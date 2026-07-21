@@ -9,7 +9,8 @@ from typing import Any, Callable
 
 import torch
 from transformers import (
-    AutoModelForCausalLM,
+    AutoConfig,
+    AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig,
     TextIteratorStreamer,
@@ -24,6 +25,7 @@ from llm_benchmark.model_loading import (
     attempted_load_configuration,
     wrap_expected_model_load_failure,
 )
+from llm_benchmark.model_selection import select_model_loader
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
 
 
@@ -222,6 +224,7 @@ class LocalLLM:
         self.load_profile_metadata: dict[str, Any] | None = None
         self.settings = settings
         self.tokenizer: Any = None
+        self.processor: Any = None
         self.model: Any = None
         self.model_load_metrics: dict[str, float] | None = None
         self.model_runtime: dict[str, Any] | None = None
@@ -235,6 +238,10 @@ class LocalLLM:
         if self.tokenizer is not None:
             del self.tokenizer
             self.tokenizer = None
+
+        if self.processor is not None:
+            del self.processor
+            self.processor = None
 
         gc.collect()
 
@@ -264,14 +271,61 @@ class LocalLLM:
             self.unload_model()
 
         load_started = time.perf_counter()
-        print("\nLoading tokenizer...")
-        print(f"Tokenizer source: {model_name}")
-        tokenizer_started = time.perf_counter()
+        print("\nLoading configuration...")
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name)
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
-                exc, model_name, load_profile, attempted
+                exc, model_name, load_profile, attempted, loading_stage="configuration"
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
+
+        print("Selecting model architecture...")
+        try:
+            loader_selection = select_model_loader(config)
+        except Exception as exc:
+            loader_diagnostic = {
+                "config_class": type(config).__name__,
+                "task": "unknown",
+                "auto_model_class": None,
+                "selection_source": "no_supported_mapping",
+                "text_only_execution": True,
+            }
+            wrapped = wrap_expected_model_load_failure(
+                exc,
+                model_name,
+                load_profile,
+                attempted,
+                loader_diagnostic,
+                "architecture_selection",
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
+        loader_diagnostic = loader_selection.diagnostic(config)
+        print(f"Selected loader: {loader_diagnostic['auto_model_class']}")
+
+        print("Loading tokenizer/processor...")
+        print(f"Tokenizer/processor source: {model_name}")
+        tokenizer_started = time.perf_counter()
+        try:
+            if loader_selection.uses_processor:
+                self.processor = AutoProcessor.from_pretrained(model_name)
+                self.tokenizer = getattr(self.processor, "tokenizer", None)
+                if self.tokenizer is None:
+                    raise ValueError(
+                        "The selected multimodal processor does not expose a tokenizer "
+                        "required for text-only streaming and token accounting."
+                    )
+            else:
+                self.processor = None
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except Exception as exc:
+            wrapped = wrap_expected_model_load_failure(
+                exc, model_name, load_profile, attempted,
+                loader_diagnostic, "tokenizer_or_processor"
             )
             if wrapped is not None:
                 raise wrapped from exc
@@ -284,16 +338,29 @@ class LocalLLM:
         model_started = time.perf_counter()
 
         try:
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self.model = loader_selection.auto_model_class.from_pretrained(
                 model_name,
+                config=config,
                 **load_kwargs,
             )
         except Exception as exc:
-            print("Placement validation failed.")
             wrapped = wrap_expected_model_load_failure(
-                exc, model_name, load_profile, attempted
+                exc, model_name, load_profile, attempted,
+                loader_diagnostic, "model_loading"
             )
             if wrapped is not None:
+                if wrapped.failure_category in {
+                    "cuda_out_of_memory",
+                    "cpu_offload_required",
+                    "disk_offload_required",
+                    "placement_failure",
+                }:
+                    print("Placement validation failed.")
+                elif wrapped.failure_category in {
+                    "unsupported_model_architecture",
+                    "incorrect_auto_model_class",
+                }:
+                    print("Model architecture selection failed.")
                 raise wrapped from exc
             raise
         self.model.eval()
@@ -315,13 +382,14 @@ class LocalLLM:
             self.model,
             self.load_profile_metadata,
         )
+        self.model_runtime["model_loader"] = loader_diagnostic
         self.model_load_metrics = {
             "tokenizer_seconds": round(tokenizer_seconds, 3),
             "model_seconds": round(model_seconds, 3),
             "total_seconds": round(total_seconds, 3),
         }
 
-        print(f"Tokenizer loaded in {tokenizer_seconds:.2f} seconds")
+        print(f"Tokenizer/processor loaded in {tokenizer_seconds:.2f} seconds")
         print(f"Model loaded in {model_seconds:.2f} seconds")
         print(f"Total load time: {total_seconds:.2f} seconds")
         print(f"Requested profile: {self.requested_load_profile}")
@@ -384,6 +452,38 @@ class LocalLLM:
 
         return "", cleaned
 
+    def _prepare_text_inputs(self, prompt: str) -> Any:
+        """Render and encode a text-only chat for the selected model family."""
+        if self.processor is None:
+            messages = [{"role": "user", "content": prompt}]
+            rendered_prompt = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=self.settings.enable_thinking,
+            )
+            return self.tokenizer(rendered_prompt, return_tensors="pt")
+
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": prompt}]}
+        ]
+        template_owner = (
+            self.processor
+            if callable(getattr(self.processor, "apply_chat_template", None))
+            else self.tokenizer
+        )
+        if not callable(getattr(template_owner, "apply_chat_template", None)):
+            raise ValueError(
+                "The multimodal processor/tokenizer has no chat template for "
+                "verified text-only prompt preparation."
+            )
+        rendered_prompt = template_owner.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        return self.processor(text=rendered_prompt, return_tensors="pt")
+
     def generate(
         self,
         prompt: str,
@@ -393,19 +493,7 @@ class LocalLLM:
     ) -> dict[str, Any]:
         request_started = time.perf_counter()
         prompt_preparation_started = request_started
-        messages = [{"role": "user", "content": prompt}]
-
-        rendered_prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=self.settings.enable_thinking,
-        )
-
-        inputs = self.tokenizer(
-            rendered_prompt,
-            return_tensors="pt",
-        )
+        inputs = self._prepare_text_inputs(prompt)
         prompt_tokenization_seconds = time.perf_counter() - prompt_preparation_started
         inputs = inputs.to(self.model.device)
 

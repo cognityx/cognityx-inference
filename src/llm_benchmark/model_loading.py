@@ -10,6 +10,12 @@ from llm_benchmark.reporting import get_gpu_status, get_system_metadata, sanitiz
 FAILED_LOAD_DIRECTORY = Path("outputs/failed_loads")
 
 FAILURE_DESCRIPTIONS = {
+    "unsupported_model_architecture": (
+        "The model configuration is not supported by an available generation loader."
+    ),
+    "incorrect_auto_model_class": (
+        "The selected AutoModel class does not support this model configuration."
+    ),
     "cuda_out_of_memory": "CUDA ran out of memory while loading or placing the model.",
     "cpu_offload_required": (
         "Automatic device placement required one or more modules on CPU."
@@ -33,12 +39,16 @@ class ModelPlacementError(RuntimeError):
         original_exception: BaseException,
         failure_category: str,
         attempted_configuration: dict[str, Any],
+        loader_diagnostic: dict[str, Any] | None = None,
+        loading_stage: str | None = None,
     ) -> None:
         self.model_name = model_name
         self.profile = profile
         self.original_exception = original_exception
         self.failure_category = failure_category
         self.attempted_configuration = attempted_configuration
+        self.loader_diagnostic = loader_diagnostic
+        self.loading_stage = loading_stage
         self.diagnostic_message = FAILURE_DESCRIPTIONS[failure_category]
         super().__init__(self.diagnostic_message)
 
@@ -48,6 +58,13 @@ def classify_model_load_failure(exception: BaseException) -> str | None:
     message = str(exception).casefold()
     class_name = type(exception).__name__.casefold()
 
+    if "unsupportedmodelarchitectureerror" in class_name:
+        return "unsupported_model_architecture"
+    if (
+        "unrecognized configuration class" in message
+        and "for automodelfor" in message
+    ):
+        return "incorrect_auto_model_class"
     if "outofmemory" in class_name or "cuda out of memory" in message:
         return "cuda_out_of_memory"
     if "cpu" in message and any(
@@ -128,6 +145,8 @@ def wrap_expected_model_load_failure(
     model_name: str,
     profile: str,
     attempted_configuration: dict[str, Any],
+    loader_diagnostic: dict[str, Any] | None = None,
+    loading_stage: str | None = None,
 ) -> ModelPlacementError | None:
     category = classify_model_load_failure(exception)
     if category is None:
@@ -138,10 +157,20 @@ def wrap_expected_model_load_failure(
         exception,
         category,
         attempted_configuration,
+        loader_diagnostic,
+        loading_stage,
     )
 
 
 def _suggestions(error: ModelPlacementError) -> list[str]:
+    if error.failure_category in {
+        "unsupported_model_architecture",
+        "incorrect_auto_model_class",
+    }:
+        return [
+            "Confirm that the installed Transformers version supports this architecture.",
+            "Check the model card for its required Transformers task and processor.",
+        ]
     suggestions = ["Use a smaller model."]
     if error.profile != "int4":
         suggestions.append("Try the INT4 loading profile.")
@@ -192,6 +221,20 @@ def format_model_load_failure(error: ModelPlacementError) -> str:
             "do not necessarily reduce the model's memory footprint.\n"
         )
     suggestions = "\n".join(f"• {suggestion}" for suggestion in _suggestions(error))
+    architecture_summary = ""
+    if error.failure_category in {
+        "unsupported_model_architecture",
+        "incorrect_auto_model_class",
+    }:
+        loader = error.loader_diagnostic or {}
+        architecture_summary = (
+            "\nModel architecture selection failed\n"
+            "-----------------------------------\n"
+            f"Configuration:       {loader.get('config_class', 'unknown')}\n"
+            f"Attempted loader:    {loader.get('auto_model_class', 'none')}\n"
+            f"Required task family: {loader.get('task', 'unknown')}\n\n"
+            "This failure occurred before GPU memory placement was evaluated.\n"
+        )
     return (
         "==================================================\n"
         "Model loading failed\n"
@@ -206,6 +249,7 @@ def format_model_load_failure(error: ModelPlacementError) -> str:
         f"GPU:                {gpu['name'] or 'unavailable'}\n"
         f"GPU total memory:   {gpu_memory}\n\n"
         f"Failure: {error.diagnostic_message}\n"
+        f"{architecture_summary}"
         f"{placement_summary}"
         f"{moe_note}\n"
         "Suggestions\n"
@@ -246,6 +290,8 @@ def save_failed_load(
         "exception_message": str(error.original_exception),
         "diagnostic_summary": error.diagnostic_message,
         "attempted_configuration": error.attempted_configuration,
+        "loading_stage": error.loading_stage,
+        "model_loader": error.loader_diagnostic,
     }
     with path.open("x", encoding="utf-8") as output_file:
         json.dump(payload, output_file, indent=2, ensure_ascii=False)
