@@ -1,0 +1,23 @@
+{
+  "timestamp_utc": "2026-07-21T15:26:27.623473+00:00",
+  "model": "Qwen/Qwen3-30B-A3B",
+  "profile": "int4",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "total_memory_gb": 31.842
+  },
+  "cuda_version": "13.0",
+  "pytorch_version": "2.13.0+cu130",
+  "failure_category": "cpu_offload_required",
+  "exception_message": "Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the quantized model. If you want to dispatch the model on the CPU or the disk while keeping these modules in 32-bit, you need to set `llm_int8_enable_fp32_cpu_offload=True` and pass a custom `device_map` to `from_pretrained`. Check https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu for more details. ",
+  "diagnostic_summary": "Automatic device placement required one or more modules on CPU.",
+  "attempted_configuration": {
+    "requested_load_profile": "int4",
+    "effective_load_profile": null,
+    "quantization_enabled": true,
+    "quantization_bits": 4,
+    "quantization_method": "bitsandbytes",
+    "compute_dtype": "torch.bfloat16",
+    "storage_dtype": "torch.uint8"
+  }
+}

@@ -19,6 +19,11 @@ from llm_benchmark.model_diagnostics import (
     collect_model_runtime,
     extract_quantization_metadata,
 )
+from llm_benchmark.model_loading import (
+    ModelPlacementError,
+    attempted_load_configuration,
+    wrap_expected_model_load_failure,
+)
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
 
 
@@ -239,25 +244,60 @@ class LocalLLM:
 
     def load_model(self, model_name: str, load_profile: str = "bf16") -> None:
         load_profile = validate_load_profile(load_profile)
-        load_kwargs, requested_compute_dtype = build_model_load_kwargs(load_profile)
+        try:
+            load_kwargs, requested_compute_dtype = build_model_load_kwargs(load_profile)
+        except Exception as exc:
+            attempted = attempted_load_configuration(load_profile)
+            wrapped = wrap_expected_model_load_failure(
+                exc, model_name, load_profile, attempted
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
+        attempted = attempted_load_configuration(
+            load_profile,
+            requested_compute_dtype,
+            load_kwargs,
+        )
         if self.model is not None:
             print(f"\nUnloading {self.model_name}...")
             self.unload_model()
 
         load_started = time.perf_counter()
-        print(f"\nLoading tokenizer: {model_name}")
+        print("\nLoading tokenizer...")
+        print(f"Tokenizer source: {model_name}")
         tokenizer_started = time.perf_counter()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        except Exception as exc:
+            wrapped = wrap_expected_model_load_failure(
+                exc, model_name, load_profile, attempted
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
         tokenizer_seconds = time.perf_counter() - tokenizer_started
 
-        print(f"Loading model: {model_name}")
+        print("Loading model...")
+        print("Building device map...")
+        print("Validating placement...")
         model_started = time.perf_counter()
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            **load_kwargs,
-        )
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                **load_kwargs,
+            )
+        except Exception as exc:
+            print("Placement validation failed.")
+            wrapped = wrap_expected_model_load_failure(
+                exc, model_name, load_profile, attempted
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
         self.model.eval()
+        print("Placement validated.")
 
         model_seconds = time.perf_counter() - model_started
         total_seconds = time.perf_counter() - load_started
@@ -303,12 +343,21 @@ class LocalLLM:
 
     def switch_model(self, model_name: str, load_profile: str = "bf16") -> None:
         load_profile = validate_load_profile(load_profile)
-        build_model_load_kwargs(load_profile)
+        try:
+            load_kwargs, compute_dtype = build_model_load_kwargs(load_profile)
+        except Exception as exc:
+            attempted = attempted_load_configuration(load_profile)
+            wrapped = wrap_expected_model_load_failure(
+                exc, model_name, load_profile, attempted
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
         previous_model = self.model_name
         previous_profile = self.requested_load_profile
         try:
             self.load_model(model_name, load_profile)
-        except Exception:
+        except ModelPlacementError:
             self.unload_model()
             print(f"Attempting to restore {previous_model} ({previous_profile})...")
             self.load_model(previous_model, previous_profile)

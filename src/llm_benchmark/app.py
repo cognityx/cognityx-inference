@@ -26,6 +26,7 @@ from llm_benchmark.llm import (
     LocalLLM,
     validate_load_profile,
 )
+from llm_benchmark.model_loading import ModelPlacementError, report_model_load_failure
 from llm_benchmark.reporting import (
     get_gpu_status,
     get_system_metadata,
@@ -476,8 +477,11 @@ def run(
 
                 try:
                     llm.switch_model(requested_model, requested_profile)
-                except Exception as exc:
-                    print(f"Could not load model: {exc}")
+                except ModelPlacementError as exc:
+                    report_model_load_failure(exc)
+                    if llm.model is None:
+                        print("No working model remains; exiting.")
+                        return
 
                 continue
 
@@ -503,4 +507,7 @@ def run(
 
 def main(arguments: list[str] | None = None) -> None:
     args = parse_args(arguments)
-    run(args.model, args.profile)
+    try:
+        run(args.model, args.profile)
+    except ModelPlacementError as exc:
+        report_model_load_failure(exc)

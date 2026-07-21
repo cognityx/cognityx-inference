@@ -1,0 +1,190 @@
+{
+  "model": "Qwen/Qwen3-14B",
+  "requested_load_profile": "int4",
+  "effective_load_profile": "int4",
+  "quantization_enabled": true,
+  "quantization_bits": 4,
+  "quantization_method": "bitsandbytes",
+  "compute_dtype": "torch.bfloat16",
+  "storage_dtype": "torch.uint8",
+  "run_type": "interactive",
+  "benchmark_name": null,
+  "prompt": "hi",
+  "settings": {
+    "enable_thinking": true,
+    "max_new_tokens": 1024,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "do_sample": true,
+    "repetition_penalty": 1.0
+  },
+  "finish_reason": "eos",
+  "generation_truncated": false,
+  "model_runtime": {
+    "device_map": null,
+    "devices_used": [
+      "cuda:0"
+    ],
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false,
+    "uses_non_cuda_device": false,
+    "non_cuda_devices": [],
+    "model_dtype": "mixed",
+    "parameter_dtypes": [
+      "torch.bfloat16",
+      "torch.uint8"
+    ],
+    "uses_mixed_dtypes": true,
+    "load_profile": {
+      "requested_load_profile": "int4",
+      "effective_load_profile": "int4",
+      "quantization_enabled": true,
+      "quantization_bits": 4,
+      "quantization_method": "bitsandbytes",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8"
+    },
+    "model_size": {
+      "logical_parameters": 14768307200,
+      "logical_parameters_billions": 14.768,
+      "parameter_count_source": "quantization_aware_parameter_tensors",
+      "parameter_count_reliable": true,
+      "requested_profile": "int4",
+      "effective_profile": "int4",
+      "nominal_bits_per_weight": 4,
+      "estimated_raw_weight_storage_bytes": 7384153600,
+      "estimated_raw_weight_storage_gib": 6.877,
+      "actual_parameter_storage_bytes": null,
+      "actual_parameter_storage_gib": null,
+      "actual_storage_notes": "Quantized wrapper storage is not reported as actual physical size because packed weights and quantization state are not exposed uniformly.",
+      "storage_estimate_notes": "Nominal weight-only estimate. It excludes quantization scales and zero points, packing metadata, non-quantized layers, allocator overhead, KV cache, activations, and runtime buffers; it is not an estimate of total VRAM usage.",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8",
+      "uses_mixed_dtypes": true,
+      "quantization_method": "bitsandbytes",
+      "quantization_bits": 4,
+      "active_parameters_per_token": 14768307200,
+      "active_parameters_billions": 14.768,
+      "active_parameter_fraction": 1.0
+    },
+    "model_family": {
+      "family": "Qwen3",
+      "architecture_type": "dense",
+      "dense_or_moe": "dense",
+      "logical_parameters": 14768307200,
+      "active_parameters_per_token": 14768307200,
+      "active_parameters_billions": 14.768,
+      "active_parameter_fraction": 1.0,
+      "active_parameter_count_source": "logical_parameter_count",
+      "active_parameter_count_reliable": true,
+      "active_parameter_count_notes": "Dense model: all logical model parameters are treated as active per token.",
+      "num_experts": null,
+      "num_experts_per_token": null,
+      "shared_experts": null,
+      "moe_config": {
+        "num_experts": null,
+        "num_experts_per_token": null,
+        "moe_intermediate_size": null,
+        "shared_expert_intermediate_size": null,
+        "num_shared_experts": null,
+        "decoder_sparse_step": null,
+        "num_dense_layers": null,
+        "router_aux_loss_coef": null
+      }
+    },
+    "attention_implementation": "sdpa",
+    "kv_cache": {
+      "use_cache": true,
+      "use_cache_source": "model_config",
+      "cache_implementation": "default",
+      "cache_implementation_explicit": false,
+      "cache_implementation_source": "default"
+    },
+    "architecture": {
+      "model_type": "qwen3",
+      "architecture": "Qwen3ForCausalLM",
+      "total_parameters": 14768307200,
+      "num_hidden_layers": 40,
+      "hidden_size": 5120,
+      "intermediate_size": 17408,
+      "num_attention_heads": 40,
+      "num_key_value_heads": 8,
+      "vocab_size": 151936,
+      "max_position_embeddings": 40960,
+      "rope": {
+        "theta": null,
+        "scaling": {
+          "rope_theta": 1000000,
+          "rope_type": "default"
+        }
+      }
+    }
+  },
+  "quality_indicators": {
+    "answer_complete": true,
+    "reasoning_detected": true,
+    "thinking_characters": 264,
+    "thinking_tokens": 55,
+    "answer_characters": 36,
+    "answer_tokens": 11,
+    "raw_output_characters": 319,
+    "empty_answer": false,
+    "finish_reason": "eos",
+    "generation_truncated": false
+  },
+  "performance": {
+    "prompt_tokenization_seconds": 0.019,
+    "prefill_seconds": 1.568,
+    "prefill_measurement_method": "generation_start_to_first_raw_streamer_token",
+    "prompt_tokens": 9,
+    "prompt_tokens_per_second": 5.74,
+    "time_to_first_token_seconds": 1.568,
+    "first_token_latency_after_prompt_preparation_seconds": 1.568,
+    "time_to_first_streamed_output_seconds": 1.649,
+    "decode_seconds": 4.072,
+    "decode_token_count": 70,
+    "generated_tokens": 71,
+    "decode_tokens_per_second": 17.19,
+    "generation_seconds": 5.64,
+    "end_to_end_seconds": 5.662,
+    "decode_measurement_method": "generation_finish_minus_first_raw_token; throughput excludes the first token"
+  },
+  "result": {
+    "raw_output": "<think>\nOkay, the user said \"hi\". I need to respond appropriately. Since they greeted me, I should acknowledge their greeting and offer assistance. Let me make sure the response is friendly and open-ended. Maybe ask how I can help them today. Keep it simple and welcoming.\n</think>\n\nHello! How can I assist you today? 😊",
+    "thinking": "Okay, the user said \"hi\". I need to respond appropriately. Since they greeted me, I should acknowledge their greeting and offer assistance. Let me make sure the response is friendly and open-ended. Maybe ask how I can help them today. Keep it simple and welcoming.",
+    "answer": "Hello! How can I assist you today? 😊"
+  },
+  "metrics": {
+    "time_to_first_token_seconds": 1.649,
+    "prompt_tokens": 9,
+    "generated_tokens": 71,
+    "total_tokens": 80,
+    "generation_seconds": 5.64,
+    "tokens_per_second": 12.59,
+    "peak_vram_gb": 10.056,
+    "gpu_allocated_before_gb": 9.856,
+    "gpu_reserved_before_gb": 10.027,
+    "gpu_allocated_after_gb": 9.888,
+    "gpu_reserved_after_gb": 10.211
+  },
+  "timestamp_utc": "2026-07-21T15:25:18.730334+00:00",
+  "metadata": {
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_total_memory_gb": 31.842,
+    "pytorch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "transformers_version": "5.14.1",
+    "python_version": "3.12.3"
+  },
+  "schema_version": 2,
+  "api_equivalent_cost_estimate": {
+    "enabled": false,
+    "pricing_label": null,
+    "input_price_per_million_tokens": null,
+    "output_price_per_million_tokens": null,
+    "currency": "USD",
+    "basis": "disabled",
+    "disclaimer": "Hypothetical hosted API-equivalent estimate; not measured local operating cost."
+  }
+}
