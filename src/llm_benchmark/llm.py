@@ -9,6 +9,8 @@ from typing import Any, Callable
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
+from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
+
 
 @dataclass
 class GenerationSettings:
@@ -21,12 +23,27 @@ class GenerationSettings:
     repetition_penalty: float = 1.0
 
 
+def detect_finish_reason(
+    generated_token_ids: list[int],
+    eos_token_ids: set[int],
+    max_new_tokens: int,
+) -> tuple[str, bool]:
+    if any(token_id in eos_token_ids for token_id in generated_token_ids):
+        return "eos", False
+
+    if len(generated_token_ids) >= max_new_tokens:
+        return "length", True
+
+    return "unknown", False
+
+
 class LocalLLM:
     def __init__(self, model_name: str, settings: GenerationSettings) -> None:
         self.model_name = model_name
         self.settings = settings
         self.tokenizer: Any = None
         self.model: Any = None
+        self.model_load_metrics: dict[str, float] | None = None
         self.load_model(model_name)
 
     def unload_model(self) -> None:
@@ -49,11 +66,14 @@ class LocalLLM:
             print(f"\nUnloading {self.model_name}...")
             self.unload_model()
 
+        load_started = time.perf_counter()
         print(f"\nLoading tokenizer: {model_name}")
+        tokenizer_started = time.perf_counter()
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer_seconds = time.perf_counter() - tokenizer_started
 
         print(f"Loading model: {model_name}")
-        started = time.perf_counter()
+        model_started = time.perf_counter()
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -63,9 +83,17 @@ class LocalLLM:
         self.model.eval()
 
         self.model_name = model_name
-        elapsed = time.perf_counter() - started
+        model_seconds = time.perf_counter() - model_started
+        total_seconds = time.perf_counter() - load_started
+        self.model_load_metrics = {
+            "tokenizer_seconds": round(tokenizer_seconds, 3),
+            "model_seconds": round(model_seconds, 3),
+            "total_seconds": round(total_seconds, 3),
+        }
 
-        print(f"Model loaded in {elapsed:.2f} seconds")
+        print(f"Tokenizer loaded in {tokenizer_seconds:.2f} seconds")
+        print(f"Model loaded in {model_seconds:.2f} seconds")
+        print(f"Total load time: {total_seconds:.2f} seconds")
         print(f"Device: {next(self.model.parameters()).device}")
 
         if torch.cuda.is_available():
@@ -116,9 +144,10 @@ class LocalLLM:
 
         prompt_tokens = inputs.input_ids.shape[1]
 
+        gpu_before = get_gpu_status()
         if torch.cuda.is_available():
-            torch.cuda.reset_peak_memory_stats()
             torch.cuda.synchronize()
+            torch.cuda.reset_peak_memory_stats()
 
         generation_kwargs: dict[str, Any] = {
             "max_new_tokens": self.settings.max_new_tokens,
@@ -179,6 +208,21 @@ class LocalLLM:
         outputs = generation_result["outputs"]
         generated_ids = outputs[0, prompt_tokens:]
         generated_tokens = generated_ids.shape[0]
+        generated_token_ids = generated_ids.tolist()
+
+        configured_eos = getattr(self.model.generation_config, "eos_token_id", None)
+        if configured_eos is None:
+            configured_eos = self.tokenizer.eos_token_id
+        if isinstance(configured_eos, int):
+            eos_token_ids = {configured_eos}
+        else:
+            eos_token_ids = set(configured_eos or [])
+
+        finish_reason, generation_truncated = detect_finish_reason(
+            generated_token_ids,
+            eos_token_ids,
+            self.settings.max_new_tokens,
+        )
 
         raw_output = self.tokenizer.decode(
             generated_ids,
@@ -187,14 +231,17 @@ class LocalLLM:
 
         thinking, answer = self.split_thinking_and_answer(raw_output)
 
+        gpu_after = get_gpu_status()
         peak_vram_gb = None
         if torch.cuda.is_available():
-            peak_vram_gb = torch.cuda.max_memory_allocated() / 1024**3
+            peak_vram_gb = bytes_to_gb(torch.cuda.max_memory_allocated())
 
         return {
             "model": self.model_name,
             "prompt": prompt,
             "settings": asdict(self.settings),
+            "finish_reason": finish_reason,
+            "generation_truncated": generation_truncated,
             "result": {
                 "raw_output": raw_output,
                 "thinking": thinking,
@@ -216,9 +263,11 @@ class LocalLLM:
                     else None
                 ),
                 "peak_vram_gb": (
-                    round(peak_vram_gb, 3)
-                    if peak_vram_gb is not None
-                    else None
+                    peak_vram_gb if peak_vram_gb is not None else None
                 ),
+                "gpu_allocated_before_gb": gpu_before["allocated_gb"],
+                "gpu_reserved_before_gb": gpu_before["reserved_gb"],
+                "gpu_allocated_after_gb": gpu_after["allocated_gb"],
+                "gpu_reserved_after_gb": gpu_after["reserved_gb"],
             },
         }

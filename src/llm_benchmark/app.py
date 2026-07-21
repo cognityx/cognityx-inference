@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any
 
 import torch
 
 from llm_benchmark.llm import GenerationSettings, LocalLLM
+from llm_benchmark.reporting import (
+    get_gpu_status,
+    get_system_metadata,
+    save_benchmark_result,
+)
 
 
 def parse_value(current_value: Any, new_value: str) -> Any:
@@ -57,6 +63,9 @@ Commands
     Example:
         /model Qwen/Qwen3-4B
 
+ /benchmark or /status
+    Show model, settings, GPU status, and the most recent query metrics.
+
  /quit
     Exit and release GPU memory.
 """
@@ -68,29 +77,59 @@ def print_metrics(result: dict[str, Any]) -> None:
     time_to_first_token = metrics["time_to_first_token_seconds"]
     peak_vram = metrics["peak_vram_gb"]
 
+    def format_gb(value: float | None) -> str:
+        return f"{value:.3f} GB" if value is not None else "unavailable"
+
     print("\nMetrics")
     print("-------")
     print(
-        "Time to first token: "
+        "Time to first streamed output: "
         f"{time_to_first_token:.3f} seconds"
         if time_to_first_token is not None
-        else "Time to first token: unavailable"
+        else "Time to first streamed output: unavailable"
     )
     print(f"Total generation time: {metrics['generation_seconds']:.3f} seconds")
     print(f"Prompt tokens: {metrics['prompt_tokens']}")
     print(f"Output tokens: {metrics['generated_tokens']}")
     print(f"Total tokens: {metrics['total_tokens']}")
     print(f"Output tokens per second: {metrics['tokens_per_second']}")
+    print(f"Finish reason: {result['finish_reason']}")
+    print(f"Generation truncated: {result['generation_truncated']}")
+    print(f"Peak VRAM: {format_gb(peak_vram)}")
     print(
-        f"Peak VRAM: {peak_vram:.3f} GB"
-        if peak_vram is not None
-        else "Peak VRAM: unavailable"
+        "GPU allocated before: "
+        f"{format_gb(metrics['gpu_allocated_before_gb'])}"
     )
+    print(
+        "GPU reserved before: "
+        f"{format_gb(metrics['gpu_reserved_before_gb'])}"
+    )
+    print(
+        "GPU allocated after: "
+        f"{format_gb(metrics['gpu_allocated_after_gb'])}"
+    )
+    print(
+        "GPU reserved after: "
+        f"{format_gb(metrics['gpu_reserved_after_gb'])}"
+    )
+
+
+def build_status(llm: LocalLLM, last_result: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "model": llm.model_name,
+        "model_load_metrics": llm.model_load_metrics,
+        "settings": asdict(llm.settings),
+        "gpu": get_gpu_status(),
+        "last_query_metrics": (
+            last_result["metrics"] if last_result is not None else None
+        ),
+    }
 
 
 def run() -> None:
     settings = GenerationSettings()
     llm = LocalLLM("Qwen/Qwen3-8B", settings)
+    last_result: dict[str, Any] | None = None
 
     print_help()
 
@@ -118,6 +157,10 @@ def run() -> None:
                         indent=2,
                     )
                 )
+                continue
+
+            if user_input in {"/benchmark", "/status"}:
+                print(json.dumps(build_status(llm, last_result), indent=2))
                 continue
 
             if user_input.startswith("/set "):
@@ -169,6 +212,10 @@ def run() -> None:
                 )
                 print()
 
+                result["timestamp_utc"] = datetime.now(timezone.utc).isoformat()
+                result["metadata"] = get_system_metadata()
+                last_result = result
+
                 print_metrics(result)
 
                 print("\nJSON")
@@ -181,6 +228,9 @@ def run() -> None:
                 print("\nAnswer")
                 print("------")
                 print(result["result"]["answer"] or "[No final answer returned]")
+
+                saved_path = save_benchmark_result(result)
+                print(f"\nSaved benchmark: {saved_path}")
 
             except torch.cuda.OutOfMemoryError:
                 print("\nCUDA out of memory.")
