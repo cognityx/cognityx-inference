@@ -115,9 +115,24 @@ def print_metrics(result: dict[str, Any]) -> None:
 
 
 def build_status(llm: LocalLLM, last_result: dict[str, Any] | None) -> dict[str, Any]:
+    runtime = llm.model_runtime or {}
+    architecture = runtime.get("architecture", {})
+    cache = runtime.get("kv_cache", {})
     return {
         "model": llm.model_name,
         "model_load_metrics": llm.model_load_metrics,
+        "model_runtime": {
+            "model_dtype": runtime.get("model_dtype", "unknown"),
+            "devices_used": runtime.get("devices_used", []),
+            "uses_cpu_offload": runtime.get("uses_cpu_offload", False),
+            "uses_disk_offload": runtime.get("uses_disk_offload", False),
+            "attention_implementation": runtime.get(
+                "attention_implementation", "unknown"
+            ),
+            "cache_enabled": cache.get("use_cache"),
+            "cache_implementation": cache.get("cache_implementation", "unknown"),
+            "total_parameters": architecture.get("total_parameters"),
+        },
         "settings": asdict(llm.settings),
         "gpu": get_gpu_status(),
         "last_query_metrics": (

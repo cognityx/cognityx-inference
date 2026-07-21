@@ -9,6 +9,7 @@ from typing import Any, Callable
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
+from llm_benchmark.model_diagnostics import collect_model_runtime
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
 
 
@@ -44,6 +45,7 @@ class LocalLLM:
         self.tokenizer: Any = None
         self.model: Any = None
         self.model_load_metrics: dict[str, float] | None = None
+        self.model_runtime: dict[str, Any] | None = None
         self.load_model(model_name)
 
     def unload_model(self) -> None:
@@ -82,9 +84,10 @@ class LocalLLM:
         )
         self.model.eval()
 
-        self.model_name = model_name
         model_seconds = time.perf_counter() - model_started
         total_seconds = time.perf_counter() - load_started
+        self.model_name = model_name
+        self.model_runtime = collect_model_runtime(self.model)
         self.model_load_metrics = {
             "tokenizer_seconds": round(tokenizer_seconds, 3),
             "model_seconds": round(model_seconds, 3),
@@ -242,6 +245,7 @@ class LocalLLM:
             "settings": asdict(self.settings),
             "finish_reason": finish_reason,
             "generation_truncated": generation_truncated,
+            "model_runtime": self.model_runtime,
             "result": {
                 "raw_output": raw_output,
                 "thinking": thinking,

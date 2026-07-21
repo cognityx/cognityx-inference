@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -54,17 +55,27 @@ def benchmark_filename(timestamp: datetime | None = None) -> str:
     return f"benchmark_{utc_timestamp:%Y%m%dT%H%M%S_%fZ}.json"
 
 
+def sanitize_model_name(model_name: str) -> str:
+    sanitized = model_name.strip().replace("/", "--").replace("\\", "--")
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", sanitized)
+    sanitized = sanitized.strip(".-")
+    return sanitized or "unknown-model"
+
+
 def save_benchmark_result(
     result: dict[str, Any],
     output_directory: Path = DEFAULT_OUTPUT_DIRECTORY,
 ) -> Path:
-    output_directory.mkdir(parents=True, exist_ok=True)
+    model_directory = output_directory / sanitize_model_name(
+        str(result.get("model", "unknown-model"))
+    )
+    model_directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc)
-    path = output_directory / benchmark_filename(timestamp)
+    path = model_directory / benchmark_filename(timestamp)
     suffix = 1
 
     while path.exists():
-        path = output_directory / (
+        path = model_directory / (
             f"{Path(benchmark_filename(timestamp)).stem}_{suffix}.json"
         )
         suffix += 1
