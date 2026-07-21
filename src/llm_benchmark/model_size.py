@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from llm_benchmark.model_architecture import classify_architecture, extract_moe_config
+
 BYTES_PER_GIB = 1024**3
 
 
@@ -98,9 +100,40 @@ def _config_derived_parameter_count(model: Any) -> int | None:
     attention_per_layer = hidden * (
         hidden + 2 * key_value_heads * head_dim + hidden
     )
-    gated_mlp_per_layer = 3 * hidden * intermediate
     normalization = (2 * layers + 1) * hidden
     output_head = 0 if _config_value(config, "tie_word_embeddings") else embedding
+    if classify_architecture(config) == "moe":
+        moe = extract_moe_config(config)
+        num_experts = moe["num_experts"]
+        expert_intermediate = moe["moe_intermediate_size"]
+        if num_experts is None or expert_intermediate is None:
+            return None
+        sparse_step = moe["decoder_sparse_step"] or 1
+        dense_layers = min(layers, moe["num_dense_layers"] or 0)
+        sparse_layers = max(0, (layers - dense_layers) // sparse_step)
+        dense_layers = layers - sparse_layers
+        routed_experts = sparse_layers * num_experts * 3 * hidden * expert_intermediate
+        shared_experts = (
+            sparse_layers
+            * (moe["num_shared_experts"] or 0)
+            * 3
+            * hidden
+            * (moe["shared_expert_intermediate_size"] or 0)
+        )
+        routers = sparse_layers * hidden * num_experts
+        dense_mlp = dense_layers * 3 * hidden * intermediate
+        return (
+            embedding
+            + output_head
+            + layers * attention_per_layer
+            + normalization
+            + routed_experts
+            + shared_experts
+            + routers
+            + dense_mlp
+        )
+
+    gated_mlp_per_layer = 3 * hidden * intermediate
     return embedding + output_head + layers * (
         attention_per_layer + gated_mlp_per_layer
     ) + normalization

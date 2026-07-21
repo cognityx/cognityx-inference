@@ -160,7 +160,7 @@ Commands
     Show current cost-estimation assumptions.
 
  /compare [--all] [--model NAME] [--benchmark NAME] [--latest N]
-          [--format table|markdown|csv]
+          [--architecture] [--format table|markdown|csv]
     Compare saved benchmark runs; defaults to benchmark runs only.
 
  /quit
@@ -230,6 +230,7 @@ def build_status(
     runtime = llm.model_runtime or {}
     cache = runtime.get("kv_cache", {})
     model_size = runtime.get("model_size", {})
+    model_family = runtime.get("model_family", {})
     runtime_status = {
         "model_dtype": runtime.get("model_dtype", "unknown"),
         "devices_used": runtime.get("devices_used", []),
@@ -246,9 +247,27 @@ def build_status(
             "estimated_raw_weight_storage_gib"
         ),
         "parameter_count_source": model_size.get("parameter_count_source"),
+        "architecture_type": model_family.get("architecture_type", "unknown"),
+        "active_parameters_per_token": model_family.get(
+            "active_parameters_per_token"
+        ),
+        "active_parameters_billions": model_family.get(
+            "active_parameters_billions"
+        ),
+        "active_parameter_fraction": model_family.get("active_parameter_fraction"),
+        "experts": (
+            {
+                "total": model_family.get("num_experts"),
+                "selected_per_token": model_family.get("num_experts_per_token"),
+                "shared": model_family.get("shared_experts"),
+            }
+            if model_family.get("architecture_type") == "moe"
+            else None
+        ),
     }
     if detailed:
         runtime_status["device_map"] = runtime.get("device_map")
+        runtime_status["model_family"] = model_family
 
     return {
         "model": llm.model_name,
@@ -394,9 +413,13 @@ def run(
                     for warning in warnings:
                         print(f"Warning: {warning}")
                     if options.output_format == "table":
-                        print(render_table(rows))
+                        print(render_table(rows, options.include_architecture))
                     else:
-                        path = save_comparison(rows, options.output_format)
+                        path = save_comparison(
+                            rows,
+                            options.output_format,
+                            include_architecture=options.include_architecture,
+                        )
                         print(f"Saved comparison: {path}")
                 except ValueError as exc:
                     print(f"Invalid compare command: {exc}")

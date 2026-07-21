@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 
+from llm_benchmark.model_architecture import classify_model_family
 from llm_benchmark.model_size import calculate_model_size
 
 
@@ -237,6 +238,21 @@ def collect_model_runtime(
     )
     model_size = calculate_model_size(model, load_profile)
     model_size["uses_mixed_dtypes"] = len(parameter_dtypes) > 1
+    model_family = classify_model_family(
+        _attribute(model, "config"),
+        model_size["logical_parameters"],
+        model_size["parameter_count_reliable"],
+        model,
+    )
+    model_size["active_parameters_per_token"] = model_family[
+        "active_parameters_per_token"
+    ]
+    model_size["active_parameters_billions"] = model_family[
+        "active_parameters_billions"
+    ]
+    model_size["active_parameter_fraction"] = model_family[
+        "active_parameter_fraction"
+    ]
 
     return {
         **device_placement,
@@ -245,6 +261,7 @@ def collect_model_runtime(
         "uses_mixed_dtypes": len(parameter_dtypes) > 1,
         "load_profile": load_profile,
         "model_size": model_size,
+        "model_family": model_family,
         "attention_implementation": detect_attention_implementation(model),
         "kv_cache": extract_cache_configuration(model),
         "architecture": extract_architecture_metadata(

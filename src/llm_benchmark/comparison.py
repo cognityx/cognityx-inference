@@ -31,6 +31,12 @@ COLUMNS = (
     ("truncated", "Truncated"),
     ("answer_complete", "Complete"),
 )
+ARCHITECTURE_COLUMNS = (
+    ("architecture_type", "Arch"),
+    ("logical_parameters", "Logical"),
+    ("active_parameters", "Active/tok"),
+    ("active_fraction", "Active %"),
+)
 
 
 @dataclass
@@ -40,6 +46,7 @@ class CompareOptions:
     benchmark: str | None = None
     latest: int | None = None
     output_format: str = "table"
+    include_architecture: bool = False
 
 
 class _Parser(argparse.ArgumentParser):
@@ -54,6 +61,7 @@ def parse_compare_command(command: str) -> CompareOptions:
     parser.add_argument("--benchmark")
     parser.add_argument("--latest", type=int)
     parser.add_argument("--format", choices=("table", "markdown", "csv"), default="table")
+    parser.add_argument("--architecture", action="store_true")
     arguments = parser.parse_args(shlex.split(command)[1:])
     if arguments.latest is not None and arguments.latest <= 0:
         raise ValueError("--latest must be a positive integer")
@@ -63,6 +71,7 @@ def parse_compare_command(command: str) -> CompareOptions:
         benchmark=arguments.benchmark,
         latest=arguments.latest,
         output_format=arguments.format,
+        include_architecture=arguments.architecture,
     )
 
 
@@ -75,6 +84,8 @@ def normalize_benchmark(data: dict[str, Any], path: Path) -> dict[str, Any]:
     performance = data.get("performance") if isinstance(data.get("performance"), dict) else {}
     metrics = data.get("metrics") if isinstance(data.get("metrics"), dict) else {}
     runtime = data.get("model_runtime") if isinstance(data.get("model_runtime"), dict) else {}
+    model_family = runtime.get("model_family") if isinstance(runtime.get("model_family"), dict) else {}
+    model_size = runtime.get("model_size") if isinstance(runtime.get("model_size"), dict) else {}
     quality = data.get("quality_indicators") if isinstance(data.get("quality_indicators"), dict) else {}
     run_type = data.get("run_type")
     if run_type is None and (
@@ -102,6 +113,10 @@ def normalize_benchmark(data: dict[str, Any], path: Path) -> dict[str, Any]:
         "cpu_offload": runtime.get("uses_cpu_offload"),
         "truncated": data.get("generation_truncated"),
         "answer_complete": quality.get("answer_complete"),
+        "architecture_type": model_family.get("architecture_type"),
+        "logical_parameters": model_size.get("logical_parameters"),
+        "active_parameters": model_size.get("active_parameters_per_token"),
+        "active_fraction": model_size.get("active_parameter_fraction"),
         "source_path": str(path),
     }
 
@@ -140,11 +155,21 @@ def load_comparison_rows(
     return rows, warnings
 
 
-def _display(value: Any, width: int | None = None) -> str:
+def _columns(include_architecture: bool) -> tuple[tuple[str, str], ...]:
+    return COLUMNS + ARCHITECTURE_COLUMNS if include_architecture else COLUMNS
+
+
+def _display(value: Any, width: int | None = None, key: str | None = None) -> str:
     if value is None:
         text = "-"
     elif isinstance(value, bool):
         text = "Yes" if value else "No"
+    elif key in {"logical_parameters", "active_parameters"} and isinstance(
+        value, (int, float)
+    ):
+        text = f"{value / 1_000_000_000:.2f}B"
+    elif key == "active_fraction" and isinstance(value, (int, float)):
+        text = f"{value * 100:.1f}%"
     elif isinstance(value, float):
         text = f"{value:.3f}"
     else:
@@ -154,44 +179,56 @@ def _display(value: Any, width: int | None = None) -> str:
     return text
 
 
-def render_table(rows: list[dict[str, Any]]) -> str:
+def render_table(
+    rows: list[dict[str, Any]],
+    include_architecture: bool = False,
+) -> str:
     if not rows:
         return "No matching benchmark runs found."
     widths: dict[str, int] = {}
     caps = {"timestamp": 19, "model": 24, "benchmark_name": 22}
-    for key, heading in COLUMNS:
+    columns = _columns(include_architecture)
+    for key, heading in columns:
         widths[key] = min(
             caps.get(key, 14),
-            max(len(heading), *(len(_display(row.get(key))) for row in rows)),
+            max(len(heading), *(len(_display(row.get(key), key=key)) for row in rows)),
         )
-    header = "  ".join(heading.ljust(widths[key]) for key, heading in COLUMNS)
-    separator = "  ".join("-" * widths[key] for key, _ in COLUMNS)
+    header = "  ".join(heading.ljust(widths[key]) for key, heading in columns)
+    separator = "  ".join("-" * widths[key] for key, _ in columns)
     body = [
-        "  ".join(_display(row.get(key), widths[key]).ljust(widths[key]) for key, _ in COLUMNS)
+        "  ".join(
+            _display(row.get(key), widths[key], key).ljust(widths[key])
+            for key, _ in columns
+        )
         for row in rows
     ]
     return "\n".join([header, separator, *body])
 
 
-def render_markdown(rows: list[dict[str, Any]]) -> str:
-    headings = [heading for _, heading in COLUMNS]
+def render_markdown(
+    rows: list[dict[str, Any]],
+    include_architecture: bool = False,
+) -> str:
+    columns = _columns(include_architecture)
+    headings = [heading for _, heading in columns]
     lines = [
         "| " + " | ".join(headings) + " |",
         "| " + " | ".join("---" for _ in headings) + " |",
     ]
     lines.extend(
-        "| " + " | ".join(_display(row.get(key)) for key, _ in COLUMNS) + " |"
+        "| " + " | ".join(_display(row.get(key), key=key) for key, _ in columns) + " |"
         for row in rows
     )
     return "\n".join(lines)
 
 
-def render_csv(rows: list[dict[str, Any]]) -> str:
+def render_csv(rows: list[dict[str, Any]], include_architecture: bool = False) -> str:
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=[key for key, _ in COLUMNS])
+    columns = _columns(include_architecture)
+    writer = csv.DictWriter(output, fieldnames=[key for key, _ in columns])
     writer.writeheader()
     for row in rows:
-        writer.writerow({key: row.get(key) for key, _ in COLUMNS})
+        writer.writerow({key: row.get(key) for key, _ in columns})
     return output.getvalue()
 
 
@@ -199,6 +236,7 @@ def save_comparison(
     rows: list[dict[str, Any]],
     output_format: str,
     directory: Path = DEFAULT_COMPARISON_DIRECTORY,
+    include_architecture: bool = False,
 ) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     extension = "md" if output_format == "markdown" else "csv"
@@ -208,7 +246,11 @@ def save_comparison(
     while path.exists():
         path = directory / f"comparison_{timestamp}_{suffix}.{extension}"
         suffix += 1
-    content = render_markdown(rows) if output_format == "markdown" else render_csv(rows)
+    content = (
+        render_markdown(rows, include_architecture)
+        if output_format == "markdown"
+        else render_csv(rows, include_architecture)
+    )
     with path.open("x", encoding="utf-8") as output_file:
         output_file.write(content)
     return path
