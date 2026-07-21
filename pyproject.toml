@@ -1,0 +1,20 @@
+[project]
+name = "llm-benchmark"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.14.0",
+    "datasets>=5.0.0",
+    "evaluate>=0.4.6",
+    "huggingface-hub[cli]>=1.24.0",
+    "ipywidgets>=8.1.8",
+    "jupyterlab>=4.6.1",
+    "safetensors>=0.8.0",
+    "sentencepiece>=0.2.2",
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
+    "torchvision>=0.28.0",
+    "transformers>=5.14.1",
+]
