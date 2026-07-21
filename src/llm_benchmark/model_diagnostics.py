@@ -5,10 +5,14 @@ from typing import Any
 
 import torch
 
+from llm_benchmark.model_size import calculate_model_size
+
 
 def _attribute(source: Any, name: str) -> Any:
     if source is None:
         return None
+    if isinstance(source, Mapping):
+        return source.get(name)
     try:
         return getattr(source, name, None)
     except (AttributeError, RuntimeError):
@@ -151,14 +155,71 @@ def extract_architecture_metadata(
     }
 
 
-def collect_model_runtime(model: Any) -> dict[str, Any]:
+def extract_quantization_metadata(
+    model: Any,
+    requested_profile: str,
+    requested_compute_dtype: Any = None,
+) -> dict[str, Any]:
+    config = _attribute(model, "config")
+    quantization_config = _attribute(config, "quantization_config")
+    if quantization_config is None:
+        quantization_config = _attribute(model, "quantization_config")
+
+    loaded_in_4bit = bool(
+        _attribute(model, "is_loaded_in_4bit")
+        or _attribute(quantization_config, "load_in_4bit")
+    )
+    loaded_in_8bit = bool(
+        _attribute(model, "is_loaded_in_8bit")
+        or _attribute(quantization_config, "load_in_8bit")
+    )
+
+    if loaded_in_4bit:
+        effective_profile = "int4"
+        quantization_bits = 4
+    elif loaded_in_8bit:
+        effective_profile = "int8"
+        quantization_bits = 8
+    else:
+        effective_profile = requested_profile
+        quantization_bits = None
+
+    quantization_enabled = quantization_bits is not None
+    quantization_method = _attribute(quantization_config, "quant_method")
+    if quantization_enabled and quantization_method is None:
+        quantization_method = "bitsandbytes"
+    quantization_method = _attribute(quantization_method, "value") or quantization_method
+
+    compute_dtype = _attribute(quantization_config, "bnb_4bit_compute_dtype")
+    if compute_dtype is None:
+        compute_dtype = requested_compute_dtype
+
+    storage_dtype = _attribute(quantization_config, "bnb_4bit_quant_storage")
+    if storage_dtype is None and not quantization_enabled:
+        storage_dtype = requested_compute_dtype
+
+    return {
+        "requested_load_profile": requested_profile,
+        "effective_load_profile": effective_profile,
+        "quantization_enabled": quantization_enabled,
+        "quantization_bits": quantization_bits,
+        "quantization_method": (
+            str(quantization_method) if quantization_method is not None else None
+        ),
+        "compute_dtype": str(compute_dtype) if compute_dtype is not None else None,
+        "storage_dtype": str(storage_dtype) if storage_dtype is not None else None,
+    }
+
+
+def collect_model_runtime(
+    model: Any,
+    load_profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     dtype_values: set[str] = set()
     parameter_devices: set[Any] = set()
-    total_parameters = 0
     for parameter in model.parameters():
         dtype_values.add(str(parameter.dtype))
         parameter_devices.add(parameter.device)
-        total_parameters += parameter.numel()
 
     parameter_dtypes = sorted(dtype_values)
 
@@ -174,16 +235,20 @@ def collect_model_runtime(model: Any) -> dict[str, Any]:
         _attribute(model, "hf_device_map"),
         parameter_devices,
     )
+    model_size = calculate_model_size(model, load_profile)
+    model_size["uses_mixed_dtypes"] = len(parameter_dtypes) > 1
 
     return {
         **device_placement,
         "model_dtype": model_dtype,
         "parameter_dtypes": parameter_dtypes,
         "uses_mixed_dtypes": len(parameter_dtypes) > 1,
+        "load_profile": load_profile,
+        "model_size": model_size,
         "attention_implementation": detect_attention_implementation(model),
         "kv_cache": extract_cache_configuration(model),
         "architecture": extract_architecture_metadata(
             _attribute(model, "config"),
-            total_parameters,
+            model_size["logical_parameters"],
         ),
     }

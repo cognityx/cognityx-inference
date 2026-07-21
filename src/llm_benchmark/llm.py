@@ -1,15 +1,24 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
 import threading
 import time
 from dataclasses import asdict, dataclass
 from typing import Any, Callable
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TextIteratorStreamer,
+)
 
-from llm_benchmark.model_diagnostics import collect_model_runtime
+from llm_benchmark.model_diagnostics import (
+    collect_model_runtime,
+    extract_quantization_metadata,
+)
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
 
 
@@ -22,6 +31,163 @@ class GenerationSettings:
     top_k: int = 20
     do_sample: bool = True
     repetition_penalty: float = 1.0
+
+
+LOAD_PROFILES = ("bf16", "fp16", "int8", "int4")
+
+
+class LoadProfileError(ValueError):
+    pass
+
+
+class TimingTextIteratorStreamer(TextIteratorStreamer):
+    """Text streamer that timestamps the first raw generated token."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.first_generated_token_at: float | None = None
+
+    def put(self, value: Any) -> None:
+        is_prompt = self.skip_prompt and self.next_tokens_are_prompt
+        if not is_prompt and self.first_generated_token_at is None:
+            self.first_generated_token_at = time.perf_counter()
+        super().put(value)
+
+
+def validate_load_profile(profile: str) -> str:
+    normalized = profile.lower()
+    if normalized not in LOAD_PROFILES:
+        raise LoadProfileError(
+            f"Unknown load profile: {profile}. Choose from: {', '.join(LOAD_PROFILES)}"
+        )
+    return normalized
+
+
+def bitsandbytes_available() -> bool:
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+
+def build_model_load_kwargs(
+    profile: str,
+    *,
+    has_bitsandbytes: bool | None = None,
+) -> tuple[dict[str, Any], torch.dtype]:
+    profile = validate_load_profile(profile)
+    if profile == "bf16":
+        return {"torch_dtype": torch.bfloat16, "device_map": "auto"}, torch.bfloat16
+    if profile == "fp16":
+        return {"torch_dtype": torch.float16, "device_map": "auto"}, torch.float16
+
+    available = bitsandbytes_available() if has_bitsandbytes is None else has_bitsandbytes
+    if not available:
+        raise LoadProfileError(
+            f"The {profile} profile requires bitsandbytes. "
+            "Install it with: uv add bitsandbytes"
+        )
+
+    if profile == "int8":
+        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+        compute_dtype = torch.float16
+    else:
+        bf16_supported = bool(
+            torch.cuda.is_available()
+            and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
+        )
+        compute_dtype = torch.bfloat16 if bf16_supported else torch.float16
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=compute_dtype,
+            bnb_4bit_use_double_quant=False,
+        )
+
+    return {
+        "quantization_config": quantization_config,
+        "device_map": "auto",
+    }, compute_dtype
+
+
+def count_text_tokens(tokenizer: Any, text: str) -> int:
+    if not text:
+        return 0
+    return len(tokenizer.encode(text, add_special_tokens=False))
+
+
+def build_quality_indicators(
+    tokenizer: Any,
+    thinking: str,
+    answer: str,
+    raw_output: str,
+    finish_reason: str,
+    generation_truncated: bool,
+) -> dict[str, Any]:
+    return {
+        "answer_complete": not generation_truncated,
+        "reasoning_detected": bool(thinking.strip()),
+        "thinking_characters": len(thinking),
+        "thinking_tokens": count_text_tokens(tokenizer, thinking),
+        "answer_characters": len(answer),
+        "answer_tokens": count_text_tokens(tokenizer, answer),
+        "raw_output_characters": len(raw_output),
+        "empty_answer": not bool(answer.strip()),
+        "finish_reason": finish_reason,
+        "generation_truncated": generation_truncated,
+    }
+
+
+def calculate_performance_metrics(
+    *,
+    prompt_tokenization_seconds: float,
+    generation_seconds: float,
+    end_to_end_seconds: float,
+    prompt_tokens: int,
+    generated_tokens: int,
+    first_token_seconds: float | None,
+    first_streamed_output_seconds: float | None,
+) -> dict[str, Any]:
+    """Calculate prefill/decode approximations around streamed generation."""
+    prefill_seconds = first_token_seconds
+    decode_seconds = (
+        max(0.0, generation_seconds - first_token_seconds)
+        if first_token_seconds is not None
+        else None
+    )
+    decode_tokens = max(0, generated_tokens - 1)
+    return {
+        "prompt_tokenization_seconds": round(prompt_tokenization_seconds, 3),
+        "prefill_seconds": round(prefill_seconds, 3) if prefill_seconds is not None else None,
+        "prefill_measurement_method": "generation_start_to_first_raw_streamer_token",
+        "prompt_tokens": prompt_tokens,
+        "prompt_tokens_per_second": (
+            round(prompt_tokens / prefill_seconds, 2)
+            if prefill_seconds is not None and prefill_seconds > 0
+            else None
+        ),
+        "time_to_first_token_seconds": (
+            round(first_token_seconds, 3) if first_token_seconds is not None else None
+        ),
+        "first_token_latency_after_prompt_preparation_seconds": (
+            round(first_token_seconds, 3) if first_token_seconds is not None else None
+        ),
+        "time_to_first_streamed_output_seconds": (
+            round(first_streamed_output_seconds, 3)
+            if first_streamed_output_seconds is not None
+            else None
+        ),
+        "decode_seconds": round(decode_seconds, 3) if decode_seconds is not None else None,
+        "decode_token_count": decode_tokens,
+        "generated_tokens": generated_tokens,
+        "decode_tokens_per_second": (
+            round(decode_tokens / decode_seconds, 2)
+            if decode_seconds is not None and decode_seconds > 0
+            else 0.0 if decode_tokens == 0 else None
+        ),
+        "generation_seconds": round(generation_seconds, 3),
+        "end_to_end_seconds": round(end_to_end_seconds, 3),
+        "decode_measurement_method": (
+            "generation_finish_minus_first_raw_token; throughput excludes the first token"
+        ),
+    }
 
 
 def detect_finish_reason(
@@ -39,14 +205,22 @@ def detect_finish_reason(
 
 
 class LocalLLM:
-    def __init__(self, model_name: str, settings: GenerationSettings) -> None:
+    def __init__(
+        self,
+        model_name: str,
+        settings: GenerationSettings,
+        load_profile: str = "bf16",
+    ) -> None:
         self.model_name = model_name
+        self.requested_load_profile = validate_load_profile(load_profile)
+        self.effective_load_profile = self.requested_load_profile
+        self.load_profile_metadata: dict[str, Any] | None = None
         self.settings = settings
         self.tokenizer: Any = None
         self.model: Any = None
         self.model_load_metrics: dict[str, float] | None = None
         self.model_runtime: dict[str, Any] | None = None
-        self.load_model(model_name)
+        self.load_model(model_name, self.requested_load_profile)
 
     def unload_model(self) -> None:
         if self.model is not None:
@@ -63,7 +237,9 @@ class LocalLLM:
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
 
-    def load_model(self, model_name: str) -> None:
+    def load_model(self, model_name: str, load_profile: str = "bf16") -> None:
+        load_profile = validate_load_profile(load_profile)
+        load_kwargs, requested_compute_dtype = build_model_load_kwargs(load_profile)
         if self.model is not None:
             print(f"\nUnloading {self.model_name}...")
             self.unload_model()
@@ -79,15 +255,26 @@ class LocalLLM:
 
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype="auto",
-            device_map="auto",
+            **load_kwargs,
         )
         self.model.eval()
 
         model_seconds = time.perf_counter() - model_started
         total_seconds = time.perf_counter() - load_started
         self.model_name = model_name
-        self.model_runtime = collect_model_runtime(self.model)
+        self.requested_load_profile = load_profile
+        self.load_profile_metadata = extract_quantization_metadata(
+            self.model,
+            load_profile,
+            requested_compute_dtype,
+        )
+        self.effective_load_profile = self.load_profile_metadata[
+            "effective_load_profile"
+        ]
+        self.model_runtime = collect_model_runtime(
+            self.model,
+            self.load_profile_metadata,
+        )
         self.model_load_metrics = {
             "tokenizer_seconds": round(tokenizer_seconds, 3),
             "model_seconds": round(model_seconds, 3),
@@ -97,6 +284,15 @@ class LocalLLM:
         print(f"Tokenizer loaded in {tokenizer_seconds:.2f} seconds")
         print(f"Model loaded in {model_seconds:.2f} seconds")
         print(f"Total load time: {total_seconds:.2f} seconds")
+        print(f"Requested profile: {self.requested_load_profile}")
+        print(f"Effective profile: {self.effective_load_profile}")
+        print(
+            "Quantization: "
+            f"{self.load_profile_metadata['quantization_method'] or 'disabled'}"
+        )
+        print(f"Quantization bits: {self.load_profile_metadata['quantization_bits']}")
+        print(f"Compute dtype: {self.load_profile_metadata['compute_dtype']}")
+        print(f"Storage dtype: {self.load_profile_metadata['storage_dtype']}")
         print(f"Device: {next(self.model.parameters()).device}")
 
         if torch.cuda.is_available():
@@ -104,6 +300,19 @@ class LocalLLM:
             reserved = torch.cuda.memory_reserved() / 1024**3
             print(f"GPU memory allocated: {allocated:.2f} GB")
             print(f"GPU memory reserved:  {reserved:.2f} GB")
+
+    def switch_model(self, model_name: str, load_profile: str = "bf16") -> None:
+        load_profile = validate_load_profile(load_profile)
+        build_model_load_kwargs(load_profile)
+        previous_model = self.model_name
+        previous_profile = self.requested_load_profile
+        try:
+            self.load_model(model_name, load_profile)
+        except Exception:
+            self.unload_model()
+            print(f"Attempting to restore {previous_model} ({previous_profile})...")
+            self.load_model(previous_model, previous_profile)
+            raise
 
     @staticmethod
     def split_thinking_and_answer(text: str) -> tuple[str, str]:
@@ -130,7 +339,11 @@ class LocalLLM:
         self,
         prompt: str,
         on_text: Callable[[str], None] | None = None,
+        run_type: str = "interactive",
+        benchmark_name: str | None = None,
     ) -> dict[str, Any]:
+        request_started = time.perf_counter()
+        prompt_preparation_started = request_started
         messages = [{"role": "user", "content": prompt}]
 
         rendered_prompt = self.tokenizer.apply_chat_template(
@@ -143,7 +356,9 @@ class LocalLLM:
         inputs = self.tokenizer(
             rendered_prompt,
             return_tensors="pt",
-        ).to(self.model.device)
+        )
+        prompt_tokenization_seconds = time.perf_counter() - prompt_preparation_started
+        inputs = inputs.to(self.model.device)
 
         prompt_tokens = inputs.input_ids.shape[1]
 
@@ -168,7 +383,7 @@ class LocalLLM:
                 }
             )
 
-        streamer = TextIteratorStreamer(
+        streamer = TimingTextIteratorStreamer(
             self.tokenizer,
             skip_prompt=True,
             skip_special_tokens=True,
@@ -204,6 +419,14 @@ class LocalLLM:
             torch.cuda.synchronize()
 
         elapsed = time.perf_counter() - started
+        first_token_seconds = (
+            streamer.first_generated_token_at - started
+            if streamer.first_generated_token_at is not None
+            else None
+        )
+        first_streamed_output_seconds = (
+            first_output_at - started if first_output_at is not None else None
+        )
 
         if "error" in generation_result:
             raise generation_result["error"]
@@ -233,19 +456,51 @@ class LocalLLM:
         ).strip()
 
         thinking, answer = self.split_thinking_and_answer(raw_output)
-
+        quality_indicators = build_quality_indicators(
+            self.tokenizer,
+            thinking,
+            answer,
+            raw_output,
+            finish_reason,
+            generation_truncated,
+        )
         gpu_after = get_gpu_status()
         peak_vram_gb = None
         if torch.cuda.is_available():
             peak_vram_gb = bytes_to_gb(torch.cuda.max_memory_allocated())
+        end_to_end_seconds = time.perf_counter() - request_started
+        performance = calculate_performance_metrics(
+            prompt_tokenization_seconds=prompt_tokenization_seconds,
+            generation_seconds=elapsed,
+            end_to_end_seconds=end_to_end_seconds,
+            prompt_tokens=prompt_tokens,
+            generated_tokens=generated_tokens,
+            first_token_seconds=first_token_seconds,
+            first_streamed_output_seconds=first_streamed_output_seconds,
+        )
 
         return {
             "model": self.model_name,
+            "requested_load_profile": self.requested_load_profile,
+            "effective_load_profile": self.effective_load_profile,
+            "quantization_enabled": self.load_profile_metadata[
+                "quantization_enabled"
+            ],
+            "quantization_bits": self.load_profile_metadata["quantization_bits"],
+            "quantization_method": self.load_profile_metadata[
+                "quantization_method"
+            ],
+            "compute_dtype": self.load_profile_metadata["compute_dtype"],
+            "storage_dtype": self.load_profile_metadata["storage_dtype"],
+            "run_type": run_type,
+            "benchmark_name": benchmark_name,
             "prompt": prompt,
             "settings": asdict(self.settings),
             "finish_reason": finish_reason,
             "generation_truncated": generation_truncated,
             "model_runtime": self.model_runtime,
+            "quality_indicators": quality_indicators,
+            "performance": performance,
             "result": {
                 "raw_output": raw_output,
                 "thinking": thinking,

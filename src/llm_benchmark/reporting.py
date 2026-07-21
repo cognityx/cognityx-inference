@@ -69,13 +69,19 @@ def save_benchmark_result(
     model_directory = output_directory / sanitize_model_name(
         str(result.get("model", "unknown-model"))
     )
-    model_directory.mkdir(parents=True, exist_ok=True)
+    profile = str(
+        result.get("effective_load_profile")
+        or result.get("requested_load_profile")
+        or "unknown-profile"
+    )
+    profile_directory = model_directory / sanitize_model_name(profile)
+    profile_directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc)
-    path = model_directory / benchmark_filename(timestamp)
+    path = profile_directory / benchmark_filename(timestamp)
     suffix = 1
 
     while path.exists():
-        path = model_directory / (
+        path = profile_directory / (
             f"{Path(benchmark_filename(timestamp)).stem}_{suffix}.json"
         )
         suffix += 1

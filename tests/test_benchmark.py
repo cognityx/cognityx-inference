@@ -1,19 +1,38 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
-from llm_benchmark.llm import detect_finish_reason
+import torch
+
+from llm_benchmark.app import (
+    BENCHMARK_NAME,
+    BENCHMARK_PROMPT,
+    benchmark_request,
+    parse_args,
+    parse_model_command,
+    process_prompt,
+)
+from llm_benchmark.llm import (
+    LoadProfileError,
+    build_model_load_kwargs,
+    build_quality_indicators,
+    detect_finish_reason,
+    validate_load_profile,
+)
 from llm_benchmark.model_diagnostics import (
     analyze_device_map,
     collect_model_runtime,
     detect_attention_implementation,
     extract_architecture_metadata,
     extract_cache_configuration,
+    extract_quantization_metadata,
 )
 from llm_benchmark.reporting import (
     benchmark_filename,
@@ -55,6 +74,8 @@ class ReportingTests(unittest.TestCase):
     def test_saved_json_preserves_structure(self) -> None:
         result = {
             "model": "test/model",
+            "requested_load_profile": "int4",
+            "effective_load_profile": "int4",
             "prompt": "hello",
             "settings": {"max_new_tokens": 10},
             "finish_reason": "eos",
@@ -80,7 +101,8 @@ class ReportingTests(unittest.TestCase):
             saved = json.loads(path.read_text(encoding="utf-8"))
 
         self.assertEqual(saved, result)
-        self.assertEqual(path.parent.name, "test--model")
+        self.assertEqual(path.parent.name, "int4")
+        self.assertEqual(path.parent.parent.name, "test--model")
         self.assertEqual(saved["finish_reason"], "eos")
         self.assertIn("raw_output", saved["result"])
         self.assertIn("generated_tokens", saved["metrics"])
@@ -196,6 +218,192 @@ class ModelDiagnosticTests(unittest.TestCase):
         self.assertEqual(runtime["parameter_dtypes"], ["float16", "float32"])
         self.assertTrue(runtime["uses_mixed_dtypes"])
         self.assertEqual(runtime["architecture"]["total_parameters"], 15)
+
+    def test_extracts_quantization_metadata(self) -> None:
+        class QuantizationConfig:
+            load_in_4bit = True
+            load_in_8bit = False
+            quant_method = "bitsandbytes"
+            bnb_4bit_compute_dtype = torch.bfloat16
+            bnb_4bit_quant_storage = torch.uint8
+
+        class Config:
+            quantization_config = QuantizationConfig()
+
+        class Model:
+            config = Config()
+            is_loaded_in_4bit = True
+
+        metadata = extract_quantization_metadata(Model(), "int4")
+
+        self.assertEqual(metadata["effective_load_profile"], "int4")
+        self.assertTrue(metadata["quantization_enabled"])
+        self.assertEqual(metadata["quantization_bits"], 4)
+        self.assertEqual(metadata["compute_dtype"], "torch.bfloat16")
+        self.assertEqual(metadata["storage_dtype"], "torch.uint8")
+
+    def test_non_quantized_bf16_metadata(self) -> None:
+        class Model:
+            config = object()
+
+        metadata = extract_quantization_metadata(
+            Model(),
+            "bf16",
+            torch.bfloat16,
+        )
+
+        self.assertEqual(metadata["effective_load_profile"], "bf16")
+        self.assertFalse(metadata["quantization_enabled"])
+        self.assertIsNone(metadata["quantization_bits"])
+        self.assertEqual(metadata["compute_dtype"], "torch.bfloat16")
+
+
+class CommandTests(unittest.TestCase):
+    def test_startup_argument_defaults(self) -> None:
+        args = parse_args([])
+
+        self.assertEqual(args.model, "Qwen/Qwen3-8B")
+        self.assertEqual(args.profile, "bf16")
+
+    def test_startup_arguments_accept_model_and_profile(self) -> None:
+        args = parse_args(["--model", "Qwen/Qwen3-14B", "--profile", "int4"])
+
+        self.assertEqual(args.model, "Qwen/Qwen3-14B")
+        self.assertEqual(args.profile, "int4")
+
+    def test_startup_arguments_reject_unknown_profile(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_args(["--profile", "unknown"])
+
+    def test_load_profile_validation(self) -> None:
+        for profile in ("bf16", "fp16", "int8", "int4"):
+            self.assertEqual(validate_load_profile(profile), profile)
+        with self.assertRaises(LoadProfileError):
+            validate_load_profile("fp32")
+
+    def test_model_command_defaults_to_bf16(self) -> None:
+        self.assertEqual(
+            parse_model_command("/model Qwen/Qwen3-8B"),
+            ("Qwen/Qwen3-8B", "bf16"),
+        )
+
+    def test_model_command_accepts_profile(self) -> None:
+        self.assertEqual(
+            parse_model_command("/model Qwen/Qwen3-14B int8"),
+            ("Qwen/Qwen3-14B", "int8"),
+        )
+
+    def test_benchmark_request_is_stable(self) -> None:
+        self.assertEqual(
+            benchmark_request(),
+            (BENCHMARK_PROMPT, "benchmark", BENCHMARK_NAME),
+        )
+        self.assertEqual(
+            BENCHMARK_PROMPT,
+            "Can AI be applied to the travelling salesman problem?",
+        )
+
+    def test_missing_bitsandbytes_rejects_quantized_profiles(self) -> None:
+        for profile in ("int8", "int4"):
+            with self.assertRaisesRegex(LoadProfileError, "uv add bitsandbytes"):
+                build_model_load_kwargs(profile, has_bitsandbytes=False)
+
+    def test_bf16_does_not_require_bitsandbytes(self) -> None:
+        kwargs, compute_dtype = build_model_load_kwargs(
+            "bf16",
+            has_bitsandbytes=False,
+        )
+
+        self.assertEqual(kwargs["torch_dtype"], torch.bfloat16)
+        self.assertEqual(compute_dtype, torch.bfloat16)
+
+
+class QualityIndicatorTests(unittest.TestCase):
+    class Tokenizer:
+        @staticmethod
+        def encode(text: str, add_special_tokens: bool = False) -> list[str]:
+            return text.split()
+
+    def test_quality_indicator_counts(self) -> None:
+        quality = build_quality_indicators(
+            self.Tokenizer(),
+            "step one",
+            "final answer",
+            "step one </think> final answer",
+            "eos",
+            False,
+        )
+
+        self.assertTrue(quality["answer_complete"])
+        self.assertTrue(quality["reasoning_detected"])
+        self.assertEqual(quality["thinking_tokens"], 2)
+        self.assertEqual(quality["answer_tokens"], 2)
+        self.assertFalse(quality["empty_answer"])
+
+    def test_length_truncation_is_incomplete(self) -> None:
+        quality = build_quality_indicators(
+            self.Tokenizer(), "", "partial", "partial", "length", True
+        )
+
+        self.assertFalse(quality["answer_complete"])
+        self.assertTrue(quality["generation_truncated"])
+
+    def test_eos_completion_is_complete(self) -> None:
+        quality = build_quality_indicators(
+            self.Tokenizer(), "", "done", "done", "eos", False
+        )
+
+        self.assertTrue(quality["answer_complete"])
+
+    @patch("llm_benchmark.app.save_benchmark_result", return_value=Path("saved.json"))
+    @patch("llm_benchmark.app.get_system_metadata", return_value={})
+    def test_prompt_processing_marks_run_type(
+        self,
+        _metadata: object,
+        _save: object,
+    ) -> None:
+        def generate(prompt: str, **kwargs: object) -> dict[str, object]:
+            return {
+                "model": "mock",
+                "prompt": prompt,
+                "run_type": kwargs["run_type"],
+                "benchmark_name": kwargs["benchmark_name"],
+                "finish_reason": "eos",
+                "generation_truncated": False,
+                "result": {"raw_output": "done", "thinking": "", "answer": "done"},
+                "metrics": {
+                    "time_to_first_token_seconds": 0.1,
+                    "generation_seconds": 0.2,
+                    "prompt_tokens": 1,
+                    "generated_tokens": 1,
+                    "total_tokens": 2,
+                    "tokens_per_second": 5.0,
+                    "peak_vram_gb": None,
+                    "gpu_allocated_before_gb": None,
+                    "gpu_reserved_before_gb": None,
+                    "gpu_allocated_after_gb": None,
+                    "gpu_reserved_after_gb": None,
+                },
+            }
+
+        llm = Mock()
+        llm.generate.side_effect = generate
+        with contextlib.redirect_stdout(io.StringIO()):
+            benchmark = process_prompt(
+                llm,
+                BENCHMARK_PROMPT,
+                "benchmark",
+                BENCHMARK_NAME,
+            )
+            interactive = process_prompt(llm, "hello")
+
+        self.assertEqual(benchmark["run_type"], "benchmark")
+        self.assertEqual(benchmark["benchmark_name"], BENCHMARK_NAME)
+        self.assertEqual(benchmark["schema_version"], 2)
+        self.assertIn("api_equivalent_cost_estimate", benchmark)
+        self.assertEqual(interactive["run_type"], "interactive")
+        self.assertIsNone(interactive["benchmark_name"])
 
 
 if __name__ == "__main__":
