@@ -63,6 +63,31 @@ Commands
     )
 
 
+def print_metrics(result: dict[str, Any]) -> None:
+    metrics = result["metrics"]
+    time_to_first_token = metrics["time_to_first_token_seconds"]
+    peak_vram = metrics["peak_vram_gb"]
+
+    print("\nMetrics")
+    print("-------")
+    print(
+        "Time to first token: "
+        f"{time_to_first_token:.3f} seconds"
+        if time_to_first_token is not None
+        else "Time to first token: unavailable"
+    )
+    print(f"Total generation time: {metrics['generation_seconds']:.3f} seconds")
+    print(f"Prompt tokens: {metrics['prompt_tokens']}")
+    print(f"Output tokens: {metrics['generated_tokens']}")
+    print(f"Total tokens: {metrics['total_tokens']}")
+    print(f"Output tokens per second: {metrics['tokens_per_second']}")
+    print(
+        f"Peak VRAM: {peak_vram:.3f} GB"
+        if peak_vram is not None
+        else "Peak VRAM: unavailable"
+    )
+
+
 def run() -> None:
     settings = GenerationSettings()
     llm = LocalLLM("Qwen/Qwen3-8B", settings)
@@ -136,7 +161,15 @@ def run() -> None:
                 continue
 
             try:
-                result = llm.generate(user_input)
+                print("\nResponse")
+                print("--------")
+                result = llm.generate(
+                    user_input,
+                    on_text=lambda text: print(text, end="", flush=True),
+                )
+                print()
+
+                print_metrics(result)
 
                 print("\nJSON")
                 print(json.dumps(result, indent=2, ensure_ascii=False))

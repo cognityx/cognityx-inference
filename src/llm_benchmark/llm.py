@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import gc
+import threading
 import time
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, Callable
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 
 @dataclass
@@ -94,7 +95,11 @@ class LocalLLM:
 
         return "", cleaned
 
-    def generate(self, prompt: str) -> dict[str, Any]:
+    def generate(
+        self,
+        prompt: str,
+        on_text: Callable[[str], None] | None = None,
+    ) -> dict[str, Any]:
         messages = [{"role": "user", "content": prompt}]
 
         rendered_prompt = self.tokenizer.apply_chat_template(
@@ -115,8 +120,6 @@ class LocalLLM:
             torch.cuda.reset_peak_memory_stats()
             torch.cuda.synchronize()
 
-        started = time.perf_counter()
-
         generation_kwargs: dict[str, Any] = {
             "max_new_tokens": self.settings.max_new_tokens,
             "do_sample": self.settings.do_sample,
@@ -133,17 +136,47 @@ class LocalLLM:
                 }
             )
 
-        with torch.inference_mode():
-            outputs = self.model.generate(
-                **inputs,
-                **generation_kwargs,
-            )
+        streamer = TextIteratorStreamer(
+            self.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+        )
+        generation_result: dict[str, Any] = {}
+
+        def run_generation() -> None:
+            try:
+                with torch.inference_mode():
+                    generation_result["outputs"] = self.model.generate(
+                        **inputs,
+                        **generation_kwargs,
+                        streamer=streamer,
+                    )
+            except BaseException as exc:
+                generation_result["error"] = exc
+                streamer.end()
+
+        started = time.perf_counter()
+        generation_thread = threading.Thread(target=run_generation)
+        generation_thread.start()
+
+        first_output_at: float | None = None
+        for text in streamer:
+            if text and first_output_at is None:
+                first_output_at = time.perf_counter()
+            if on_text is not None:
+                on_text(text)
+
+        generation_thread.join()
 
         if torch.cuda.is_available():
             torch.cuda.synchronize()
 
         elapsed = time.perf_counter() - started
 
+        if "error" in generation_result:
+            raise generation_result["error"]
+
+        outputs = generation_result["outputs"]
         generated_ids = outputs[0, prompt_tokens:]
         generated_tokens = generated_ids.shape[0]
 
@@ -168,8 +201,14 @@ class LocalLLM:
                 "answer": answer,
             },
             "metrics": {
+                "time_to_first_token_seconds": (
+                    round(first_output_at - started, 3)
+                    if first_output_at is not None
+                    else None
+                ),
                 "prompt_tokens": prompt_tokens,
                 "generated_tokens": generated_tokens,
+                "total_tokens": prompt_tokens + generated_tokens,
                 "generation_seconds": round(elapsed, 3),
                 "tokens_per_second": (
                     round(generated_tokens / elapsed, 2)
