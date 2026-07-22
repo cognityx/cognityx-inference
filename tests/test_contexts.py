@@ -75,8 +75,8 @@ class ContextPromptTests(unittest.TestCase):
             contexts.CONTEXT_PROVIDERS = original
         self.assertEqual(result.metadata["actual_corpus_tokens"], 5)
         self.assertEqual(result.metadata["input_truncation_status"], "final_chunk_trimmed")
-        self.assertEqual([chunk["token_count"] for chunk in result.metadata["chunks_used"]], [3, 2])
-        self.assertNotIn("text", result.metadata["chunks_used"][0])
+        self.assertEqual(result.metadata["chunks_used_count"], 2)
+        self.assertNotIn("chunks_used", result.metadata)
 
     def test_prompt_budget_trims_only_last_chunk(self) -> None:
         provider = type("Provider", (), {
@@ -97,8 +97,8 @@ class ContextPromptTests(unittest.TestCase):
             )
         finally:
             contexts.CONTEXT_PROVIDERS = original
-        self.assertEqual(result.metadata["chunks_used"][0]["token_count"], 3)
-        self.assertLess(result.metadata["chunks_used"][-1]["token_count"], 5)
+        self.assertEqual(result.metadata["chunks_used_count"], 2)
+        self.assertEqual(result.metadata["actual_corpus_tokens"], 5)
         self.assertLessEqual(result.metadata["final_prompt_tokens"], 32)
 
 

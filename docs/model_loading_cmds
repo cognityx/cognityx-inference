@@ -76,7 +76,7 @@ uv run python src/llm_benchmark/main.py \
   --profile int4 \
   --context wikitext \
   --context-tokens 10000 \
-  --vllm-max-model-len 50000 \
+  --vllm-max-model-len 40960 \
   --kv-cache-dtype fp8
 
 ### Increase context gradually without reloading:

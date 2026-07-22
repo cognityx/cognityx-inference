@@ -142,9 +142,9 @@ implemented, but `/help` lists supported filters and export formats.
 
 For context-backed runs, reports store only a 24-word `prompt` preview instead of
 duplicating the full corpus prompt. The original character count, exact prompt-token
-count, and SHA-256 hash remain available for traceability. `chunks_used` contains
-only chunk IDs, sources, and token counts; full chunk text remains in the prepared
-context JSONL.
+count, SHA-256 hash, and compact `chunks_used_count` remain available for
+traceability. Per-chunk details and full text remain in the prepared context JSONL
+instead of being copied into every benchmark report.
 
 ## Optional vLLM engine
 
@@ -154,8 +154,12 @@ Transformers environment:
 ```bash
 uv venv .venv-vllm --python 3.12 --seed
 uv pip install --python .venv-vllm/bin/python vllm bitsandbytes --torch-backend=auto
-# Keep nvcc aligned with the CUDA 13.0 headers selected by this environment.
-uv pip install --python .venv-vllm/bin/python nvidia-cuda-nvcc==13.0.88
+# Keep the CUDA compiler front end, assembler, headers, and CCCL coherent.
+uv pip install --python .venv-vllm/bin/python \
+  nvidia-cuda-nvcc==13.0.88 \
+  nvidia-nvvm==13.0.88 \
+  nvidia-cuda-crt==13.0.88 \
+  nvidia-cuda-cccl==13.0.85
 ```
 
 The application automatically re-executes `--engine vllm` under `.venv-vllm`. On
@@ -185,7 +189,7 @@ uv run python src/llm_benchmark/main.py \
   --profile int4 \
   --context wikitext \
   --context-tokens 10000 \
-  --vllm-max-model-len 50000 \
+  --vllm-max-model-len 40960 \
   --kv-cache-dtype fp8
 ```
 

@@ -66,6 +66,17 @@ class VLLMLLM:
             model_name, local_files_only=not load_options.allow_download
         )
         architecture = extract_architecture_metadata(config, None)
+        declared_context_limit = architecture.get("max_position_embeddings")
+        if (
+            isinstance(declared_context_limit, (int, float))
+            and max_model_len > int(declared_context_limit)
+        ):
+            raise VLLMEngineError(
+                f"--vllm-max-model-len {max_model_len} exceeds the model's "
+                f"declared context limit of {int(declared_context_limit)} tokens. "
+                "Choose a value at or below that limit; the unsafe vLLM override "
+                "is intentionally not enabled."
+            )
         started = time.perf_counter()
         kwargs: dict[str, Any] = {
             "model": model_name,

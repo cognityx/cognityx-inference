@@ -159,6 +159,36 @@ def ensure_engine_runtime(engine: str) -> None:
     )
     if cuda_home is not None:
         environment.setdefault("CUDA_HOME", str(cuda_home))
+        cuda_lib = cuda_home / "lib"
+        cuda_lib64 = cuda_home / "lib64"
+        if cuda_lib.is_dir() and not cuda_lib64.exists():
+            try:
+                cuda_lib64.symlink_to(cuda_lib.name, target_is_directory=True)
+            except OSError as exc:
+                raise VLLMEngineError(
+                    f"Could not create the CUDA lib64 compatibility link: {exc}"
+                ) from exc
+        cudart_versioned = cuda_lib / "libcudart.so.13"
+        cudart_link = cuda_lib / "libcudart.so"
+        if cudart_versioned.is_file() and not cudart_link.exists():
+            try:
+                cudart_link.symlink_to(cudart_versioned.name)
+            except OSError as exc:
+                raise VLLMEngineError(
+                    f"Could not create the CUDA runtime linker name: {exc}"
+                ) from exc
+        cuda_library_paths = [str(cuda_home / "lib")]
+        wsl_driver_library = Path("/usr/lib/wsl/lib")
+        if wsl_driver_library.is_dir():
+            cuda_library_paths.append(str(wsl_driver_library))
+        existing_library_path = environment.get("LIBRARY_PATH")
+        if existing_library_path:
+            cuda_library_paths.append(existing_library_path)
+        environment["LIBRARY_PATH"] = ":".join(cuda_library_paths)
+        existing_runtime_path = environment.get("LD_LIBRARY_PATH")
+        if existing_runtime_path:
+            cuda_library_paths.append(existing_runtime_path)
+        environment["LD_LIBRARY_PATH"] = ":".join(cuda_library_paths)
     path_entries = [str(python.parent)]
     if cuda_home is not None:
         path_entries.append(str(cuda_home / "bin"))
@@ -622,7 +652,7 @@ def process_prompt(
             f"{context_metadata['context_name']} ({context_metadata['context_provider']}), "
             f"{context_metadata['actual_corpus_tokens']} corpus tokens, "
             f"{context_metadata['final_prompt_tokens']} final prompt tokens, "
-            f"{len(context_metadata['chunks_used'])} chunks, "
+            f"{context_metadata['chunks_used_count']} chunks, "
             f"input {context_metadata['input_truncation_status']}"
         )
     cost_estimate = result["api_equivalent_cost_estimate"]

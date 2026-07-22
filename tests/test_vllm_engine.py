@@ -100,6 +100,31 @@ class VLLMConfigurationTests(unittest.TestCase):
         self._build("fp8")
         self.assertEqual(FakeLLM.calls[-1]["kv_cache_dtype"], "fp8")
 
+    def test_rejects_context_capacity_above_model_limit(self) -> None:
+        fake_module = SimpleNamespace(__version__="test", LLM=FakeLLM)
+        with (
+            patch.dict(sys.modules, {"vllm": fake_module}),
+            patch(
+                "llm_benchmark.vllm_engine.AutoConfig.from_pretrained",
+                return_value=object(),
+            ),
+            patch(
+                "llm_benchmark.vllm_engine.extract_architecture_metadata",
+                return_value={"max_position_embeddings": 40960},
+            ),
+            self.assertRaisesRegex(
+                VLLMEngineError, "exceeds the model's declared context limit"
+            ),
+        ):
+            VLLMLLM(
+                "Qwen/Qwen3-32B",
+                GenerationSettings(max_new_tokens=8192),
+                "int4",
+                ModelLoadOptions(strict_gpu_only=True),
+                kv_cache_dtype="fp8",
+                max_model_len=50000,
+            )
+
     def test_prompt_template_requests_plain_token_ids(self) -> None:
         engine = self._build("auto")
         tokenizer = FakeTokenizer([1, 2, 3])

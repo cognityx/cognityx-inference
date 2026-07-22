@@ -437,7 +437,7 @@ class QualityIndicatorTests(unittest.TestCase):
                     "context_name": "sample",
                     "context_provider": "folder",
                     "actual_corpus_tokens": 5,
-                    "chunks_used": [],
+                    "chunks_used_count": 0,
                     "input_truncation_status": "not_truncated",
                 },
             )
