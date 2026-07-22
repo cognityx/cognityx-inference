@@ -262,6 +262,17 @@ def resolve_load_profile(
     native_method = extract_checkpoint_quantization_method(config)
     checkpoint_quantized = checkpoint_has_quantization_config(config)
 
+    if requested_profile in {"gptq3", "gptq2"}:
+        expected = int(requested_profile[-1])
+        quant_config = getattr(config, "quantization_config", None)
+        bits = quant_config.get("bits") if isinstance(quant_config, Mapping) else getattr(quant_config, "bits", None)
+        if native_method != "gptq" or bits != expected:
+            raise QuantizationResolutionError(
+                f"{requested_profile} requires a separate GPTQ checkpoint declaring {expected}-bit weights; found method={native_method!r}, bits={bits!r}."
+            )
+        if importlib.util.find_spec("gptqmodel") is None and importlib.util.find_spec("auto_gptq") is None:
+            raise QuantizationResolutionError("GPTQ backend missing. Install it with: uv add gptqmodel")
+
     if requested_profile == "native" and not checkpoint_quantized:
         raise NativeQuantizationRequiredError(
             "The native profile requires a checkpoint with an embedded "
@@ -269,7 +280,7 @@ def resolve_load_profile(
         )
 
     if checkpoint_quantized:
-        adapted = requested_profile not in {"native", "auto"}
+        adapted = requested_profile not in {"native", "auto", "gptq3", "gptq2"}
         warning = None
         if adapted:
             warning = (
@@ -337,7 +348,7 @@ def resolve_load_profile(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=False,
+            bnb_4bit_use_double_quant=effective_profile == "int4-double",
         )
     return QuantizationResolution(
         requested_profile=requested_profile,

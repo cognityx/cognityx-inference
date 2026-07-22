@@ -1,0 +1,48 @@
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-8B \
+  --profile bf16
+
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-14B \
+  --profile int4
+
+
+uv run python src/llm_benchmark/main.py \
+  --model openai/gpt-oss-20b \
+  --profile auto
+
+
+uv run python src/llm_benchmark/main.py \
+  --model google/gemma-3-27b-it \
+  --profile int4
+
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-32B \
+  --profile int4
+
+uv run python src/llm_benchmark/main.py \
+  --model deepseek-ai/DeepSeek-R1-Distill-Qwen-32B \
+  --profile int4
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-30B-A3B \
+  --profile int4
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen2.5-72B-Instruct \
+  --profile int4
+
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen2.5-72B-Instruct \
+  --profile int4
+
+  uv run python src/llm_benchmark/main.py \
+  --model meta-llama/Llama-3.1-70B-Instruct \
+  --profile int4
+
+
+
+

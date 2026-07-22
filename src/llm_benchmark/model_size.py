@@ -13,7 +13,12 @@ def bytes_to_gib(value: int | float) -> float:
 
 
 def nominal_bits_for_profile(profile: str) -> int | None:
-    return {"bf16": 16, "fp16": 16, "int8": 8, "int4": 4}.get(profile)
+    return {"bf16": 16, "fp16": 16, "int8": 8, "int4": 4, "int4-double": 4, "gptq3": 3, "gptq2": 2}.get(profile)
+
+
+def estimate_parameter_count_from_config(config: Any) -> int | None:
+    holder = type("ConfigHolder", (), {"config": config})()
+    return _config_derived_parameter_count(holder)
 
 
 def _attribute(source: Any, name: str) -> Any:

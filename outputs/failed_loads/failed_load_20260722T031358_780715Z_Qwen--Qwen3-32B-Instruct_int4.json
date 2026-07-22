@@ -1,0 +1,43 @@
+{
+  "timestamp_utc": "2026-07-22T03:13:58.780715+00:00",
+  "model": "Qwen/Qwen3-32B-Instruct",
+  "profile": "int4",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "total_memory_gb": 31.842
+  },
+  "cuda_version": "13.0",
+  "pytorch_version": "2.13.0+cu130",
+  "exception_type": "OSError",
+  "exception_message": "Qwen/Qwen3-32B-Instruct is not a local folder and is not a valid model identifier listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having permission to this repo either by logging in with `hf auth login` or by passing `token=<your_token>`",
+  "exception_chain": [
+    {
+      "exception_type": "OSError",
+      "exception_message": "Qwen/Qwen3-32B-Instruct is not a local folder and is not a valid model identifier listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token having permission to this repo either by logging in with `hf auth login` or by passing `token=<your_token>`"
+    },
+    {
+      "exception_type": "RepositoryNotFoundError",
+      "exception_message": "404 Client Error. (Request ID: Root=1-6a603576-27b374f2009f3a993892f39f;18ab6920-8e4e-4b18-bd29-4651bca7fdf6)\n\nRepository Not Found for url: https://huggingface.co/Qwen/Qwen3-32B-Instruct/resolve/main/config.json.\nPlease make sure you specified the correct `repo_id` and `repo_type`.\nIf you are trying to access a private or gated repo, make sure you are authenticated and your token has the required permissions.\nFor more details, see https://huggingface.co/docs/huggingface_hub/authentication"
+    },
+    {
+      "exception_type": "HTTPStatusError",
+      "exception_message": "Client error '404 Not Found' for url 'https://huggingface.co/Qwen/Qwen3-32B-Instruct/resolve/main/config.json'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+    }
+  ],
+  "failure_stage": "configuration_download",
+  "failure_category": "authentication",
+  "failure_code": "gated_repository",
+  "bf16_dequantization_fallback_attempted": false,
+  "diagnostic_summary": "The Hugging Face repository is gated and access has not been granted.",
+  "attempted_configuration": {
+    "requested_load_profile": "int4",
+    "effective_load_profile": null,
+    "quantization_enabled": true,
+    "quantization_bits": 4,
+    "quantization_method": "bitsandbytes",
+    "compute_dtype": null,
+    "storage_dtype": null
+  },
+  "loading_stage": "configuration_download",
+  "model_loader": null
+}

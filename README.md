@@ -3,6 +3,17 @@
 Run a persistent local Transformers model with streaming output and saved benchmark
 diagnostics.
 
+Before loading, a Hugging Face Hub dry run reports cached and missing checkpoint
+bytes without downloading weights. Missing downloads require confirmation (No by
+default). Scripts should combine `--non-interactive` with either `--allow-download`
+or `--no-download`.
+
+The loading menu offers strict GPU-only placement, BitsAndBytes INT4 nested
+quantization, controlled GPU-first CPU offload, or a separate verified GPTQ 3-bit
+or 2-bit checkpoint. CPU-offloaded results are classified separately from
+GPU-only capacity results. The GPTQ choices never quantize an ordinary checkpoint
+and may require `uv add gptqmodel`.
+
 ```bash
 uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-8B --profile bf16
 ```
@@ -27,6 +38,18 @@ Load profiles distinguish checkpoint-native quantization from runtime quantizati
 - `auto` uses embedded quantization when present and otherwise defaults to BF16.
 - `int4` and `int8` apply bitsandbytes only to unquantized checkpoints; requests for
   an already quantized checkpoint adapt to its native format with a warning.
+- `int4-double` remains an INT4 NF4 profile and enables nested metadata
+  quantization; it is not described as true 3.6-bit quantization.
+- `gptq3` and `gptq2` require a separate checkpoint whose embedded configuration
+  verifies the requested GPTQ bit width.
+
+Retry an already cached large checkpoint with:
+
+```bash
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen2.5-72B-Instruct \
+  --profile int4
+```
 
 For native checkpoints, diagnostics separately report the checkpoint format and the
 actual runtime path. MXFP4 checks use the installed Transformers requirements for GPU

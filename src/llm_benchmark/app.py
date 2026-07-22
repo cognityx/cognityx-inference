@@ -33,6 +33,10 @@ from llm_benchmark.reporting import (
     get_system_metadata,
     save_benchmark_result,
 )
+from llm_benchmark.download_preflight import format_bytes, inspect_download
+from llm_benchmark.loading_decision import ModelLoadOptions, controlled_max_memory, estimate_capacity
+from llm_benchmark.model_size import estimate_parameter_count_from_config
+from transformers import AutoConfig
 
 DEFAULT_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_LOAD_PROFILE = "bf16"
@@ -62,6 +66,11 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
             "when present, otherwise bf16"
         ),
     )
+    download = parser.add_mutually_exclusive_group()
+    download.add_argument("--allow-download", action="store_true", help="Approve missing checkpoint downloads without prompting")
+    download.add_argument("--no-download", action="store_true", help="Use cached files only; never download")
+    parser.add_argument("--non-interactive", action="store_true", help="Disable all prompts; download permission must be explicit")
+    parser.add_argument("--allow-cpu-offload", action="store_true", help="Allow controlled GPU-first CPU overflow placement")
     parser.add_argument(
         "--config",
         type=Path,
@@ -81,6 +90,95 @@ def parse_model_command(user_input: str) -> tuple[str, str]:
 
 def benchmark_request() -> tuple[str, str, str]:
     return BENCHMARK_PROMPT, "benchmark", BENCHMARK_NAME
+
+
+def approve_download(preflight: Any, *, allow: bool, deny: bool, non_interactive: bool, input_fn: Any = input) -> tuple[bool, dict[str, Any]]:
+    print()
+    if preflight.cached_checkpoint:
+        print("Model checkpoint already cached")
+        print(f"Cache path: {preflight.cache_location}")
+        print(f"Approximate cached size: {format_bytes(preflight.cached_bytes)}")
+        return False, {"download_approved": False, "checkpoint_already_cached": True}
+    print("The selected model requires an additional download.\n")
+    print(f"Model: {preflight.model}")
+    print(f"Already cached: {format_bytes(preflight.cached_bytes)}")
+    print(f"Additional download: {format_bytes(preflight.missing_download_bytes)}")
+    print(f"Available disk space: {format_bytes(preflight.available_disk_bytes)}")
+    print(f"Cache location: {preflight.cache_location}")
+    if deny:
+        return False, {"download_approved": False}
+    if allow:
+        return True, {"download_approved": True, "source": "--allow-download"}
+    if non_interactive:
+        raise RuntimeError("Download required. Non-interactive mode requires --allow-download (or pre-cache the checkpoint).")
+    approved = input_fn("Proceed with download? [y/N] ").strip().lower() in {"y", "yes"}
+    return approved, {"download_approved": approved, "source": "interactive_prompt"}
+
+
+def print_capacity(estimate: dict[str, Any]) -> None:
+    print("\nPre-load memory estimate")
+    print("------------------------")
+    print(f"Logical parameters: {estimate['logical_parameters'] or 'unknown'}")
+    print(f"Requested profile: {estimate['requested_profile']}")
+    print(f"Nominal bits/weight: {estimate['nominal_bits_per_weight'] or 'unknown'}")
+    raw = estimate['theoretical_raw_weight_bytes']
+    print(f"Theoretical raw weight storage: {format_bytes(raw) if raw else 'unknown'}")
+    print(f"GPU total/free: {estimate['gpu_total_gib']} / {estimate['gpu_free_gib']} GiB")
+    print(f"GPU-only placement: {estimate['gpu_only_estimate']}")
+    print(f"Overhead warning: {estimate['overhead_warning']}")
+
+
+def choose_loading_mode(profile: str, *, cpu_flag: bool, non_interactive: bool, input_fn: Any = input) -> tuple[str, str, str | None]:
+    if non_interactive:
+        return ("gpu_cpu_offload" if cpu_flag else "gpu_only"), profile, None
+    print("\nSelect loading mode:\n")
+    print("1. GPU only")
+    if profile in {"int4", "int4-double"}:
+        print("2. GPU only with INT4 nested/double quantization")
+    print("3. GPU + CPU offload")
+    print("4. Select a separate pre-quantized 3-bit or 2-bit checkpoint")
+    print("5. Cancel")
+    choice = input_fn("\nChoice: ").strip()
+    if choice == "1": return "gpu_only", profile, None
+    if choice == "2" and profile in {"int4", "int4-double"}: return "gpu_only", "int4-double", None
+    if choice == "3": return "gpu_cpu_offload", profile, None
+    if choice == "4":
+        bits = input_fn("GPTQ bit width [3/2]: ").strip()
+        if bits not in {"2", "3"}: raise ValueError("GPTQ bit width must be 2 or 3")
+        checkpoint = input_fn("Enter the compatible pre-quantized model ID or local path: ").strip()
+        if not checkpoint: raise ValueError("A pre-quantized checkpoint is required")
+        return "gpu_only_low_bit", f"gptq{bits}", checkpoint
+    raise RuntimeError("Model loading cancelled.")
+
+
+def prepare_load(model: str, profile: str, *, allow_download: bool, no_download: bool, non_interactive: bool, allow_cpu_offload: bool, input_fn: Any = input) -> tuple[str, str, ModelLoadOptions]:
+    original = model
+    confirmations: dict[str, Any] = {}
+    while True:
+        preflight = inspect_download(model)
+        can_download, confirmation = approve_download(preflight, allow=allow_download, deny=no_download, non_interactive=non_interactive, input_fn=input_fn)
+        confirmations.update(confirmation)
+        if not preflight.cached_checkpoint and not can_download:
+            raise RuntimeError("Model download was not approved; loading stopped safely.")
+        config = AutoConfig.from_pretrained(model, local_files_only=not can_download)
+        estimate = estimate_capacity(estimate_parameter_count_from_config(config), profile)
+        print_capacity(estimate)
+        choice, selected_profile, alternate = choose_loading_mode(profile, cpu_flag=allow_cpu_offload, non_interactive=non_interactive, input_fn=input_fn)
+        if alternate:
+            model, profile = alternate, selected_profile
+            continue
+        options = ModelLoadOptions(
+            loading_choice=choice,
+            allow_download=can_download,
+            cpu_offload_allowed=choice == "gpu_cpu_offload",
+            strict_gpu_only=choice != "gpu_cpu_offload",
+            max_memory=controlled_max_memory() if choice == "gpu_cpu_offload" else None,
+            download_preflight=preflight.to_dict(),
+            original_model_id=original,
+            quantized_checkpoint_model_id=model if model != original else None,
+            user_confirmations=confirmations,
+        )
+        return model, selected_profile, options
 
 
 def parse_cost_model_command(user_input: str) -> CostConfig:
@@ -298,6 +396,7 @@ def build_status(
         "quantization_resolution": getattr(llm, "quantization_resolution", None),
         "model_load_metrics": llm.model_load_metrics,
         "model_runtime": runtime_status,
+        "loading": getattr(llm, "loading_diagnostics", None),
         "settings": asdict(llm.settings),
         "gpu": get_gpu_status(),
         "last_query_metrics": (
@@ -362,10 +461,38 @@ def run(
     model_name: str = DEFAULT_MODEL,
     load_profile: str = DEFAULT_LOAD_PROFILE,
     config_path: Path = DEFAULT_CONFIG_PATH,
+    *,
+    allow_download: bool = False,
+    no_download: bool = False,
+    non_interactive: bool = False,
+    allow_cpu_offload: bool = False,
 ) -> None:
     settings = load_generation_settings(config_path)
     print(f"Generation settings loaded from: {config_path}")
-    llm = LocalLLM(model_name, settings, load_profile)
+    original_model = model_name
+    while True:
+        model_name, load_profile, load_options = prepare_load(model_name, load_profile, allow_download=allow_download, no_download=no_download, non_interactive=non_interactive, allow_cpu_offload=allow_cpu_offload)
+        try:
+            llm = LocalLLM(model_name, settings, load_profile, load_options)
+            placement = llm.loading_diagnostics
+            if placement["capacity_classification"] == "gpu_cpu_offloaded_inference":
+                print("\nGPU + CPU offloaded inference success")
+                print("CPU-resident modules:")
+                for module in placement["cpu_resident_modules"]:
+                    print(f"  - {module or '<root>'}")
+            elif placement["capacity_classification"] == "gpu_only_low_bit_inference":
+                print("\nGPU-only low-bit inference success")
+                print("Note: aggressive quantization may affect response quality; retain the answer for human inspection.")
+            else:
+                print("\nGPU-only inference success")
+            break
+        except ModelPlacementError as exc:
+            report_model_load_failure(exc)
+            if non_interactive:
+                raise
+            print("\nThe model cannot fit entirely on the GPU with the current profile.")
+            print("Choose another loading mode from the menu; the cached checkpoint will be reused.")
+            model_name = original_model
     last_result: dict[str, Any] | None = None
     cost_config = CostConfig()
 
@@ -396,6 +523,7 @@ def run(
                             "quantization_resolution": getattr(
                                 llm, "quantization_resolution", None
                             ),
+                            "loading": getattr(llm, "loading_diagnostics", None),
                             "settings": asdict(llm.settings),
                         },
                         indent=2,
@@ -502,7 +630,8 @@ def run(
                     continue
 
                 try:
-                    llm.switch_model(requested_model, requested_profile)
+                    requested_model, requested_profile, options = prepare_load(requested_model, requested_profile, allow_download=False, no_download=False, non_interactive=False, allow_cpu_offload=False)
+                    llm.switch_model(requested_model, requested_profile, options)
                 except ModelPlacementError as exc:
                     report_model_load_failure(exc)
                     if llm.model is None:
@@ -534,8 +663,10 @@ def run(
 def main(arguments: list[str] | None = None) -> None:
     args = parse_args(arguments)
     try:
-        run(args.model, args.profile, args.config)
+        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload)
     except ConfigurationError as exc:
         print(f"Configuration error: {exc}")
     except ModelPlacementError as exc:
         report_model_load_failure(exc)
+    except RuntimeError as exc:
+        print(f"Model loading stopped: {exc}")

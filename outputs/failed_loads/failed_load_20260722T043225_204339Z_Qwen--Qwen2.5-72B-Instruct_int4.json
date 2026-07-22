@@ -1,0 +1,77 @@
+{
+  "timestamp_utc": "2026-07-22T04:32:25.204339+00:00",
+  "model": "Qwen/Qwen2.5-72B-Instruct",
+  "profile": "int4",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "total_memory_gb": 31.842
+  },
+  "cuda_version": "13.0",
+  "pytorch_version": "2.13.0+cu130",
+  "exception_type": "RuntimeError",
+  "exception_message": "Task error: File reconstruction error: IO Error: Input/output error (os error 5)",
+  "exception_chain": [
+    {
+      "exception_type": "RuntimeError",
+      "exception_message": "Task error: File reconstruction error: IO Error: Input/output error (os error 5)"
+    }
+  ],
+  "failure_stage": "model_initialization",
+  "failure_category": "unknown",
+  "failure_code": "model_load_runtime_error",
+  "bf16_dequantization_fallback_attempted": false,
+  "diagnostic_summary": "Model initialization failed.",
+  "attempted_configuration": {
+    "requested_load_profile": "int4",
+    "effective_load_profile": "int4",
+    "quantization_enabled": true,
+    "quantization_bits": 4,
+    "quantization_method": "bitsandbytes",
+    "compute_dtype": "torch.bfloat16",
+    "storage_dtype": "torch.uint8",
+    "quantization_resolution": {
+      "requested_profile": "int4",
+      "effective_profile": "int4",
+      "checkpoint_quantized": false,
+      "checkpoint_quantization_method": null,
+      "runtime_quantization_method": "bitsandbytes",
+      "quantization_source": "runtime_bitsandbytes",
+      "profile_was_adapted": false,
+      "adaptation_reason": null,
+      "pass_quantization_config": true,
+      "warning": null,
+      "bf16_dequantization_fallback_attempted": false,
+      "hardware_preflight": {
+        "accelerator_type": "cuda",
+        "gpu_name": "NVIDIA GeForce RTX 5090",
+        "compute_capability": "12.0",
+        "cuda_version": "13.0",
+        "pytorch_version": "2.13.0+cu130",
+        "transformers_version": "5.14.1",
+        "triton_version": "3.7.1",
+        "triton_kernels_available": false,
+        "triton_compatible": true,
+        "triton_requirement": ">=3.4.0",
+        "kernels_version": "0.15.2",
+        "kernels_compatible": true,
+        "kernels_requirement": ">=0.15.2,<0.16.0"
+      },
+      "native_quantization_runtime_preflight": {
+        "status": "not_applicable",
+        "runtime_backend": null,
+        "reason": null,
+        "runtime_fallback": null,
+        "expected_performance_impact": null,
+        "detection_source": "preflight"
+      }
+    }
+  },
+  "loading_stage": "model_initialization",
+  "model_loader": {
+    "config_class": "Qwen2Config",
+    "task": "causal-lm",
+    "auto_model_class": "AutoModelForCausalLM",
+    "selection_source": "transformers_auto_mapping",
+    "text_only_execution": true
+  }
+}

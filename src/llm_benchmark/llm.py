@@ -31,6 +31,7 @@ from llm_benchmark.quantization import (
     resolve_load_profile,
 )
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
+from llm_benchmark.loading_decision import ModelLoadOptions, load_diagnostics, process_ram_gib
 
 
 @dataclass
@@ -44,7 +45,7 @@ class GenerationSettings:
     repetition_penalty: float = 1.0
 
 
-LOAD_PROFILES = ("bf16", "fp16", "int8", "int4", "native", "auto")
+LOAD_PROFILES = ("bf16", "fp16", "int8", "int4", "int4-double", "gptq3", "gptq2", "native", "auto")
 
 
 class LoadProfileError(ValueError):
@@ -203,12 +204,14 @@ class LocalLLM:
         model_name: str,
         settings: GenerationSettings,
         load_profile: str = "bf16",
+        load_options: ModelLoadOptions | None = None,
     ) -> None:
         self.model_name = model_name
         self.requested_load_profile = validate_load_profile(load_profile)
         self.effective_load_profile = self.requested_load_profile
         self.load_profile_metadata: dict[str, Any] | None = None
         self.settings = settings
+        self.load_options = load_options or ModelLoadOptions()
         self.tokenizer: Any = None
         self.processor: Any = None
         self.model: Any = None
@@ -245,7 +248,7 @@ class LocalLLM:
         load_started = time.perf_counter()
         print("\nLoading configuration...")
         try:
-            config = AutoConfig.from_pretrained(model_name)
+            config = AutoConfig.from_pretrained(model_name, local_files_only=not self.load_options.allow_download)
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
                 exc,
@@ -288,7 +291,7 @@ class LocalLLM:
         tokenizer_started = time.perf_counter()
         try:
             if loader_selection.uses_processor:
-                self.processor = AutoProcessor.from_pretrained(model_name)
+                self.processor = AutoProcessor.from_pretrained(model_name, local_files_only=not self.load_options.allow_download)
                 self.tokenizer = getattr(self.processor, "tokenizer", None)
                 if self.tokenizer is None:
                     raise ValueError(
@@ -297,7 +300,7 @@ class LocalLLM:
                     )
             else:
                 self.processor = None
-                self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self.tokenizer = AutoTokenizer.from_pretrained(model_name, local_files_only=not self.load_options.allow_download)
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
                 exc, model_name, load_profile, attempted,
@@ -324,6 +327,15 @@ class LocalLLM:
                 raise wrapped from exc
             raise
         load_kwargs = resolution.load_kwargs()
+        load_kwargs["local_files_only"] = not self.load_options.allow_download
+        if self.load_options.cpu_offload_allowed:
+            load_kwargs["device_map"] = "auto"
+            load_kwargs["max_memory"] = self.load_options.max_memory
+            quant_config = load_kwargs.get("quantization_config")
+            if load_profile == "int8" and quant_config is not None:
+                quant_config.llm_int8_enable_fp32_cpu_offload = True
+        elif self.load_options.strict_gpu_only:
+            load_kwargs["device_map"] = {"": 0}
         resolution_preload_diagnostic = resolution.diagnostic()
         native_runtime_preflight = resolution_preload_diagnostic[
             "native_quantization_runtime_preflight"
@@ -357,6 +369,8 @@ class LocalLLM:
 
         print("Loading model weights...")
         model_started = time.perf_counter()
+        cpu_memory_before = process_ram_gib()
+        gpu_memory_before = get_gpu_status()
 
         try:
             self.model = loader_selection.auto_model_class.from_pretrained(
@@ -375,12 +389,28 @@ class LocalLLM:
                 raise wrapped from exc
             raise
         self.model.eval()
+        cpu_memory_after = process_ram_gib()
+        gpu_memory_after = get_gpu_status()
+        device_map = dict(getattr(self.model, "hf_device_map", {}) or {})
+        placement = load_diagnostics(self.load_options, cpu_memory_before, cpu_memory_after, device_map)
+        placement["gpu_memory_before"] = gpu_memory_before
+        placement["gpu_memory_after"] = gpu_memory_after
+        if self.load_options.strict_gpu_only and (placement["uses_cpu_offload"] or placement["disk_offload_used"]):
+            raise ModelPlacementError(model_name, load_profile, RuntimeError("Strict GPU-only placement contains CPU or disk modules"), "cpu_offload_required", attempted)
         native_runtime = detect_loaded_native_quantization_runtime(
             self.model,
             resolution.checkpoint_quantization_method,
             native_runtime_preflight,
         )
         resolution_diagnostic = resolution.diagnostic()
+        if load_profile in {"gptq3", "gptq2"}:
+            checkpoint_quantization = getattr(config, "quantization_config", None)
+            resolution_diagnostic["gptq_checkpoint"] = {
+                "bits": checkpoint_quantization.get("bits") if isinstance(checkpoint_quantization, dict) else getattr(checkpoint_quantization, "bits", None),
+                "group_size": checkpoint_quantization.get("group_size") if isinstance(checkpoint_quantization, dict) else getattr(checkpoint_quantization, "group_size", None),
+                "backend": "gptqmodel_or_auto_gptq",
+                "human_inspection_recommended": True,
+            }
         resolution_diagnostic["native_quantization_runtime"] = native_runtime
         resolution_diagnostic["bf16_dequantization_fallback_attempted"] = (
             native_runtime.get("runtime_fallback") == "bf16"
@@ -402,7 +432,13 @@ class LocalLLM:
         self.load_profile_metadata["effective_load_profile"] = resolution.effective_profile
         if resolution.checkpoint_quantized:
             native_method = resolution.checkpoint_quantization_method
-            native_bits = 4 if native_method == "mxfp4" else None
+            embedded_quantization = getattr(self.model.config, "quantization_config", None)
+            embedded_bits = (
+                embedded_quantization.get("bits")
+                if isinstance(embedded_quantization, dict)
+                else getattr(embedded_quantization, "bits", None)
+            )
+            native_bits = 4 if native_method == "mxfp4" else embedded_bits
             model_config = getattr(self.model, "config", None)
             native_compute_dtype = (
                 getattr(model_config, "dtype", None)
@@ -440,6 +476,8 @@ class LocalLLM:
         )
         self.model_runtime["model_loader"] = loader_diagnostic
         self.model_runtime["quantization_resolution"] = resolution_diagnostic
+        self.model_runtime["loading"] = placement
+        self.loading_diagnostics = placement
         self.quantization_resolution = resolution_diagnostic
         architecture = self.model_runtime.get("architecture", {})
         context_length = architecture.get("max_position_embeddings")
@@ -491,15 +529,24 @@ class LocalLLM:
             print(f"GPU memory allocated: {allocated:.2f} GB")
             print(f"GPU memory reserved:  {reserved:.2f} GB")
 
-    def switch_model(self, model_name: str, load_profile: str = "bf16") -> None:
+    def switch_model(
+        self,
+        model_name: str,
+        load_profile: str = "bf16",
+        load_options: ModelLoadOptions | None = None,
+    ) -> None:
         load_profile = validate_load_profile(load_profile)
         previous_model = self.model_name
         previous_profile = self.requested_load_profile
+        previous_options = self.load_options
+        if load_options is not None:
+            self.load_options = load_options
         try:
             self.load_model(model_name, load_profile)
         except ModelPlacementError:
             self.unload_model()
             print(f"Attempting to restore {previous_model} ({previous_profile})...")
+            self.load_options = previous_options
             self.load_model(previous_model, previous_profile)
             raise
 
@@ -699,9 +746,27 @@ class LocalLLM:
             "quantization_method": self.load_profile_metadata[
                 "quantization_method"
             ],
+            "quantization_type": "nf4" if self.requested_load_profile in {"int4", "int4-double"} else None,
             "compute_dtype": self.load_profile_metadata["compute_dtype"],
             "storage_dtype": self.load_profile_metadata["storage_dtype"],
             "quantization_resolution": self.quantization_resolution,
+            "download_preflight": self.loading_diagnostics.get("download_preflight"),
+            "cached_checkpoint": (self.loading_diagnostics.get("download_preflight") or {}).get("cached_checkpoint"),
+            "cached_bytes": (self.loading_diagnostics.get("download_preflight") or {}).get("cached_bytes"),
+            "missing_download_bytes": (self.loading_diagnostics.get("download_preflight") or {}).get("missing_download_bytes"),
+            "loading_choice": self.loading_diagnostics["loading_choice"],
+            "capacity_classification": self.loading_diagnostics["capacity_classification"],
+            "gpu_only_capacity_pass": self.loading_diagnostics["gpu_only_capacity_pass"],
+            "nested_quantization": self.requested_load_profile == "int4-double",
+            "cpu_offload_allowed": self.loading_diagnostics["cpu_offload_allowed"],
+            "cpu_resident_modules": self.loading_diagnostics["cpu_resident_modules"],
+            "cpu_memory_before": self.loading_diagnostics["cpu_memory_before_gib"],
+            "cpu_memory_after": self.loading_diagnostics["cpu_memory_after_gib"],
+            "cpu_memory_peak": self.loading_diagnostics["cpu_memory_peak_gib"],
+            "disk_offload_allowed": self.loading_diagnostics["disk_offload_allowed"],
+            "disk_offload_used": self.loading_diagnostics["disk_offload_used"],
+            "quantized_checkpoint_model_id": self.loading_diagnostics["quantized_checkpoint_model_id"],
+            "user_confirmations": self.loading_diagnostics["user_confirmations"],
             "run_type": run_type,
             "benchmark_name": benchmark_name,
             "prompt": prompt,
