@@ -21,6 +21,7 @@ from llm_benchmark.cost_estimation import (
 )
 from llm_benchmark.llm import calculate_performance_metrics
 from llm_benchmark.model_size import bytes_to_gib, calculate_model_size
+from llm_benchmark.reporting import build_gpu_memory_breakdown, estimate_kv_cache_bytes
 
 
 class Parameter:
@@ -275,6 +276,42 @@ class ComparisonTests(unittest.TestCase):
             path = save_comparison(rows, "markdown", Path(temporary_directory))
             self.assertEqual(path.suffix, ".md")
             self.assertTrue(path.exists())
+
+
+class GpuMemoryBreakdownTests(unittest.TestCase):
+    def test_grouped_query_attention_kv_estimate(self) -> None:
+        estimated, details = estimate_kv_cache_bytes(
+            {
+                "num_hidden_layers": 32,
+                "hidden_size": 4096,
+                "num_attention_heads": 32,
+                "num_key_value_heads": 8,
+            },
+            sequence_tokens=1000,
+            dtype_name="torch.bfloat16",
+        )
+        self.assertEqual(estimated, 32 * 2 * 8 * 128 * 1000 * 2)
+        self.assertTrue(details["available"])
+
+    def test_missing_architecture_marks_kv_estimate_unavailable(self) -> None:
+        estimated, details = estimate_kv_cache_bytes({}, 1000, "torch.float16")
+        self.assertIsNone(estimated)
+        self.assertFalse(details["available"])
+
+    def test_breakdown_separates_allocator_and_runtime_memory(self) -> None:
+        result = build_gpu_memory_breakdown(
+            allocated_before_gb=10.0,
+            allocated_after_gb=10.5,
+            reserved_after_gb=12.0,
+            peak_allocated_gb=13.0,
+            cuda_model_bytes=8 * 1024**3,
+            prompt_tensor_bytes=1 * 1024**3,
+            kv_cache_bytes=1 * 1024**3,
+            kv_estimate_details={"available": True},
+        )
+        self.assertEqual(result["other_allocated_after_gb"], 1.5)
+        self.assertEqual(result["unused_reserved_allocator_gb"], 1.5)
+        self.assertEqual(result["estimated_peak_transient_runtime_gb"], 2.0)
 
 
 if __name__ == "__main__":

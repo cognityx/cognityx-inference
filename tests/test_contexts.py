@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from llm_benchmark.app import parse_args, parse_context_command
+from llm_benchmark.app import parse_args, parse_context_command, prompt_preview
 from llm_benchmark.contexts import (
     ContextChunk,
     ContextError,
@@ -76,6 +76,7 @@ class ContextPromptTests(unittest.TestCase):
         self.assertEqual(result.metadata["actual_corpus_tokens"], 5)
         self.assertEqual(result.metadata["input_truncation_status"], "final_chunk_trimmed")
         self.assertEqual([chunk["token_count"] for chunk in result.metadata["chunks_used"]], [3, 2])
+        self.assertNotIn("text", result.metadata["chunks_used"][0])
 
     def test_prompt_budget_trims_only_last_chunk(self) -> None:
         provider = type("Provider", (), {
@@ -102,6 +103,10 @@ class ContextPromptTests(unittest.TestCase):
 
 
 class ContextCliTests(unittest.TestCase):
+    def test_context_prompt_preview_is_word_limited(self) -> None:
+        preview = prompt_preview("one two three four five", word_limit=3)
+        self.assertEqual(preview, "one two three … [truncated]")
+
     def test_benchmark_context_arguments(self) -> None:
         args = parse_args(["--context", "wikitext", "--context-tokens", "32000"])
         self.assertEqual((args.context, args.context_tokens), ("wikitext", 32000))

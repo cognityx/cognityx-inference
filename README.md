@@ -92,6 +92,13 @@ During streamed generation, press `Ctrl+C` once to cancel only the current reque
 The decoder stops at the next safe generation step and returns to the `You>` prompt;
 the model remains loaded, so `/context` and `/set` can be adjusted immediately.
 
+The performance report includes a GPU-memory breakdown. Model and prompt tensor
+storage are measured where PyTorch exposes them; KV-cache size and transient
+prefill/decode memory are explicitly labelled estimates. Prefill is not reported as
+a separate persistent cache because it uses the KV cache plus temporary activations
+and workspaces. Quantized/fused runtime state may appear in the unclassified
+allocated-memory remainder.
+
 For native checkpoints, diagnostics separately report the checkpoint format and the
 actual runtime path. MXFP4 checks use the installed Transformers requirements for GPU
 capability, Triton, and `kernels`, then confirm any BF16 dequantization fallback from
@@ -132,3 +139,9 @@ API-equivalent costs are disabled by default and use only prices entered by the 
 They are hypothetical hosted-token-price comparisons, not measured local costs or
 savings. Use `/compare` to compare saved benchmark runs; `/compare --help` is not
 implemented, but `/help` lists supported filters and export formats.
+
+For context-backed runs, reports store only a 24-word `prompt` preview instead of
+duplicating the full corpus prompt. The original character count, exact prompt-token
+count, and SHA-256 hash remain available for traceability. `chunks_used` contains
+only chunk IDs, sources, and token counts; full chunk text remains in the prepared
+context JSONL.

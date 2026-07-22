@@ -32,7 +32,14 @@ from llm_benchmark.quantization import (
     detect_loaded_native_quantization_runtime,
     resolve_load_profile,
 )
-from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
+from llm_benchmark.reporting import (
+    build_gpu_memory_breakdown,
+    bytes_to_gb,
+    cuda_model_tensor_bytes,
+    estimate_kv_cache_bytes,
+    get_gpu_status,
+    tensor_collection_bytes,
+)
 from llm_benchmark.loading_decision import ModelLoadOptions, load_diagnostics, process_ram_gib
 
 
@@ -782,6 +789,28 @@ class LocalLLM:
             first_token_seconds=first_token_seconds,
             first_streamed_output_seconds=first_streamed_output_seconds,
         )
+        architecture = (self.model_runtime or {}).get("architecture", {})
+        cache_configuration = (self.model_runtime or {}).get("kv_cache", {})
+        cache_dtype = (
+            cache_configuration.get("cache_dtype")
+            or self.load_profile_metadata.get("compute_dtype")
+            or (self.model_runtime or {}).get("model_dtype")
+        )
+        kv_cache_bytes, kv_estimate_details = estimate_kv_cache_bytes(
+            architecture,
+            prompt_tokens + generated_tokens,
+            cache_dtype,
+        )
+        gpu_memory_breakdown = build_gpu_memory_breakdown(
+            allocated_before_gb=gpu_before["allocated_gb"],
+            allocated_after_gb=gpu_after["allocated_gb"],
+            reserved_after_gb=gpu_after["reserved_gb"],
+            peak_allocated_gb=peak_vram_gb,
+            cuda_model_bytes=cuda_model_tensor_bytes(self.model),
+            prompt_tensor_bytes=tensor_collection_bytes(inputs),
+            kv_cache_bytes=kv_cache_bytes,
+            kv_estimate_details=kv_estimate_details,
+        )
 
         return {
             "model": self.model_name,
@@ -852,5 +881,6 @@ class LocalLLM:
                 "gpu_reserved_before_gb": gpu_before["reserved_gb"],
                 "gpu_allocated_after_gb": gpu_after["allocated_gb"],
                 "gpu_reserved_after_gb": gpu_after["reserved_gb"],
+                "gpu_memory_breakdown": gpu_memory_breakdown,
             },
         }

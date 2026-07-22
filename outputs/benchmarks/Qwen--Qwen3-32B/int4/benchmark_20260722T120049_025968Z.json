@@ -1,0 +1,1093 @@
+{
+  "model": "Qwen/Qwen3-32B",
+  "requested_load_profile": "int4",
+  "effective_load_profile": "int4",
+  "quantization_enabled": true,
+  "quantization_bits": 4,
+  "quantization_method": "bitsandbytes",
+  "quantization_type": "nf4",
+  "compute_dtype": "torch.bfloat16",
+  "storage_dtype": "torch.uint8",
+  "quantization_resolution": {
+    "requested_profile": "int4",
+    "effective_profile": "int4",
+    "checkpoint_quantized": false,
+    "checkpoint_quantization_method": null,
+    "runtime_quantization_method": "bitsandbytes",
+    "quantization_source": "runtime_bitsandbytes",
+    "profile_was_adapted": false,
+    "adaptation_reason": null,
+    "pass_quantization_config": true,
+    "warning": null,
+    "bf16_dequantization_fallback_attempted": false,
+    "hardware_preflight": {
+      "accelerator_type": "cuda",
+      "gpu_name": "NVIDIA GeForce RTX 5090",
+      "compute_capability": "12.0",
+      "cuda_version": "13.0",
+      "pytorch_version": "2.13.0+cu130",
+      "transformers_version": "5.14.1",
+      "triton_version": "3.7.1",
+      "triton_kernels_available": false,
+      "triton_compatible": true,
+      "triton_requirement": ">=3.4.0",
+      "kernels_version": "0.15.2",
+      "kernels_compatible": true,
+      "kernels_requirement": ">=0.15.2,<0.16.0"
+    },
+    "native_quantization_runtime_preflight": {
+      "status": "not_applicable",
+      "runtime_backend": null,
+      "reason": null,
+      "runtime_fallback": null,
+      "expected_performance_impact": null,
+      "detection_source": "preflight"
+    },
+    "native_quantization_runtime": {
+      "status": "not_applicable",
+      "runtime_backend": null,
+      "reason": null,
+      "runtime_fallback": null,
+      "expected_performance_impact": null,
+      "detection_source": "preflight"
+    }
+  },
+  "download_preflight": {
+    "model": "Qwen/Qwen3-32B",
+    "cached_checkpoint": true,
+    "cached_bytes": 65540268929,
+    "missing_download_bytes": 0,
+    "cached_files": [
+      "merges.txt",
+      "generation_config.json",
+      "config.json",
+      "model-00003-of-00017.safetensors",
+      "model-00001-of-00017.safetensors",
+      "model-00006-of-00017.safetensors",
+      "model-00005-of-00017.safetensors",
+      "model-00004-of-00017.safetensors",
+      "model-00008-of-00017.safetensors",
+      "model-00007-of-00017.safetensors",
+      "model-00002-of-00017.safetensors",
+      "model-00009-of-00017.safetensors",
+      "model-00010-of-00017.safetensors",
+      "model.safetensors.index.json",
+      "model-00011-of-00017.safetensors",
+      "model-00013-of-00017.safetensors",
+      "model-00014-of-00017.safetensors",
+      "model-00012-of-00017.safetensors",
+      "model-00016-of-00017.safetensors",
+      "tokenizer_config.json",
+      "tokenizer.json",
+      "model-00015-of-00017.safetensors",
+      "vocab.json",
+      "model-00017-of-00017.safetensors"
+    ],
+    "missing_files": [],
+    "cache_location": "/mnt/d/AI/models/huggingface/hub/models--Qwen--Qwen3-32B/snapshots/9216db5781bf21249d130ec9da846c4624c16137",
+    "available_disk_bytes": 203534987264
+  },
+  "cached_checkpoint": true,
+  "cached_bytes": 65540268929,
+  "missing_download_bytes": 0,
+  "loading_choice": "gpu_only",
+  "capacity_classification": "gpu_only_inference",
+  "gpu_only_capacity_pass": true,
+  "nested_quantization": false,
+  "cpu_offload_allowed": false,
+  "cpu_resident_modules": [],
+  "cpu_memory_before": 0.906,
+  "cpu_memory_after": 0.887,
+  "cpu_memory_peak": 59.736,
+  "disk_offload_allowed": false,
+  "disk_offload_used": false,
+  "quantized_checkpoint_model_id": null,
+  "user_confirmations": {
+    "download_approved": false,
+    "checkpoint_already_cached": true
+  },
+  "run_type": "benchmark",
+  "benchmark_name": "travelling_salesman_problem",
+  "prompt": "Use the supplied context when it is relevant. Answer the question after the context.\n\nContext:\n[Context chunk chunk-00000000; source: wikitext-103-raw:train:1]\n = Valkyria Chronicles III = \n\n\n[Context chunk chunk-00000001; source: wikitext-103-raw:train:3]\n Senjō no Valkyria 3 : Unrecorded Chronicles ( Japanese : 戦場のヴァルキュリア3 , lit . Valkyria of the Battlefield 3 ) , commonly referred to as Valkyria Chronicles III outside Japan , is a tactical role @-@ playing video game developed by Sega and Media.Vision for the PlayStation Portable . Released in January 2011 in Japan , it is the third game in the Valkyria series . Employing the same fusion of tactical and real @-@ time gameplay as its predecessors , the story runs parallel to the first game and follows the \" Nameless \" , a penal military unit serving the nation of Gallia during the Second Europan War who perform secret black operations and are pitted against the Imperial unit \" Calamaty Raven \" . \n\n\n[Context chunk chunk-00000002; source: wikitext-103-raw:train:4]\n The game began development in 2010 , carrying over a large portion of the work done on Valkyria Chronicles II . While it retained the standard features of the series , it also underwent multiple adjustments , such as making the game more forgiving for series newcomers . Character designer Raita Honjou and composer Hitoshi Sakimoto both returned from previous entries , along with Valkyria Chronicles II director Takeshi Ozawa . A large team of writers handled the script . The game 's opening theme was sung by May 'n . \n\n\n[Context chunk chunk-00000003; source: wikitext-103-raw:train:5]\n It met with positive sales in Japan , and was praised by both Japanese and western critics . After release , it received downloadable content , along with an expanded edition in November of that year . It was also adapted into manga and an original video animation series . Due to low sales of Valkyria Chronicles II , Valkyria Chronicles III was not localized , but a fan translation compatible with the game 's expanded edition was released in 2014 . Media.Vision would return to the franchise with the development of Valkyria : Azure Revolution for the PlayStation 4 . \n\n\n[Context chunk chunk-00000004; source: wikitext-103-raw:train:7]\n = = Gameplay = = \n\n\n[Context chunk chunk-00000005; source: wikitext-103-raw:train:9]\n As with previous Valkyira Chronicles games , Valkyria Chronicles III is a tactical role @-@ playing game where players take control of a military unit and take part in missions against enemy forces . Stories are told through comic book @-@ like panels with animated character portraits , with characters speaking partially through voiced speech bubbles and partially through unvoiced text . The player progresses through a series of linear missions , gradually unlocked as maps that can be freely scanned through and replayed as they are unlocked . The route to each story location on the map varies depending on an individual player 's approach : when one option is selected , the other is sealed off to the player . Outside missions , the player characters rest in a camp , where units can be customized and character growth occurs . Alongside the main story missions are character @-@ specific sub missions relating to different squad members . After the game 's completion , additional episodes are unlocked , some of them having a higher difficulty than those found in the rest of the game . There are also love simulation elements related to the game 's two main heroines , although they take a very minor role . \n\n\n[Context chunk chunk-00000006; source: wikitext-103-raw:train:10]\n The game 's battle system , the BliTZ system , is carried over directly from Valkyira Chronicles . During missions , players select each unit using a top @-@ down perspective of the battlefield map : once a character is selected , the player moves the character around the battlefield in third @-@ person . A character can only act once per @-@ turn , but characters can be granted multiple turns at the expense of other characters ' turns . Each character has a field and distance of movement limited by their Action Gauge . Up to nine characters can be assigned to a single mission . During gameplay , characters will call out if something happens to them , such as their health points ( HP ) getting low or being knocked out by enemy attacks . Each character has specific \" Potentials \" , skills unique to each character . They are divided into \" Personal Potential \" , which are innate skills that remain unaltered unless otherwise dictated by the story and can either help or impede a character , and \" Battle Potentials \" , which are grown throughout the game and always grant boons to a character . To learn Battle Potentials , each character has a unique \" Masters Table \" , a grid @-@ based skill table that can be used to acquire and link different skills . Characters also have Special Abilities that grant them temporary boosts on the battlefield : Kurt can activate \" Direct Command \" and move around the battlefield without depleting his Action Point gauge , the character Reila can shift into her \" Valkyria Form \" and become invincible , while Imca can target multiple enemy units with her heavy weapon . \n\n\n[Context chunk chunk-00000007; source: wikitext-103-raw:train:11]\n Troops are divided into five classes : Scouts , Shocktroopers , Engineers , Lancers and Armored Soldier . Troopers can switch classes by changing their assigned weapon . Changing class does not greatly affect the stats gained while in a previous class . With victory in battle , experience points are awarded to the squad , which are distributed into five different attributes shared by the entire squad , a feature differing from early games ' method of distributing to different unit types . \n\n\n[Context chunk chunk-00000008; source: wikitext-103-raw:train:13]\n = = Plot = = \n\n\n[Context chunk chunk-00000009; source: wikitext-103-raw:train:15]\n The game takes place during the Second Europan War . Gallian Army Squad 422 , also known as \" The Nameless \" , are a penal military unit composed of criminals , foreign deserters , and military offenders whose real names are erased from the records and thereon officially referred to by numbers . Ordered by the Gallian military to perform the most dangerous missions that the Regular Army and Militia will not do , they are nevertheless up to the task , exemplified by their motto , Altaha Abilia , meaning \" Always Ready . \" The three main characters are No.7 Kurt Irving , an army officer falsely accused of treason who wishes to redeem himself ; Ace No.1 Imca , a female Darcsen heavy weapons specialist who seeks revenge against the Valkyria who destroyed her home ; and No.13 Riela Marcellis , a seemingly jinxed young woman who is unknowingly a descendant of the Valkyria . Together with their fellow squad members , these three are tasked to fight against a mysterious Imperial unit known as Calamity Raven , consisting of mostly Darcsen soldiers . \n\n\n[Context chunk chunk-00000010; source: wikitext-103-raw:train:16]\n As the Nameless officially do not exist , the upper echelons of the Gallian Army exploit the concept of plausible deniability in order to send them on missions that would otherwise make Gallia lose face in the war . While at times this works to their advantage , such as a successful incursion into Imperial territory , other orders cause certain members of the 422nd great distress . One such member , Gusurg , becomes so enraged that he abandons his post and defects into the ranks of Calamity Raven , attached to the ideal of Darcsen independence proposed by their leader , Dahau . At the same time , elements within Gallian Army Command move to erase the Nameless in order to protect their own interests . Hounded by both allies and enemies , and combined with the presence of a traitor within their ranks , the 422nd desperately move to keep themselves alive while at the same time fight to help the Gallian war effort . This continues until the Nameless 's commanding officer , Ramsey Crowe , who had been kept under house arrest , is escorted to the capital city of Randgriz in order to present evidence exonerating the weary soldiers and expose the real traitor , the Gallian General that had accused Kurt of Treason . \n\n\n[Context chunk chunk-00000011; source: wikitext-103-raw:train:17]\n Partly due to these events , and partly due to the major losses in manpower Gallia suffers towards the end of the war with the Empire , the Nameless are offered a formal position as a squad in the Gallian Army rather than serve as an anonymous shadow force . This is short @-@ lived , however , as following Maximilian 's defeat , Dahau and Calamity Raven move to activate an ancient Valkyrian super weapon within the Empire , kept secret by their benefactor . Without the support of Maximilian or the chance to prove themselves in the war with Gallia , it is Dahau 's last trump card in creating a new Darcsen nation . As an armed Gallian force invading the Empire just following the two nations ' cease @-@ fire would certainly wreck their newfound peace , Kurt decides to once again make his squad the Nameless , asking Crowe to list himself and all under his command as killed @-@ in @-@ action . Now owing allegiance to none other than themselves , the 422nd confronts Dahau and destroys the Valkyrian weapon . Each member then goes their separate ways in order to begin their lives anew . \n\n\n[Context chunk chunk-00000012; source: wikitext-103-raw:train:19]\n = = Development = = \n\n\n[Context chunk chunk-00000013; source: wikitext-103-raw:train:21]\n Concept work for Valkyria Chronicles III began after development finished on Valkyria Chronicles II in early 2010 , with full development beginning shortly after this . The director of Valkyria Chronicles II , Takeshi Ozawa , returned to that role for Valkyria Chronicles III . Development work took approximately one year . After the release of Valkyria Chronicles II , the staff took a look at both the popular response for the game and what they wanted to do next for the series . Like its predecessor , Valkyria Chronicles III was developed for PlayStation Portable : this was due to the team wanting to refine the mechanics created for Valkyria Chronicles II , and they had not come up with the \" revolutionary \" idea that would warrant a new entry for the PlayStation 3 . Speaking in an interview , it was stated that the development team considered Valkyria Chronicles III to be the series ' first true sequel : while Valkyria Chronicles II had required a large amount of trial and error during development due to the platform move , the third game gave them a chance to improve upon the best parts of Valkyria Chronicles II due to being on the same platform . In addition to Sega staff from the previous games , development work was also handled by Media.Vision. The original scenario was written Kazuki Yamanobe , while the script was written by Hiroyuki Fujii , Koichi Majima , Kishiko Miyagi , Seiki Nagakawa and Takayuki Shouji . Its story was darker and more somber than that of its predecessor . \n\n\n[Context chunk chunk-00000014; source: wikitext-103-raw:train:22]\n The majority of material created for previous games , such as the BLiTZ system and the design of maps , was carried over . Alongside this , improvements were made to the game 's graphics and some elements were expanded , such as map layouts , mission structure , and the number of playable units per mission . A part of this upgrade involved creating unique polygon models for each character 's body . In order to achieve this , the cooperative elements incorporated into the second game were removed , as they took up a large portion of memory space needed for the improvements . They also adjusted the difficulty settings and ease of play so they could appeal to new players while retaining the essential components of the series ' gameplay . The newer systems were decided upon early in development . The character designs were done by Raita Honjou , who had worked on the previous Valkyria Chronicles games . When creating the Nameless Squad , Honjou was faced with the same problem he had had during the first game : the military uniforms essentially destroyed character individuality , despite him needing to create unique characters the player could identify while maintaining a sense of reality within the Valkyria Chronicles world . The main color of the Nameless was black . As with the previous Valkyria games , Valkyria Chronicles III used the CANVAS graphics engine . The anime opening was produced by Production I.G. \n\n\n[Context chunk chunk-00000015; source: wikitext-103-raw:train:24]\n = = = Music = = = \n\n\n[Context chunk chunk-00000016; source: wikitext-103-raw:train:26]\n The music was composed by Hitoshi Sakimoto , who had also worked on the previous Valkyria Chronicles games . When he originally heard about the project , he thought it would be a light tone similar to other Valkyria Chronicles games , but found the themes much darker than expected . An early theme he designed around his original vision of the project was rejected . He redid the main theme about seven times through the music production due to this need to reassess the game . The main theme was initially recorded using orchestra , then Sakimoto removed elements such as the guitar and bass , then adjusted the theme using a synthesizer before redoing segments such as the guitar piece on their own before incorporating them into the theme . The rejected main theme was used as a hopeful tune that played during the game 's ending . The battle themes were designed around the concept of a \" modern battle \" divorced from a fantasy scenario by using modern musical instruments , constructed to create a sense of atonality . While Sakimoto was most used to working with synthesized music , he felt that he needed to incorporate live instruments such as orchestra and guitar . The guitar was played by Mitsuhiro Ohta , who also arranged several of the later tracks . The game 's opening theme song , \" If You Wish for ... \" ( もしも君が願うのなら , Moshimo Kimi ga Negauno Nara ) , was sung by Japanese singer May 'n . Its theme was the reason soldiers fought , in particular their wish to protect what was precious to them rather than a sense of responsibility or duty . Its lyrics were written by Seiko Fujibayashi , who had worked on May 'n on previous singles . \n\n\n[Context chunk chunk-00000017; source: wikitext-103-raw:train:28]\n = = = Release = = = \n\n\n[Context chunk chunk-00000018; source: wikitext-103-raw:train:30]\n In September 2010 , a teaser website was revealed by Sega , hinting at a new Valkyria Chronicles game . In its September issue , Famitsu listed that Senjō no Valkyria 3 would be arriving on the PlayStation Portable . Its first public appearance was at the 2010 Tokyo Game Show ( TGS ) , where a demo was made available for journalists and attendees . During the publicity , story details were kept scant so as not to spoil too much for potential players , along with some of its content still being in flux at the time of its reveal . To promote the game and detail the story leading into the game 's events , an episodic Flash visual novel written by Fujii began release in January 2011 . The game was released January 27 , 2011 . During an interview , the development team said that the game had the capacity for downloadable content ( DLC ) , but that no plans were finalized . Multiple DLC maps , featuring additional missions and recruitable characters , were released between February and April 2011 . An expanded edition of the game , Valkyria Chronicles III Extra Edition , released on November 23 , 2011 . Packaged and sold at a lower price than the original , Extra Edition game with seven additional episodes : three new , three chosen by staff from the game 's DLC , and one made available as a pre @-@ order bonus . People who also owned the original game could transfer their save data between versions . \n\n\n[Context chunk chunk-00000019; source: wikitext-103-raw:train:31]\n Unlike its two predecessors , Valkyria Chronicles III was not released in the west . According to Sega , this was due to poor sales of Valkyria Chronicles II and the general unpopularity of the PSP in the west . An unofficial fan translation patch began development in February 2012 : players with a copy of Valkyria Chronicles III could download and apply the patch , which translated the game 's text into English . Compatible with the Extra Edition , the patch was released in January 2014 . \n\n\n[Context chunk chunk-00000020; source: wikitext-103-raw:train:33]\n = = Reception = = \n\n\n[Context chunk chunk-00000021; source: wikitext-103-raw:train:35]\n On its day of release in Japan , Valkyria Chronicles III topped both platform @-@ exclusive and multi @-@ platform sales charts . By early February , the game sold 102 @,@ 779 units , coming in second overall to The Last Story for the Wii . By the end of the year , the game had sold just over 152 @,@ 500 units . \n\n\n[Context chunk chunk-00000022; source: wikitext-103-raw:train:36]\n Famitsu enjoyed the story , and were particularly pleased with the improvements to gameplay . Japanese gaming site Game Watch Impress , despite negatively noting its pacing and elements recycled from previous games , was generally positive about its story and characters , and found its gameplay entertaining despite off @-@ putting difficulty spikes . 4Gamer.net writer Naohiko Misuosame , in a \" Play Test \" article based on the game 's PSN demo , felt that Valkyria Chronicles III provided a \" profound feeling of closure \" for the Valkyria Chronicles series . He praised its gameplay despite annoying limitations to aspects such as special abilities , and positively noted its shift in story to a tone similar to the first game . \n\n\n[Context chunk chunk-00000023; source: wikitext-103-raw:train:37]\n PlayStation Official Magazine - UK praised the story 's blurring of Gallia 's moral standing , art style , and most points about its gameplay , positively noting the latter for both its continued quality and the tweaks to balance and content . Its one major criticism were multiple difficulty spikes , something that had affected the previous games . Heath Hindman of gaming website PlayStation Lifestyle praised the addition of non @-@ linear elements and improvements or removal of mechanics from Valkyria Chronicles II in addition to praising the returning gameplay style of previous games . He also positively noted the story 's serious tone . Points criticized in the review were recycled elements , awkward cutscenes that seemed to include all characters in a scene for no good reason , pacing issues , and occasional problems with the game 's AI . \n\n\n[Context chunk chunk-00000024; source: wikitext-103-raw:train:38]\n In a preview of the TGS demo , Ryan Geddes of IGN was left excited as to where the game would go after completing the demo , along with enjoying the improved visuals over Valkyria Chronicles II . Kotaku 's Richard Eisenbeis was highly positive about the game , citing is story as a return to form after Valkyria Chronicles II and its gameplay being the best in the series . His main criticisms were its length and gameplay repetition , along with expressing regret that it would not be localized . \n\n\n[Context chunk chunk-00000025; source: wikitext-103-raw:train:40]\n = = Legacy = = \n\n\n[Context chunk chunk-00000026; source: wikitext-103-raw:train:42]\n Kurt and Riela were featured in the Nintendo 3DS crossover Project X Zone , representing the Valkyria series . Media.Vision would return to the series to develop Valkyria : Azure Revolution , with Ozawa returning as director . Azure Revolution is a role @-@ playing video game for the PlayStation 4 that forms the beginning of a new series within the Valkyria franchise . \n\n\n[Context chunk chunk-00000027; source: wikitext-103-raw:train:44]\n = = = Adaptations = = = \n\n\n[Context chunk chunk-00000028; source: wikitext-103-raw:train:46]\n Valkyria Chronicles 3 was adapted into a two @-@ episode original video animation series in the same year of its release . Titled Senjō no Valkyria 3 : Taga Tame no Jūsō ( 戦場のヴァルキュリア３ 誰がための銃瘡 , lit . Valkyria of the Battlefield 3 : The Wound Taken for Someone 's Sake ) , it was originally released through PlayStation Network and Qriocity between April and May 2011 . The initially @-@ planned release and availability period needed to be extended due to a stoppage to PSN during the early summer of that year . It later released for DVD on June 29 and August 31 , 2011 , with separate \" Black \" and \" Blue \" editions being available for purchase . The anime is set during the latter half of Valkyria Chronicles III , detailing a mission by the Nameless against their Imperial rivals Calamity Raven . The anime was first announced in November 2010 . It was developed by A @-@ 1 Pictures , produced by Shinji Motoyama , directed by Nobuhiro Kondō , and written by Hiroshi Ōnogi . Sakimoto 's music for the game was used in the anime . \n\n\n[Context chunk chunk-00000029; source: wikitext-103-raw:train:47]\n The anime 's title was inspired by the principle purpose of the Nameless : to suffer in battle for the goals of others . A subtitle attached to the project during development was \" The Road to Kubinka \" , which referenced the Kubinka Tank Museum in Moscow . The game 's main theme was how the characters regained their sense of self when stripped of their names and identities , along with general themes focused on war and its consequences . While making the anime , the production team were told by Sega to make it as realistic as possible , with the consequence that the team did extensive research into aspects such as what happened when vehicles like tanks were overturned or damaged . Due to it being along the same timeline as the original game and its television anime adaptation , the cast of Valkyria Chronicles could make appearances , which pleased the team . The opening theme , \" Akari ( Light ) -Tomoshibi- \" ( 灯 @-@ TOMOSHIBI- ) , was sung by Japanese singer Faylan . The ending theme , \" Someday the Flowers of Light Will Bloom \" ( いつか咲く光の花 , Itsuka Saku Hikari no Hana ) , was sung by Minami Kuribayashi . Both songs ' lyrics were written by their respective artists . \n\n\n[Context chunk chunk-00000030; source: wikitext-103-raw:train:48]\n Two manga adaptations were produced , following each of the game 's main female protagonists Imca and Riela . They were Senjō no Valkyria 3 : Namo naki Chikai no Hana ( 戦場のヴァルキュリア3 名もなき誓いの花 , lit . Valkyria of the Battlefield 3 : The Flower of the Nameless Oath ) , illustrated by Naoyuki Fujisawa and eventually released in two volumes after being serialized in Dengeki Maoh between 2011 and 2012 ; and Senjō no Valkyria 3 : -Akaki Unmei no Ikusa Otome- ( 戦場のヴァルキュリア3 -赤き運命の戦乙女- , lit . Valkyria of the Battlefield 3 -The Valkyrie of the Crimson Fate ) , illustrated by Mizuki Tsuge and eventually released in a single volume by Kadokawa Shoten in 2012 . \n\n\n[Context chunk chunk-00000031; source: wikitext-103-raw:train:51]\n = Tower Building of the Little Rock Arsenal = \n\n\n[Context chunk chunk-00000032; source: wikitext-103-raw:train:53]\n The Tower Building of the Little Rock Arsenal , also known as U.S. Arsenal Building , is a building located in MacArthur Park in downtown Little Rock , Arkansas . Built in 1840 , it was part of Little Rock 's first military installation . Since its decommissioning , The Tower Building has housed two museums . It was home to the Arkansas Museum of Natural History and Antiquities from 1942 to 1997 and the MacArthur Museum of Arkansas Military History since 2001 . It has also been the headquarters of the Little Rock Æsthetic Club since 1894 . \n\n\n[Context chunk chunk-00000033; source: wikitext-103-raw:train:54]\n The building receives its name from its distinct octagonal tower . Besides being the last remaining structure of the original Little Rock Arsenal and one of the oldest buildings in central Arkansas , it was also the birthplace of General Douglas MacArthur , who became the supreme commander of US forces in the South Pacific during World War II . It was also the starting place of the Camden Expedition . In 2011 it was named as one of the top 10 attractions in the state of Arkansas by Arkansas.com. \n\n\n[Context chunk chunk-00000034; source: wikitext-103-raw:train:56]\n = = Construction = = \n\n\n[Context chunk chunk-00000035; source: wikitext-103-raw:train:58]\n The arsenal was constructed at the request of Governor James Sevier Conway in response to the perceived dangers of frontier life and fears of the many Native Americans who were passing through the state on their way to the newly established Oklahoma Territory . Thirty @-@ six acres were appropriated on the outskirts of Little Rock by Major Robert B. Lee of the U.S. Army . The land had been previously used as a racetrack by the local jockey club . John Wormley Walker , a builder for the Federal Government , supervised the construction . Originally $ 14 @,@ 000 was allocated for the construction of the arsenal , but proved inadequate . The budget was later increased to $ 30 @,@ 000 . Work began on the Tower Building in 1840 , and it was the first permanent structure of the arsenal to be built . Being originally constructed to store ammunition , the building was designed with 3 @-@ foot @-@ thick ( 0 @.@ 91 m ) exterior walls . The original plans called for it to be built of stone , however , masonry was used instead . The Arkansas Gazette referred to the structure as \" A splendid specimen of masonry \" . \n\n\n[Context chunk chunk-00000036; source: wikitext-103-raw:train:60]\n = = Civil War = = \n\n\n[Context chunk chunk-00000037; source: wikitext-103-raw:train:62]\n For several years the arsenal , which was owned by the federal government , served as a simple arms depot and was staffed with only a handful of soldiers . But in November 1860 , with the American Civil War on the horizon , a company of the Second United States Artillery , consisting of sixty @-@ five men , was transferred to Little Rock under the command of Captain James Totten . On January 15 , 1861 , the state legislature decided to hold a referendum to determine if a state convention should be held to consider the issue of secession and to elect delegates to such a convention . It was planned for February 18 ; however , events at the arsenal , would not wait . On January 28 , then Governor Henry Massey Rector informed Captain Totten that he and his soldiers would be \" permitted to remain in the possession of the Federal officers until the State , by authority of the people , shall have determined to sever their connection with the General Government , \" Totten responded to this by telling the Governor that his orders came from the United States Government and began a desperate but ultimately futile dispatch of letters and telegrams asking for reinforcements , although rumors were widely spread that they were already coming . The first telegraph wire to span between Little Rock and Memphis had recently been completed . Local attorney John M Harrel was asked to compose the first telegraph dispatched from Arkansas 's capital . In his message , Harrel reported unconfirmed rumors that more federal troops had been sent to reinforce the Little Rock Arsenal . \n\n\n[Context chunk chunk-00000038; source: wikitext-103-raw:train:63]\n The United States troops at the outposts of the western frontier of the state and in the Indian nation have all been recalled from winter quarters to reinforce the garrison at Fort Smith . The garrison at Fort Smith had been previously transferred to the United States Arsenal in this city ( Little Rock ) . The arsenal is one of the richest depositories of military stores in the United States and is supposed to be the ultimate destination of the tropps [ sic ] ordered from the frontier . \n\n\n[Context chunk chunk-00000039; source: wikitext-103-raw:train:64]\n -John M Harrel Telegram , January 31 , 1861 \n\n\n[Context chunk chunk-00000040; source: wikitext-103-raw:train:65]\n The item was intended simply as a piece of news , but telegraph lines quickly spread the news throughout the state , fueling procession sentiment . The rumor was interpreted by some Arkansans as a call from the governor to assemble to help expel the federal troops from the arsenal . By February 5 , six militia units , consisting of 1 @,@ 000 men , with a guarantee that the numbers could be increased to 5 @,@ 000 if the situations deemed it necessary , had assembled in Little Rock . Governor Rector vehemently denied ordering the troops to assemble or giving any order at all in connection with the troops . Faced with the fact that the military had assembled believing they were following his orders and the consensus of the citizens of Little Rock against any armed conflict between the civilian army and federal troops , Governor Rector was forced to take control of the situation . On February 6 , he sent a formal demand for surrender of the arsenal to Captain Totten , \n\n\n[Context chunk chunk-00000041; source: wikitext-103-raw:train:66]\n This movement is prompted by the feeling that pervades the citizens of this State that in the present emergency the arms and munitions of war in the Arsenal should be under the control of the State authorities , in order to their security . This movement , although not authorized by me , has assumed such an aspect that it becomes my duty , as the executive of this Sate , to interpose my official authority to prevent a collision between the people of the State and the Federal troops under your command . I therefore demand in the name of the State the delivery of the possession of the Arsenal and munitions of war under your charge to the State authorities , to be held subject to the action of the convention to be held on the 4th of March next . \n\n\n[Context chunk chunk-00000042; source: wikitext-103-raw:train:67]\n Perhaps because Abraham Lincoln had not yet been inaugurated as President , Captain Totten received no instructions from his superiors and was forced to withdraw his troops . He agreed to surrender the arsenal as long as the governor agreed to three provisions : \n\n\n[Context chunk chunk-00000043; source: wikitext-103-raw:train:68]\n The governor would take possession of the arsenal in the name of the United States . \n\n\n[Context chunk chunk-00000044; source: wikitext-103-raw:train:69]\n The soldiers would be allowed safe passage in any direction carrying any personal and public property besides munitions of war . \n\n\n[Context chunk chunk-00000045; source: wikitext-103-raw:train:70]\n The soldiers would be allowed to march away as men leaving under orders , not as conquered and surrendering soldiers . \n\n\n[Context chunk chunk-00000046; source: wikitext-103-raw:train:71]\n On the morning of February 8 , 1861 , Rector and Totten signed an agreement placing the arsenal in the hands of state officials . That afternoon , the citizen militia marched to the arsenal with Governor Rector at its head . All of the federal troops had left at this point , except Totten who had stayed behind to listen to the Governor 's speech and to hand the arsenal over in person . \n\n\n[Context chunk chunk-00000047; source: wikitext-103-raw:train:72]\n The Little Rock Arsenal was classified in 1860 as an \" arsenal of deposit , \" meaning that it was simply a warehouse for the storage of weapons intended for the use of the state militia in times of crisis . Thus there were no substantial operations for ordnance fabrication or repairs , nor for the manufacture of cartridges at the time the Arsenal fell into State hands . Most of these operations were started from scratch through the efforts of the Arkansas Military Board . \n\n\n[Context chunk chunk-00000048; source: wikitext-103-raw:train:73]\n Inside the Little Rock Arsenal after its seizure in February , 1861 , the Confederates inventoried some 10 @,@ 247 weapons , 250 @,@ 000 musket cartridges , and 520 @,@ 000 percussion caps , as well as the four bronze cannon of Totten 's battery . Long arms in the Arsenal 's inventory consisted of : \n\n\n[Context chunk chunk-00000049; source: wikitext-103-raw:train:74]\n M1822 .69 cal ( flintlock ) 5 @,@ 625 \n\n\n[Context chunk chunk-00000050; source: wikitext-103-raw:train:75]\n M1822 .69 cal ( percussion @-@ converted ) 53 \n\n\n[Context chunk chunk-00000051; source: wikitext-103-raw:train:76]\n M1842 .69 cal smoothbore ( percussion ) 357 \n\n\n[Context chunk chunk-00000052; source: wikitext-103-raw:train:77]\n M1855 .58 cal rifle @-@ muskets 900 \n\n\n[Context chunk chunk-00000053; source: wikitext-103-raw:train:78]\n M1817 common rifles 125 \n\n\n[Context chunk chunk-00000054; source: wikitext-103-raw:train:79]\n M1841 rifle ( \" Mississippi Rifle \" ) 54 \n\n\n[Context chunk chunk-00000055; source: wikitext-103-raw:train:80]\n M1847 musketoon 2 \n\n\n[Context chunk chunk-00000056; source: wikitext-103-raw:train:81]\n Hall 's carbines 267 \n\n\n[Context chunk chunk-00000057; source: wikitext-103-raw:train:82]\n Hall 's rifles ( flintlock ) 2 @,@ 864 \n\n\n[Context chunk chunk-00000058; source: wikitext-103-raw:train:83]\n Total 10 @,@ 247 \n\n\n[Context chunk chunk-00000059; source: wikitext-103-raw:train:84]\n Of this number , approximately 9600 weapons were serviceable , or ready @-@ for @-@ issue . Note there were only 1 @,@ 364 percussion weapons available . Disposition of the weapons found in the Arsenal is somewhat sketchy , but from various records it can be surmised that the 5th , 6th , 7th , and 8th Arkansas Infantry Regiments , mustered in June , 1861 , were issued M1816 / M1822 .69 caliber flintlocks . The 9th and 10th Arkansas , four companies of Kelly 's 9th Arkansas Battalion , and the 3rd Arkansas Cavalry Regiment were issued flintlock Hall 's Rifles . The units comprising the infantry force of Van Dorn 's Army of the West were the 1st and 2nd Arkansas Mounted Rifles were also armed with M1822 flintlocks from the Little Rock Arsenal . By the time the 11th and 12th Arkansas Infantry Regiments mustered in at Little Rock , the supply of arms had been almost completely exhausted , and only old \" junker \" weapons were left . \n\n\n[Context chunk chunk-00000060; source: wikitext-103-raw:train:85]\n Most of the equipment , arms , and machinery at the Little Rock Arsenal was removed to east of the Mississippi River by order of Maj. Gen. Earl Van Dorn in April and May 1862 , and accountability for it is lost at that point . By all appearances , the equipment was sent down the river to Napoleon , Arkansas , and from there to Jackson Mississippi , where it was probably destroyed during the Vicksburg campaign in the early summer of 1863 . \n\n\n[Context chunk chunk-00000061; source: wikitext-103-raw:train:86]\n Major General Thomas C. Hindman , sent to command the district of Arkansas in May , 1862 , found the state nearly destitute of military material . Hindman established another armory at Arkadelphia , and revived the Little Rock Arsenal as a collection point and depot for armaments and ammunition manufacture for small arms . Hindman recorded : \n\n\n[Context chunk chunk-00000062; source: wikitext-103-raw:train:87]\n \" Machinery was made for manufacturing percussion caps and small arms , and both were turned out in small quantity , but of excellent quality . Lead mines were opened and worked , and a chemical laboratory was established and successfully operated in aid of the Ordnance Department and in the manufacture of calomel , castor oil , spirits of nitre , the various tinctures of iron , and other valuable medicines . Most of these works were located at or near Arkadelphia on the Ouachita River , 75 miles south from Little Rock . The tools , machinery , and the material were gathered piecemeal or else made by hand labor . Nothing of this sort had been before attempted on Government account in Arkansas to my knowledge , except for the manufacture of small arms , the machinery for which was taken away by General Van Dorn and there was neither capital nor sufficient enterprise among the citizens to engage in such undertakings � A further supply , along with lead and caps , was procured from the citizens of Little Rock and vicinity by donation , purchases , and impressments . \n\n\n[Context chunk chunk-00000063; source: wikitext-103-raw:train:88]\n This ammunition , and that which I brought with me , was rapidly prepared for use at the Laboratory established at the Little Rock Arsenal for that purpose . As illustrating as the pitiful scarcity of material in the country , the fact may be stated that it was found necessary to use public documents of the State Library for cartridge paper . Gunsmiths were employed or conscripted , tools purchased or impressed , and the repair of the damaged guns I brought with me and about an equal number found at Little Rock commenced at once . But , after inspecting the work and observing the spirit of the men I decided that a garrison 500 strong could hold out against Fitch and that I would lead the remainder - about 1500 - to Gen 'l Rust as soon as shotguns and rifles could be obtained from Little Rock instead of pikes and lances , with which most of them were armed . Two days elapsed before the change could be effected . \" \n\n\n[Context chunk chunk-00000064; source: wikitext-103-raw:train:89]\n The Confederate ordnance establishment at Little Rock was reactivated in August , 1862 . Looking around for a suitable person to head this activity , General Hindman turned to the Confederate Navy and borrowed Lieutenant John W. Dunnington . Lt. Dunnington was the commander of the gunboat C.S.S. Ponchartrain , which had been brought to Little Rock in hopes of converting it to an ironclad . Dunnington was selected to head the ordnance works at Little Rock , and although he continued to draw his pay from the Confederate Navy Department , he was placed in charge of all Confederate ordnance activities ( which included artillery functions ) there with the rank of lieutenant colonel . \n\n\n[Context chunk chunk-00000065; source: wikitext-103-raw:train:90]\n Lt. Col. Dunnington 's \" Returns for the month of August , 1862 , at Little Rock Arsenal , C.S.A. , \" are found in Vol . 149 , Chapter IV of the \" Captured Rebel Ordnance Records , \" and are most enlightening as to the scope of Confederate ordnance activities at Little Rock during this crucial time . According to Dunnington , \" When I assumed command at this Post , all material had been removed to Arkadelphia . There were no persons employed . No shops were open for repair of arms or for fabricating ammunition . Material , tools , etc . , had to be procured as well as the employment of laborers . Work commenced the last part of the month . \" \n\n\n[Context chunk chunk-00000066; source: wikitext-103-raw:train:91]\n The military force at Little Rock under Dunnington 's command consisted of four officers : himself , Major John B. Lockman , Captain C.C. Green , and 2nd Lt. W.W. Murphy . In addition to these , he had 20 enlisted men and a civilian force composed of a foreman , 2 clerks , 3 gunsmiths for repairing small arms , a laboratorian , 26 laborers in the ammunition laboratory , and a carpenter for making packing boxes . \n\n\n[Context chunk chunk-00000067; source: wikitext-103-raw:train:92]\n During the month of August , 1862 , the following work was performed : \" Fabricated : one pair of musket bullet moulds ; 10 @,@ 000 buck & ball shot cartridges ; repaired : 750 muskets , shotguns , and rifles ; received and repaired : ordnance stores and ordnances ; performed : guard , office , and police duties ; inspected : Posts at Camden and Arkadelphia . \" \n\n\n[Context chunk chunk-00000068; source: wikitext-103-raw:train:93]\n Lt. Col. Dunnington continued to build up his works at Little Rock until November 1862 , when Captain Sanford C. Faulkner ( composer of The Arkansas Traveler ) was placed in charge of the Arsenal . Dunnington presumably returned to his naval duties and the Ponchartrain . \n\n\n[Context chunk chunk-00000069; source: wikitext-103-raw:train:94]\n A \" Summary of the Work Done for November , 1862 , Little Rock Arsenal \" shows : Fabrication : \n\n\n[Context chunk chunk-00000070; source: wikitext-103-raw:train:95]\n 75 @,@ 000 buck & ball cartridges - percussion \n\n\n[Context chunk chunk-00000071; source: wikitext-103-raw:train:96]\n 14 @,@ 000 buck & ball cartridges - flint \n\n\n[Context chunk chunk-00000072; source: wikitext-103-raw:train:97]\n 275 paper fuzes \n\n\n[Context chunk chunk-00000073; source: wikitext-103-raw:train:98]\n 117 rounds , 6 @-@ pounder canister shot \n\n\n[Context chunk chunk-00000074; source: wikitext-103-raw:train:99]\n 130 rounds , 6 @-@ pounder ball shot \n\n\n[Context chunk chunk-00000075; source: wikitext-103-raw:train:100]\n 96 ammunition packing boxes \n\n\n[Context chunk chunk-00000076; source: wikitext-103-raw:train:101]\n Repaired : \n\n\n[Context chunk chunk-00000077; source: wikitext-103-raw:train:102]\n 2 @,@ 236 shotguns and rifles ( repaired mostly for troops in service ) \n\n\n[Context chunk chunk-00000078; source: wikitext-103-raw:train:103]\n 23 pistols ( repaired mostly for troops in service ) \n\n\n[Context chunk chunk-00000079; source: wikitext-103-raw:train:104]\n Received & Issued : \n\n\n[Context chunk chunk-00000080; source: wikitext-103-raw:train:105]\n 752 packages of ordnance and ordnance stores received and mostly issued to troops in service . \n\n\n[Context chunk chunk-00000081; source: wikitext-103-raw:train:106]\n Repaired and painted : \n\n\n[Context chunk chunk-00000082; source: wikitext-103-raw:train:107]\n 4 gun carriages \n\n\n[Context chunk chunk-00000083; source: wikitext-103-raw:train:108]\n Performed : \n\n\n[Context chunk chunk-00000084; source: wikitext-103-raw:train:109]\n Guard , office , and police duties . \n\n\n[Context chunk chunk-00000085; source: wikitext-103-raw:train:110]\n Perhaps the most illuminating points of the above \" Summary of Work \" and those for following months are that the standard ammunition made was . \" buck & ball \" , indicating that the .69 caliber smoothbores and shotguns remained the predominant caliber weapon in use , and of this , nearly one sixth or more of all small arms ammunition was still for flintlock weapons , indicating that no less than a sixth of the Confederate troops in this vicinity were still armed with obsolete flintlock weapons . \n\n\n[Context chunk chunk-00000086; source: wikitext-103-raw:train:111]\n The \" Summaries of Work done at Little Rock Arsenal , C.S.A. \" continue at about the same pace and scale from August 1862 until August 1863 . Appended to the \" Summary \" for August , 1863 is the ominous notation , \" During the last week in the month , nearly all stores at the Arsenal have been packed and sent to Arkadelphia , in obedience to orders from Chief of Ordnance , District of Arkansas . \" This then marks the beginning of the evacuation of ordnance activities from Little Rock , with the city being surrendered to the advancing Federal troops of Frederick Steele 's Arkansas Expedition on September 11 , 1863 . \n\n\n[Context chunk chunk-00000087; source: wikitext-103-raw:train:112]\n In 1864 , after Little Rock fell to the Union Army and the arsenal had been recaptured , General Fredrick Steele marched 8 @,@ 500 troops from the arsenal beginning the Camden Expedition . \n\n\n[Context chunk chunk-00000088; source: wikitext-103-raw:train:113]\n The arsenal was briefly seized once more by Joseph Brooks loyalists during the Brooks @-@ Baxter War of 1874 . \n\n\n[Context chunk chunk-00000089; source: wikitext-103-raw:train:115]\n = = Decommissioning = = \n\n\n[Context chunk chunk-00000090; source: wikitext-103-raw:train:117]\n In 1873 , the building was renamed Little Rock Barracks and used as a barracks for married officers and their families . The building was drastically altered the inside and outside . Prior to renovation , a rear basement door provided the only entrance to the building , while the tower served as a hoist to move munitions between floors . By 1868 , front and rear porches had been added to the building , as well as interior walls and stairs , some of which remain today , including the central staircase . In 1880 , Douglas MacArthur was born on the northwest upper floor of this building while his father , Captain Arthur MacArthur , was stationed there . \n\n\n[Context chunk chunk-00000091; source: wikitext-103-raw:train:118]\n In the 1880s , the federal government began closing many small arsenals around the country in favor of smaller ones built near railroads for quick deployment . The arsenal commander received word from Washington that the Little Rock site must be abandoned \" not later than October 1 , 1890 . \" On April 12 , 1893 the tower building and the surrounding buildings were traded to the city of Little Rock for 1 @,@ 000 acres ( 4 km ² ) in North Little Rock under the condition that the building and land be \" forever exclusively devoted to the uses and purposes of a public park \" for 1 @,@ 000 acres ( 4 km ² ) in Big Rock Mountain on the north side of the Arkansas River , present day North Little Rock . That site later became Fort Logan H. Roots . All of the original buildings surrounding the Tower Building were demolished . \n\n\n[Context chunk chunk-00000092; source: wikitext-103-raw:train:120]\n = = Æsthetic Club = = \n\n\n[Context chunk chunk-00000093; source: wikitext-103-raw:train:122]\n In 1894 the Little Rock Æsthetic Club , one of the oldest women 's societies west of the Mississippi River , moved into the Tower Building . This was prompted due to increased membership and a need for larger , more permanent quarters . The previous year , club members working with women 's organizations throughout the state , raised money to furnish the Arkansas Building of the Columbian Exposition at The Chicago World 's Fair . At the fair 's conclusion , artifacts from the exhibit were displayed in the Tower Building , with the Æsthetic Club invited to meet in the \" Columbian Room . \" \n\n\n[Context chunk chunk-00000094; source: wikitext-103-raw:train:123]\n Except for Æsthetic Club meetings , the Tower Building remained largely unoccupied for almost fifty years and suffered significant deterioration . The Æsthetic Club provided much @-@ needed financial support during the period and even paid the electric bill during the Great Depression . The Æsthetic Club is still headquartered in the Tower Building . \n\n\n[Context chunk chunk-00000095; source: wikitext-103-raw:train:125]\n = = Public use = = \n\n\n[Context chunk chunk-00000096; source: wikitext-103-raw:train:127]\n The building and the surrounding park were used for many public purposes throughout the early 20th century . The Tower Building served as headquarters for the United Confederate Veterans Reunion , May 15 – 18 , 1911 . Over 106 @,@ 000 Civil War veterans , the largest popular gathering in the history of the city up to that time , attended and were housed in the building or camped in the park , which had also become a popular camping area . Later the building served as an armory for the Arkansas National Guard . In 1912 , the second floor of the Tower Building became Little Rock 's first public library . In 1917 , Little Rock built a fire station in the park , that building is now gone . A band shell named for H. H. Foster also was built in the park during this time , but also no longer exists . In 1936 , Works Progress Administration built the Museum of Fine Arts , now called the Arkansas Arts Center , just south of the Tower Building . \n\n\n[Context chunk chunk-00000097; source: wikitext-103-raw:train:128]\n The arsenal was listed in the National Register of Historic Places in 1970 . Due to its association with the Camden Expedition of 1864 , the arsenal may be included in the Camden Expedition Sites National Historic Landmark designated in 1994 . \n\n\n[Context chunk chunk-00000098; source: wikitext-103-raw:train:129]\n In 1942 , the Tower Building was renovated due to the efforts of the Æsthetic Club , Little Rock philanthropist Frederick W. Allsop , and the Works Progress Administration . It became the new home of The Arkansas Museum of Natural History and Antiquities , which had been located in Little Rock City Hall . The museum remained in the tower building for approximately fifty @-@ five years . The area surrounding the Tower Building had been known as Arsenal Park when the first decommissioned and then later renamed City Park . Due to the efforts of Bernie Babcock , however , the city finally named it MacArthur Park in 1942 in honor of Douglas MacArthur . \n\n\n[Context chunk chunk-00000099; source: wikitext-103-raw:train:130]\n In 1997 , the Museum of Science and Natural History merged with the Little Rock Children 's Museum , which had been located in Union Station , to form the Arkansas Museum of Discovery . The new museum was relocated to a historic building in the Little Rock River Market District . The MacArthur Museum of Arkansas Military History opened on May 19 , 2001 in the Tower Building . The new museum 's goal is to educate and inform visitors about the military history of Arkansas , preserve the Tower Building , honor servicemen and servicewomen of the United States and commemorate the birthplace of Douglas MacArthur . \n\n\n[Context chunk chunk-00000100; source: wikitext-103-raw:train:133]\n = Cicely Mary Barker = \n\n\n[Context chunk chunk-00000101; source: wikitext-103-raw:train:135]\n Cicely Mary Barker ( 28 June 1895 – 16 February 1973 ) was an English illustrator best known for a series of fantasy illustrations depicting fairies and flowers . Barker 's art education began in girlhood with correspondence courses and instruction at the Croydon School of Art . Her earliest professional work included greeting cards and juvenile magazine illustrations , and her first book , Flower Fairies of the Spring , was published in 1923 . Similar books were published in the following decades . \n\n\n[Context chunk chunk-00000102; source: wikitext-103-raw:train:136]\n Barker was a devout Anglican , and donated her artworks to Christian fundraisers and missionary organizations . She produced a few Christian @-@ themed books such as The Children ’ s Book of Hymns and , in collaboration with her sister Dorothy , He Leadeth Me . She designed a stained glass window for St. Edmund 's Church , Pitlake , and her painting of the Christ Child , The Darling of the World Has Come , was purchased by Queen Mary . \n\n\n[Context chunk chunk-00000103; source: wikitext-103-raw:train:137]\n Barker was equally proficient in watercolour , pen and ink , oils , and pastels . Kate Greenaway and the Pre @-@ Raphaelites were the principal influences on her work . She claimed to paint instinctively and rejected artistic theories . Barker died in 1973 . Though she published Flower Fairy books with spring , summer , and autumn themes , it wasn 't until 1985 that a winter collection was assembled from her remaining work and published posthumously . \n\n\n[Context chunk chunk-00000104; source: wikitext-103-raw:train:139]\n = = Biography = = \n\n\n[Context chunk chunk-00000105; source: wikitext-103-raw:train:142]\n = = = Early life = = = \n\n\n[Context chunk chunk-00000106; source: wikitext-103-raw:train:144]\n Barker was born the second daughter and youngest child of Walter Barker , a partner in a seed supply company and an amateur artist , and his wife Mary Eleanor ( Oswald ) Barker on 28 June 1895 at home at 66 Waddon Road in Croydon , Surrey , England . Barker was an epileptic as a child , and cared for at home by her parents . Later , her sister and elder by two years , Dorothy Oswald Barker , continued the care . \n\n\n[Context chunk chunk-00000107; source: wikitext-103-raw:train:145]\n The family of four was moderately well off , and belonged to the lower end of the upper middle class . A nanny , a governess , and a cook to prepare special meals for Barker were hired . She spent much time in bed at home amusing herself with painting books and a nursery library that included the works of Kate Greenaway and Randolph Caldecott – two artists who exerted strong influences on her later art . \n\n\n[Context chunk chunk-00000108; source: wikitext-103-raw:train:147]\n = = = Art education and first professional work = = = \n\n\n[Context chunk chunk-00000109; source: wikitext-103-raw:train:149]\n Barker took correspondence courses in art , probably until about 1919 . In 1908 at 13 years , she entered an evening class at the Croydon School of Art , and attended the school into the 1940s . In time , she received a teaching position . \n\n\n[Context chunk chunk-00000110; source: wikitext-103-raw:train:150]\n In 1911 , Raphael Tuck & Sons bought four of Barker 's \" little drawings \" for half a sovereign , and published them as postcards . In October 1911 , she won second prize in the Croydon Art\n\nQuestion:\nCan AI be applied to the travelling salesman problem?",
+  "settings": {
+    "enable_thinking": true,
+    "max_new_tokens": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "do_sample": true,
+    "repetition_penalty": 1.0
+  },
+  "finish_reason": "eos",
+  "generation_truncated": false,
+  "model_runtime": {
+    "device_map": null,
+    "devices_used": [
+      "cuda:0"
+    ],
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false,
+    "uses_non_cuda_device": false,
+    "non_cuda_devices": [],
+    "model_dtype": "mixed",
+    "parameter_dtypes": [
+      "torch.bfloat16",
+      "torch.uint8"
+    ],
+    "uses_mixed_dtypes": true,
+    "load_profile": {
+      "requested_load_profile": "int4",
+      "effective_load_profile": "int4",
+      "quantization_enabled": true,
+      "quantization_bits": 4,
+      "quantization_method": "bitsandbytes",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8"
+    },
+    "model_size": {
+      "logical_parameters": 32762123264,
+      "logical_parameters_billions": 32.762,
+      "parameter_count_source": "quantization_aware_parameter_tensors",
+      "parameter_count_reliable": true,
+      "requested_profile": "int4",
+      "effective_profile": "int4",
+      "nominal_bits_per_weight": 4,
+      "estimated_raw_weight_storage_bytes": 16381061632,
+      "estimated_raw_weight_storage_gib": 15.256,
+      "actual_parameter_storage_bytes": null,
+      "actual_parameter_storage_gib": null,
+      "actual_storage_notes": "Quantized wrapper storage is not reported as actual physical size because packed weights and quantization state are not exposed uniformly.",
+      "storage_estimate_notes": "Nominal weight-only estimate. It excludes quantization scales and zero points, packing metadata, non-quantized layers, allocator overhead, KV cache, activations, and runtime buffers; it is not an estimate of total VRAM usage.",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8",
+      "uses_mixed_dtypes": true,
+      "quantization_method": "bitsandbytes",
+      "quantization_bits": 4,
+      "active_parameters_per_token": 32762123264,
+      "active_parameters_billions": 32.762,
+      "active_parameter_fraction": 1.0
+    },
+    "model_family": {
+      "family": "Qwen3",
+      "architecture_type": "dense",
+      "dense_or_moe": "dense",
+      "logical_parameters": 32762123264,
+      "active_parameters_per_token": 32762123264,
+      "active_parameters_billions": 32.762,
+      "active_parameter_fraction": 1.0,
+      "active_parameter_count_source": "logical_parameter_count",
+      "active_parameter_count_reliable": true,
+      "active_parameter_count_notes": "Dense model: all logical model parameters are treated as active per token.",
+      "num_experts": null,
+      "num_experts_per_token": null,
+      "shared_experts": null,
+      "moe_config": {
+        "num_experts": null,
+        "num_experts_per_token": null,
+        "moe_intermediate_size": null,
+        "shared_expert_intermediate_size": null,
+        "num_shared_experts": null,
+        "decoder_sparse_step": null,
+        "num_dense_layers": null,
+        "router_aux_loss_coef": null
+      }
+    },
+    "attention_implementation": "sdpa",
+    "kv_cache": {
+      "use_cache": true,
+      "use_cache_source": "model_config",
+      "cache_implementation": "default",
+      "cache_implementation_explicit": false,
+      "cache_implementation_source": "default"
+    },
+    "architecture": {
+      "model_type": "qwen3",
+      "architecture": "Qwen3ForCausalLM",
+      "total_parameters": 32762123264,
+      "num_hidden_layers": 64,
+      "hidden_size": 5120,
+      "intermediate_size": 25600,
+      "num_attention_heads": 64,
+      "num_key_value_heads": 8,
+      "vocab_size": 151936,
+      "max_position_embeddings": 40960,
+      "rope": {
+        "theta": null,
+        "scaling": {
+          "rope_theta": 1000000,
+          "rope_type": "default"
+        }
+      }
+    },
+    "model_loader": {
+      "config_class": "Qwen3Config",
+      "task": "causal-lm",
+      "auto_model_class": "AutoModelForCausalLM",
+      "selection_source": "transformers_auto_mapping",
+      "text_only_execution": true
+    },
+    "quantization_resolution": {
+      "requested_profile": "int4",
+      "effective_profile": "int4",
+      "checkpoint_quantized": false,
+      "checkpoint_quantization_method": null,
+      "runtime_quantization_method": "bitsandbytes",
+      "quantization_source": "runtime_bitsandbytes",
+      "profile_was_adapted": false,
+      "adaptation_reason": null,
+      "pass_quantization_config": true,
+      "warning": null,
+      "bf16_dequantization_fallback_attempted": false,
+      "hardware_preflight": {
+        "accelerator_type": "cuda",
+        "gpu_name": "NVIDIA GeForce RTX 5090",
+        "compute_capability": "12.0",
+        "cuda_version": "13.0",
+        "pytorch_version": "2.13.0+cu130",
+        "transformers_version": "5.14.1",
+        "triton_version": "3.7.1",
+        "triton_kernels_available": false,
+        "triton_compatible": true,
+        "triton_requirement": ">=3.4.0",
+        "kernels_version": "0.15.2",
+        "kernels_compatible": true,
+        "kernels_requirement": ">=0.15.2,<0.16.0"
+      },
+      "native_quantization_runtime_preflight": {
+        "status": "not_applicable",
+        "runtime_backend": null,
+        "reason": null,
+        "runtime_fallback": null,
+        "expected_performance_impact": null,
+        "detection_source": "preflight"
+      },
+      "native_quantization_runtime": {
+        "status": "not_applicable",
+        "runtime_backend": null,
+        "reason": null,
+        "runtime_fallback": null,
+        "expected_performance_impact": null,
+        "detection_source": "preflight"
+      }
+    },
+    "loading": {
+      "loading_choice": "gpu_only",
+      "allow_download": false,
+      "cpu_offload_allowed": false,
+      "strict_gpu_only": true,
+      "disk_offload_allowed": false,
+      "max_memory": null,
+      "download_preflight": {
+        "model": "Qwen/Qwen3-32B",
+        "cached_checkpoint": true,
+        "cached_bytes": 65540268929,
+        "missing_download_bytes": 0,
+        "cached_files": [
+          "merges.txt",
+          "generation_config.json",
+          "config.json",
+          "model-00003-of-00017.safetensors",
+          "model-00001-of-00017.safetensors",
+          "model-00006-of-00017.safetensors",
+          "model-00005-of-00017.safetensors",
+          "model-00004-of-00017.safetensors",
+          "model-00008-of-00017.safetensors",
+          "model-00007-of-00017.safetensors",
+          "model-00002-of-00017.safetensors",
+          "model-00009-of-00017.safetensors",
+          "model-00010-of-00017.safetensors",
+          "model.safetensors.index.json",
+          "model-00011-of-00017.safetensors",
+          "model-00013-of-00017.safetensors",
+          "model-00014-of-00017.safetensors",
+          "model-00012-of-00017.safetensors",
+          "model-00016-of-00017.safetensors",
+          "tokenizer_config.json",
+          "tokenizer.json",
+          "model-00015-of-00017.safetensors",
+          "vocab.json",
+          "model-00017-of-00017.safetensors"
+        ],
+        "missing_files": [],
+        "cache_location": "/mnt/d/AI/models/huggingface/hub/models--Qwen--Qwen3-32B/snapshots/9216db5781bf21249d130ec9da846c4624c16137",
+        "available_disk_bytes": 203534987264
+      },
+      "original_model_id": "Qwen/Qwen3-32B",
+      "quantized_checkpoint_model_id": null,
+      "user_confirmations": {
+        "download_approved": false,
+        "checkpoint_already_cached": true
+      },
+      "capacity_classification": "gpu_only_inference",
+      "gpu_only_capacity_pass": true,
+      "uses_cpu_offload": false,
+      "cpu_resident_modules": [],
+      "gpu_resident_modules": [],
+      "disk_offload_used": false,
+      "cpu_memory_before_gib": 0.906,
+      "cpu_memory_after_gib": 0.887,
+      "cpu_memory_peak_gib": 59.736,
+      "gpu_memory_before": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "allocated_gb": 0.0,
+        "reserved_gb": 0.0,
+        "total_memory_gb": 31.842
+      },
+      "gpu_memory_after": {
+        "name": "NVIDIA GeForce RTX 5090",
+        "allocated_gb": 19.247,
+        "reserved_gb": 19.668,
+        "total_memory_gb": 31.842
+      }
+    }
+  },
+  "quality_indicators": {
+    "answer_complete": true,
+    "reasoning_detected": true,
+    "thinking_characters": 3667,
+    "thinking_tokens": 664,
+    "answer_characters": 3200,
+    "answer_tokens": 636,
+    "raw_output_characters": 6886,
+    "empty_answer": false,
+    "finish_reason": "eos",
+    "generation_truncated": false
+  },
+  "performance": {
+    "prompt_tokenization_seconds": 0.032,
+    "prefill_seconds": 6.092,
+    "prefill_measurement_method": "generation_start_to_first_raw_streamer_token",
+    "prompt_tokens": 13510,
+    "prompt_tokens_per_second": 2217.82,
+    "time_to_first_token_seconds": 6.092,
+    "first_token_latency_after_prompt_preparation_seconds": 6.092,
+    "time_to_first_streamed_output_seconds": 6.173,
+    "decode_seconds": 106.525,
+    "decode_token_count": 1304,
+    "generated_tokens": 1305,
+    "decode_tokens_per_second": 12.24,
+    "generation_seconds": 112.616,
+    "end_to_end_seconds": 112.656,
+    "decode_measurement_method": "generation_finish_minus_first_raw_token; throughput excludes the first token"
+  },
+  "result": {
+    "raw_output": "<think>\nOkay, let's tackle this question: \"Can AI be applied to the travelling salesman problem?\" Hmm, first I need to recall what the Travelling Salesman Problem (TSP) is. From what I remember, TSP is a classic optimization problem where the goal is to find the shortest possible route that visits each city exactly once and returns to the origin city. It's known to be NP-hard, which means that as the number of cities increases, the time required to find the exact solution grows exponentially. Traditional algorithms like brute force or dynamic programming become impractical for large instances.\n\nNow, the question is about applying AI to this problem. AI encompasses a variety of techniques, including machine learning, neural networks, genetic algorithms, and more. I should think about how these methods can be used for optimization problems like TSP. \n\nFirst, I know that heuristic and metaheuristic algorithms are often used for TSP when exact solutions aren't feasible. Examples include genetic algorithms, simulated annealing, and ant colony optimization. These are inspired by natural processes and can find good solutions quickly, though not necessarily the optimal one. AI, particularly machine learning, might enhance these methods. For instance, neural networks could be trained to predict good routes based on patterns learned from previous instances of TSP. Reinforcement learning could be another approach where an agent learns to navigate cities by receiving rewards for shorter paths.\n\nAdditionally, AI techniques might help in preprocessing or feature extraction. For example, using clustering algorithms to group cities into regions before applying a TSP algorithm could simplify the problem. Also, machine learning models might predict which heuristics perform best under certain conditions, allowing for adaptive algorithms that switch strategies based on problem characteristics.\n\nHowever, I should also consider limitations. AI models require training data, which for TSP could be generated from known solutions or smaller instances. But for very large TSP instances, even training data might be scarce or computationally expensive to generate. Moreover, AI approaches might not guarantee optimal solutions, which is a requirement for some applications. They could also be a black box, making it hard to understand why a particular route was chosen.\n\nAnother angle is the use of AI to improve existing exact algorithms. For example, machine learning could help in pruning the search space more effectively in branch-and-bound methods by predicting which paths are less likely to yield optimal results. This could reduce the computational time significantly.\n\nI should also check if there are existing applications of AI to TSP. From what I recall, there have been studies using neural networks, especially recurrent neural networks (RNNs) and transformers, to approximate solutions. Google's DeepMind has explored using reinforcement learning for combinatorial optimization problems, including TSP. These models are trained on a large number of TSP instances and learn to generate near-optimal routes efficiently.\n\nIn summary, yes, AI can be applied to the TSP. Techniques like machine learning, neural networks, genetic algorithms, and reinforcement learning offer ways to find good solutions, especially for large instances where traditional methods are too slow. However, the effectiveness depends on the specific AI approach used, the quality of training data, and the problem's constraints. While AI might not always find the exact optimal solution, it can provide efficient and effective approximations suitable for many practical scenarios.\n</think>\n\nYes, AI can be applied to the Traveling Salesman Problem (TSP), leveraging various techniques to find efficient solutions, though challenges remain. Here's a structured breakdown:\n\n### **Applications of AI to TSP**\n1. **Heuristic/Metaheuristic Algorithms**:\n   - **Genetic Algorithms**: Mimic natural selection to evolve solutions over generations, combining and mutating routes to find shorter paths.\n   - **Simulated Annealing**: Uses probabilistic techniques to escape local optima by accepting worse solutions temporarily.\n   - **Ant Colony Optimization**: Inspired by ants' foraging behavior, using pheromone trails to guide search for optimal routes.\n\n2. **Machine Learning**:\n   - **Neural Networks**: \n     - **Recurrent Neural Networks (RNNs)**: Learn to construct routes by processing city coordinates sequentially.\n     - **Transformers**: Capture global dependencies in TSP instances, enabling parallel processing of city relationships.\n   - **Reinforcement Learning (RL)**: Trains an agent to select cities step-by-step, rewarding shorter paths. Google DeepMind has explored RL for combinatorial optimization.\n\n3. **Hybrid Approaches**:\n   - **AI-Enhanced Exact Algorithms**: Machine learning models can predict which branches to prioritize in branch-and-bound methods or prune unpromising paths in dynamic programming.\n\n4. **Preprocessing and Feature Engineering**:\n   - **Clustering**: Group cities into regions to simplify the problem before applying TSP algorithms.\n   - **Adaptive Strategies**: Use AI to select the most effective heuristic (e.g., nearest neighbor vs. Christofides) based on problem characteristics.\n\n### **Challenges and Limitations**\n- **Optimality vs. Speed**: AI methods often provide near-optimal solutions quickly but lack guarantees of optimality, critical for some applications.\n- **Training Data**: Requires large datasets of TSP instances with optimal solutions, which can be computationally expensive to generate.\n- **Interpretability**: AI models (e.g., neural networks) may act as \"black boxes,\" making it hard to explain why a specific route is chosen.\n- **Scalability**: While AI can handle large instances better than brute-force methods, performance may degrade for extremely large or complex TSP variants.\n\n### **Existing Research and Tools**\n- **Deep Learning**: Studies like those using Pointer Networks or Graph Neural Networks (GNNs) have shown promise in approximating TSP solutions efficiently.\n- **Reinforcement Learning**: Frameworks like Google's OR-Tools incorporate learning-based heuristics for optimization problems.\n- **AI-Driven Heuristics**: Tools such as the **Concorde TSP Solver** integrate learning to improve pruning strategies in exact algorithms.\n\n### **Conclusion**\nAI is a powerful tool for tackling TSP, particularly for large-scale instances where traditional methods are impractical. While AI approaches may not always find the optimal solution, they offer efficient, scalable alternatives that balance solution quality and computational time. Ongoing advancements in neural architectures and reinforcement learning are likely to further enhance AI's role in solving TSP and similar combinatorial optimization problems.",
+    "thinking": "Okay, let's tackle this question: \"Can AI be applied to the travelling salesman problem?\" Hmm, first I need to recall what the Travelling Salesman Problem (TSP) is. From what I remember, TSP is a classic optimization problem where the goal is to find the shortest possible route that visits each city exactly once and returns to the origin city. It's known to be NP-hard, which means that as the number of cities increases, the time required to find the exact solution grows exponentially. Traditional algorithms like brute force or dynamic programming become impractical for large instances.\n\nNow, the question is about applying AI to this problem. AI encompasses a variety of techniques, including machine learning, neural networks, genetic algorithms, and more. I should think about how these methods can be used for optimization problems like TSP. \n\nFirst, I know that heuristic and metaheuristic algorithms are often used for TSP when exact solutions aren't feasible. Examples include genetic algorithms, simulated annealing, and ant colony optimization. These are inspired by natural processes and can find good solutions quickly, though not necessarily the optimal one. AI, particularly machine learning, might enhance these methods. For instance, neural networks could be trained to predict good routes based on patterns learned from previous instances of TSP. Reinforcement learning could be another approach where an agent learns to navigate cities by receiving rewards for shorter paths.\n\nAdditionally, AI techniques might help in preprocessing or feature extraction. For example, using clustering algorithms to group cities into regions before applying a TSP algorithm could simplify the problem. Also, machine learning models might predict which heuristics perform best under certain conditions, allowing for adaptive algorithms that switch strategies based on problem characteristics.\n\nHowever, I should also consider limitations. AI models require training data, which for TSP could be generated from known solutions or smaller instances. But for very large TSP instances, even training data might be scarce or computationally expensive to generate. Moreover, AI approaches might not guarantee optimal solutions, which is a requirement for some applications. They could also be a black box, making it hard to understand why a particular route was chosen.\n\nAnother angle is the use of AI to improve existing exact algorithms. For example, machine learning could help in pruning the search space more effectively in branch-and-bound methods by predicting which paths are less likely to yield optimal results. This could reduce the computational time significantly.\n\nI should also check if there are existing applications of AI to TSP. From what I recall, there have been studies using neural networks, especially recurrent neural networks (RNNs) and transformers, to approximate solutions. Google's DeepMind has explored using reinforcement learning for combinatorial optimization problems, including TSP. These models are trained on a large number of TSP instances and learn to generate near-optimal routes efficiently.\n\nIn summary, yes, AI can be applied to the TSP. Techniques like machine learning, neural networks, genetic algorithms, and reinforcement learning offer ways to find good solutions, especially for large instances where traditional methods are too slow. However, the effectiveness depends on the specific AI approach used, the quality of training data, and the problem's constraints. While AI might not always find the exact optimal solution, it can provide efficient and effective approximations suitable for many practical scenarios.",
+    "answer": "Yes, AI can be applied to the Traveling Salesman Problem (TSP), leveraging various techniques to find efficient solutions, though challenges remain. Here's a structured breakdown:\n\n### **Applications of AI to TSP**\n1. **Heuristic/Metaheuristic Algorithms**:\n   - **Genetic Algorithms**: Mimic natural selection to evolve solutions over generations, combining and mutating routes to find shorter paths.\n   - **Simulated Annealing**: Uses probabilistic techniques to escape local optima by accepting worse solutions temporarily.\n   - **Ant Colony Optimization**: Inspired by ants' foraging behavior, using pheromone trails to guide search for optimal routes.\n\n2. **Machine Learning**:\n   - **Neural Networks**: \n     - **Recurrent Neural Networks (RNNs)**: Learn to construct routes by processing city coordinates sequentially.\n     - **Transformers**: Capture global dependencies in TSP instances, enabling parallel processing of city relationships.\n   - **Reinforcement Learning (RL)**: Trains an agent to select cities step-by-step, rewarding shorter paths. Google DeepMind has explored RL for combinatorial optimization.\n\n3. **Hybrid Approaches**:\n   - **AI-Enhanced Exact Algorithms**: Machine learning models can predict which branches to prioritize in branch-and-bound methods or prune unpromising paths in dynamic programming.\n\n4. **Preprocessing and Feature Engineering**:\n   - **Clustering**: Group cities into regions to simplify the problem before applying TSP algorithms.\n   - **Adaptive Strategies**: Use AI to select the most effective heuristic (e.g., nearest neighbor vs. Christofides) based on problem characteristics.\n\n### **Challenges and Limitations**\n- **Optimality vs. Speed**: AI methods often provide near-optimal solutions quickly but lack guarantees of optimality, critical for some applications.\n- **Training Data**: Requires large datasets of TSP instances with optimal solutions, which can be computationally expensive to generate.\n- **Interpretability**: AI models (e.g., neural networks) may act as \"black boxes,\" making it hard to explain why a specific route is chosen.\n- **Scalability**: While AI can handle large instances better than brute-force methods, performance may degrade for extremely large or complex TSP variants.\n\n### **Existing Research and Tools**\n- **Deep Learning**: Studies like those using Pointer Networks or Graph Neural Networks (GNNs) have shown promise in approximating TSP solutions efficiently.\n- **Reinforcement Learning**: Frameworks like Google's OR-Tools incorporate learning-based heuristics for optimization problems.\n- **AI-Driven Heuristics**: Tools such as the **Concorde TSP Solver** integrate learning to improve pruning strategies in exact algorithms.\n\n### **Conclusion**\nAI is a powerful tool for tackling TSP, particularly for large-scale instances where traditional methods are impractical. While AI approaches may not always find the optimal solution, they offer efficient, scalable alternatives that balance solution quality and computational time. Ongoing advancements in neural architectures and reinforcement learning are likely to further enhance AI's role in solving TSP and similar combinatorial optimization problems."
+  },
+  "metrics": {
+    "time_to_first_token_seconds": 6.173,
+    "prompt_tokens": 13510,
+    "generated_tokens": 1305,
+    "total_tokens": 14815,
+    "total_context_length_tokens": 40960,
+    "generation_seconds": 112.616,
+    "tokens_per_second": 11.59,
+    "peak_vram_gb": 25.033,
+    "gpu_allocated_before_gb": 19.279,
+    "gpu_reserved_before_gb": 25.033,
+    "gpu_allocated_after_gb": 19.279,
+    "gpu_reserved_after_gb": 26.967
+  },
+  "timestamp_utc": "2026-07-22T12:00:49.021087+00:00",
+  "metadata": {
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_total_memory_gb": 31.842,
+    "pytorch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "transformers_version": "5.14.1",
+    "python_version": "3.12.3"
+  },
+  "schema_version": 2,
+  "context": {
+    "context_name": "wikitext",
+    "context_provider": "folder",
+    "benchmark_question": "Can AI be applied to the travelling salesman problem?",
+    "requested_context_tokens": 10000,
+    "actual_corpus_tokens": 10000,
+    "final_prompt_tokens": 13510,
+    "chunks_used": [
+      {
+        "chunk_id": "chunk-00000000",
+        "source": "wikitext-103-raw:train:1",
+        "text": " = Valkyria Chronicles III = \n",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000001",
+        "source": "wikitext-103-raw:train:3",
+        "text": " Senjō no Valkyria 3 : Unrecorded Chronicles ( Japanese : 戦場のヴァルキュリア3 , lit . Valkyria of the Battlefield 3 ) , commonly referred to as Valkyria Chronicles III outside Japan , is a tactical role @-@ playing video game developed by Sega and Media.Vision for the PlayStation Portable . Released in January 2011 in Japan , it is the third game in the Valkyria series . Employing the same fusion of tactical and real @-@ time gameplay as its predecessors , the story runs parallel to the first game and follows the \" Nameless \" , a penal military unit serving the nation of Gallia during the Second Europan War who perform secret black operations and are pitted against the Imperial unit \" Calamaty Raven \" . \n",
+        "token_count": 167
+      },
+      {
+        "chunk_id": "chunk-00000002",
+        "source": "wikitext-103-raw:train:4",
+        "text": " The game began development in 2010 , carrying over a large portion of the work done on Valkyria Chronicles II . While it retained the standard features of the series , it also underwent multiple adjustments , such as making the game more forgiving for series newcomers . Character designer Raita Honjou and composer Hitoshi Sakimoto both returned from previous entries , along with Valkyria Chronicles II director Takeshi Ozawa . A large team of writers handled the script . The game 's opening theme was sung by May 'n . \n",
+        "token_count": 110
+      },
+      {
+        "chunk_id": "chunk-00000003",
+        "source": "wikitext-103-raw:train:5",
+        "text": " It met with positive sales in Japan , and was praised by both Japanese and western critics . After release , it received downloadable content , along with an expanded edition in November of that year . It was also adapted into manga and an original video animation series . Due to low sales of Valkyria Chronicles II , Valkyria Chronicles III was not localized , but a fan translation compatible with the game 's expanded edition was released in 2014 . Media.Vision would return to the franchise with the development of Valkyria : Azure Revolution for the PlayStation 4 . \n",
+        "token_count": 116
+      },
+      {
+        "chunk_id": "chunk-00000004",
+        "source": "wikitext-103-raw:train:7",
+        "text": " = = Gameplay = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000005",
+        "source": "wikitext-103-raw:train:9",
+        "text": " As with previous Valkyira Chronicles games , Valkyria Chronicles III is a tactical role @-@ playing game where players take control of a military unit and take part in missions against enemy forces . Stories are told through comic book @-@ like panels with animated character portraits , with characters speaking partially through voiced speech bubbles and partially through unvoiced text . The player progresses through a series of linear missions , gradually unlocked as maps that can be freely scanned through and replayed as they are unlocked . The route to each story location on the map varies depending on an individual player 's approach : when one option is selected , the other is sealed off to the player . Outside missions , the player characters rest in a camp , where units can be customized and character growth occurs . Alongside the main story missions are character @-@ specific sub missions relating to different squad members . After the game 's completion , additional episodes are unlocked , some of them having a higher difficulty than those found in the rest of the game . There are also love simulation elements related to the game 's two main heroines , although they take a very minor role . \n",
+        "token_count": 230
+      },
+      {
+        "chunk_id": "chunk-00000006",
+        "source": "wikitext-103-raw:train:10",
+        "text": " The game 's battle system , the BliTZ system , is carried over directly from Valkyira Chronicles . During missions , players select each unit using a top @-@ down perspective of the battlefield map : once a character is selected , the player moves the character around the battlefield in third @-@ person . A character can only act once per @-@ turn , but characters can be granted multiple turns at the expense of other characters ' turns . Each character has a field and distance of movement limited by their Action Gauge . Up to nine characters can be assigned to a single mission . During gameplay , characters will call out if something happens to them , such as their health points ( HP ) getting low or being knocked out by enemy attacks . Each character has specific \" Potentials \" , skills unique to each character . They are divided into \" Personal Potential \" , which are innate skills that remain unaltered unless otherwise dictated by the story and can either help or impede a character , and \" Battle Potentials \" , which are grown throughout the game and always grant boons to a character . To learn Battle Potentials , each character has a unique \" Masters Table \" , a grid @-@ based skill table that can be used to acquire and link different skills . Characters also have Special Abilities that grant them temporary boosts on the battlefield : Kurt can activate \" Direct Command \" and move around the battlefield without depleting his Action Point gauge , the character Reila can shift into her \" Valkyria Form \" and become invincible , while Imca can target multiple enemy units with her heavy weapon . \n",
+        "token_count": 324
+      },
+      {
+        "chunk_id": "chunk-00000007",
+        "source": "wikitext-103-raw:train:11",
+        "text": " Troops are divided into five classes : Scouts , Shocktroopers , Engineers , Lancers and Armored Soldier . Troopers can switch classes by changing their assigned weapon . Changing class does not greatly affect the stats gained while in a previous class . With victory in battle , experience points are awarded to the squad , which are distributed into five different attributes shared by the entire squad , a feature differing from early games ' method of distributing to different unit types . \n",
+        "token_count": 91
+      },
+      {
+        "chunk_id": "chunk-00000008",
+        "source": "wikitext-103-raw:train:13",
+        "text": " = = Plot = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000009",
+        "source": "wikitext-103-raw:train:15",
+        "text": " The game takes place during the Second Europan War . Gallian Army Squad 422 , also known as \" The Nameless \" , are a penal military unit composed of criminals , foreign deserters , and military offenders whose real names are erased from the records and thereon officially referred to by numbers . Ordered by the Gallian military to perform the most dangerous missions that the Regular Army and Militia will not do , they are nevertheless up to the task , exemplified by their motto , Altaha Abilia , meaning \" Always Ready . \" The three main characters are No.7 Kurt Irving , an army officer falsely accused of treason who wishes to redeem himself ; Ace No.1 Imca , a female Darcsen heavy weapons specialist who seeks revenge against the Valkyria who destroyed her home ; and No.13 Riela Marcellis , a seemingly jinxed young woman who is unknowingly a descendant of the Valkyria . Together with their fellow squad members , these three are tasked to fight against a mysterious Imperial unit known as Calamity Raven , consisting of mostly Darcsen soldiers . \n",
+        "token_count": 226
+      },
+      {
+        "chunk_id": "chunk-00000010",
+        "source": "wikitext-103-raw:train:16",
+        "text": " As the Nameless officially do not exist , the upper echelons of the Gallian Army exploit the concept of plausible deniability in order to send them on missions that would otherwise make Gallia lose face in the war . While at times this works to their advantage , such as a successful incursion into Imperial territory , other orders cause certain members of the 422nd great distress . One such member , Gusurg , becomes so enraged that he abandons his post and defects into the ranks of Calamity Raven , attached to the ideal of Darcsen independence proposed by their leader , Dahau . At the same time , elements within Gallian Army Command move to erase the Nameless in order to protect their own interests . Hounded by both allies and enemies , and combined with the presence of a traitor within their ranks , the 422nd desperately move to keep themselves alive while at the same time fight to help the Gallian war effort . This continues until the Nameless 's commanding officer , Ramsey Crowe , who had been kept under house arrest , is escorted to the capital city of Randgriz in order to present evidence exonerating the weary soldiers and expose the real traitor , the Gallian General that had accused Kurt of Treason . \n",
+        "token_count": 260
+      },
+      {
+        "chunk_id": "chunk-00000011",
+        "source": "wikitext-103-raw:train:17",
+        "text": " Partly due to these events , and partly due to the major losses in manpower Gallia suffers towards the end of the war with the Empire , the Nameless are offered a formal position as a squad in the Gallian Army rather than serve as an anonymous shadow force . This is short @-@ lived , however , as following Maximilian 's defeat , Dahau and Calamity Raven move to activate an ancient Valkyrian super weapon within the Empire , kept secret by their benefactor . Without the support of Maximilian or the chance to prove themselves in the war with Gallia , it is Dahau 's last trump card in creating a new Darcsen nation . As an armed Gallian force invading the Empire just following the two nations ' cease @-@ fire would certainly wreck their newfound peace , Kurt decides to once again make his squad the Nameless , asking Crowe to list himself and all under his command as killed @-@ in @-@ action . Now owing allegiance to none other than themselves , the 422nd confronts Dahau and destroys the Valkyrian weapon . Each member then goes their separate ways in order to begin their lives anew . \n",
+        "token_count": 241
+      },
+      {
+        "chunk_id": "chunk-00000012",
+        "source": "wikitext-103-raw:train:19",
+        "text": " = = Development = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000013",
+        "source": "wikitext-103-raw:train:21",
+        "text": " Concept work for Valkyria Chronicles III began after development finished on Valkyria Chronicles II in early 2010 , with full development beginning shortly after this . The director of Valkyria Chronicles II , Takeshi Ozawa , returned to that role for Valkyria Chronicles III . Development work took approximately one year . After the release of Valkyria Chronicles II , the staff took a look at both the popular response for the game and what they wanted to do next for the series . Like its predecessor , Valkyria Chronicles III was developed for PlayStation Portable : this was due to the team wanting to refine the mechanics created for Valkyria Chronicles II , and they had not come up with the \" revolutionary \" idea that would warrant a new entry for the PlayStation 3 . Speaking in an interview , it was stated that the development team considered Valkyria Chronicles III to be the series ' first true sequel : while Valkyria Chronicles II had required a large amount of trial and error during development due to the platform move , the third game gave them a chance to improve upon the best parts of Valkyria Chronicles II due to being on the same platform . In addition to Sega staff from the previous games , development work was also handled by Media.Vision. The original scenario was written Kazuki Yamanobe , while the script was written by Hiroyuki Fujii , Koichi Majima , Kishiko Miyagi , Seiki Nagakawa and Takayuki Shouji . Its story was darker and more somber than that of its predecessor . \n",
+        "token_count": 317
+      },
+      {
+        "chunk_id": "chunk-00000014",
+        "source": "wikitext-103-raw:train:22",
+        "text": " The majority of material created for previous games , such as the BLiTZ system and the design of maps , was carried over . Alongside this , improvements were made to the game 's graphics and some elements were expanded , such as map layouts , mission structure , and the number of playable units per mission . A part of this upgrade involved creating unique polygon models for each character 's body . In order to achieve this , the cooperative elements incorporated into the second game were removed , as they took up a large portion of memory space needed for the improvements . They also adjusted the difficulty settings and ease of play so they could appeal to new players while retaining the essential components of the series ' gameplay . The newer systems were decided upon early in development . The character designs were done by Raita Honjou , who had worked on the previous Valkyria Chronicles games . When creating the Nameless Squad , Honjou was faced with the same problem he had had during the first game : the military uniforms essentially destroyed character individuality , despite him needing to create unique characters the player could identify while maintaining a sense of reality within the Valkyria Chronicles world . The main color of the Nameless was black . As with the previous Valkyria games , Valkyria Chronicles III used the CANVAS graphics engine . The anime opening was produced by Production I.G. \n",
+        "token_count": 274
+      },
+      {
+        "chunk_id": "chunk-00000015",
+        "source": "wikitext-103-raw:train:24",
+        "text": " = = = Music = = = \n",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000016",
+        "source": "wikitext-103-raw:train:26",
+        "text": " The music was composed by Hitoshi Sakimoto , who had also worked on the previous Valkyria Chronicles games . When he originally heard about the project , he thought it would be a light tone similar to other Valkyria Chronicles games , but found the themes much darker than expected . An early theme he designed around his original vision of the project was rejected . He redid the main theme about seven times through the music production due to this need to reassess the game . The main theme was initially recorded using orchestra , then Sakimoto removed elements such as the guitar and bass , then adjusted the theme using a synthesizer before redoing segments such as the guitar piece on their own before incorporating them into the theme . The rejected main theme was used as a hopeful tune that played during the game 's ending . The battle themes were designed around the concept of a \" modern battle \" divorced from a fantasy scenario by using modern musical instruments , constructed to create a sense of atonality . While Sakimoto was most used to working with synthesized music , he felt that he needed to incorporate live instruments such as orchestra and guitar . The guitar was played by Mitsuhiro Ohta , who also arranged several of the later tracks . The game 's opening theme song , \" If You Wish for ... \" ( もしも君が願うのなら , Moshimo Kimi ga Negauno Nara ) , was sung by Japanese singer May 'n . Its theme was the reason soldiers fought , in particular their wish to protect what was precious to them rather than a sense of responsibility or duty . Its lyrics were written by Seiko Fujibayashi , who had worked on May 'n on previous singles . \n",
+        "token_count": 345
+      },
+      {
+        "chunk_id": "chunk-00000017",
+        "source": "wikitext-103-raw:train:28",
+        "text": " = = = Release = = = \n",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000018",
+        "source": "wikitext-103-raw:train:30",
+        "text": " In September 2010 , a teaser website was revealed by Sega , hinting at a new Valkyria Chronicles game . In its September issue , Famitsu listed that Senjō no Valkyria 3 would be arriving on the PlayStation Portable . Its first public appearance was at the 2010 Tokyo Game Show ( TGS ) , where a demo was made available for journalists and attendees . During the publicity , story details were kept scant so as not to spoil too much for potential players , along with some of its content still being in flux at the time of its reveal . To promote the game and detail the story leading into the game 's events , an episodic Flash visual novel written by Fujii began release in January 2011 . The game was released January 27 , 2011 . During an interview , the development team said that the game had the capacity for downloadable content ( DLC ) , but that no plans were finalized . Multiple DLC maps , featuring additional missions and recruitable characters , were released between February and April 2011 . An expanded edition of the game , Valkyria Chronicles III Extra Edition , released on November 23 , 2011 . Packaged and sold at a lower price than the original , Extra Edition game with seven additional episodes : three new , three chosen by staff from the game 's DLC , and one made available as a pre @-@ order bonus . People who also owned the original game could transfer their save data between versions . \n",
+        "token_count": 315
+      },
+      {
+        "chunk_id": "chunk-00000019",
+        "source": "wikitext-103-raw:train:31",
+        "text": " Unlike its two predecessors , Valkyria Chronicles III was not released in the west . According to Sega , this was due to poor sales of Valkyria Chronicles II and the general unpopularity of the PSP in the west . An unofficial fan translation patch began development in February 2012 : players with a copy of Valkyria Chronicles III could download and apply the patch , which translated the game 's text into English . Compatible with the Extra Edition , the patch was released in January 2014 . \n",
+        "token_count": 107
+      },
+      {
+        "chunk_id": "chunk-00000020",
+        "source": "wikitext-103-raw:train:33",
+        "text": " = = Reception = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000021",
+        "source": "wikitext-103-raw:train:35",
+        "text": " On its day of release in Japan , Valkyria Chronicles III topped both platform @-@ exclusive and multi @-@ platform sales charts . By early February , the game sold 102 @,@ 779 units , coming in second overall to The Last Story for the Wii . By the end of the year , the game had sold just over 152 @,@ 500 units . \n",
+        "token_count": 86
+      },
+      {
+        "chunk_id": "chunk-00000022",
+        "source": "wikitext-103-raw:train:36",
+        "text": " Famitsu enjoyed the story , and were particularly pleased with the improvements to gameplay . Japanese gaming site Game Watch Impress , despite negatively noting its pacing and elements recycled from previous games , was generally positive about its story and characters , and found its gameplay entertaining despite off @-@ putting difficulty spikes . 4Gamer.net writer Naohiko Misuosame , in a \" Play Test \" article based on the game 's PSN demo , felt that Valkyria Chronicles III provided a \" profound feeling of closure \" for the Valkyria Chronicles series . He praised its gameplay despite annoying limitations to aspects such as special abilities , and positively noted its shift in story to a tone similar to the first game . \n",
+        "token_count": 142
+      },
+      {
+        "chunk_id": "chunk-00000023",
+        "source": "wikitext-103-raw:train:37",
+        "text": " PlayStation Official Magazine - UK praised the story 's blurring of Gallia 's moral standing , art style , and most points about its gameplay , positively noting the latter for both its continued quality and the tweaks to balance and content . Its one major criticism were multiple difficulty spikes , something that had affected the previous games . Heath Hindman of gaming website PlayStation Lifestyle praised the addition of non @-@ linear elements and improvements or removal of mechanics from Valkyria Chronicles II in addition to praising the returning gameplay style of previous games . He also positively noted the story 's serious tone . Points criticized in the review were recycled elements , awkward cutscenes that seemed to include all characters in a scene for no good reason , pacing issues , and occasional problems with the game 's AI . \n",
+        "token_count": 157
+      },
+      {
+        "chunk_id": "chunk-00000024",
+        "source": "wikitext-103-raw:train:38",
+        "text": " In a preview of the TGS demo , Ryan Geddes of IGN was left excited as to where the game would go after completing the demo , along with enjoying the improved visuals over Valkyria Chronicles II . Kotaku 's Richard Eisenbeis was highly positive about the game , citing is story as a return to form after Valkyria Chronicles II and its gameplay being the best in the series . His main criticisms were its length and gameplay repetition , along with expressing regret that it would not be localized . \n",
+        "token_count": 103
+      },
+      {
+        "chunk_id": "chunk-00000025",
+        "source": "wikitext-103-raw:train:40",
+        "text": " = = Legacy = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000026",
+        "source": "wikitext-103-raw:train:42",
+        "text": " Kurt and Riela were featured in the Nintendo 3DS crossover Project X Zone , representing the Valkyria series . Media.Vision would return to the series to develop Valkyria : Azure Revolution , with Ozawa returning as director . Azure Revolution is a role @-@ playing video game for the PlayStation 4 that forms the beginning of a new series within the Valkyria franchise . \n",
+        "token_count": 80
+      },
+      {
+        "chunk_id": "chunk-00000027",
+        "source": "wikitext-103-raw:train:44",
+        "text": " = = = Adaptations = = = \n",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000028",
+        "source": "wikitext-103-raw:train:46",
+        "text": " Valkyria Chronicles 3 was adapted into a two @-@ episode original video animation series in the same year of its release . Titled Senjō no Valkyria 3 : Taga Tame no Jūsō ( 戦場のヴァルキュリア３ 誰がための銃瘡 , lit . Valkyria of the Battlefield 3 : The Wound Taken for Someone 's Sake ) , it was originally released through PlayStation Network and Qriocity between April and May 2011 . The initially @-@ planned release and availability period needed to be extended due to a stoppage to PSN during the early summer of that year . It later released for DVD on June 29 and August 31 , 2011 , with separate \" Black \" and \" Blue \" editions being available for purchase . The anime is set during the latter half of Valkyria Chronicles III , detailing a mission by the Nameless against their Imperial rivals Calamity Raven . The anime was first announced in November 2010 . It was developed by A @-@ 1 Pictures , produced by Shinji Motoyama , directed by Nobuhiro Kondō , and written by Hiroshi Ōnogi . Sakimoto 's music for the game was used in the anime . \n",
+        "token_count": 278
+      },
+      {
+        "chunk_id": "chunk-00000029",
+        "source": "wikitext-103-raw:train:47",
+        "text": " The anime 's title was inspired by the principle purpose of the Nameless : to suffer in battle for the goals of others . A subtitle attached to the project during development was \" The Road to Kubinka \" , which referenced the Kubinka Tank Museum in Moscow . The game 's main theme was how the characters regained their sense of self when stripped of their names and identities , along with general themes focused on war and its consequences . While making the anime , the production team were told by Sega to make it as realistic as possible , with the consequence that the team did extensive research into aspects such as what happened when vehicles like tanks were overturned or damaged . Due to it being along the same timeline as the original game and its television anime adaptation , the cast of Valkyria Chronicles could make appearances , which pleased the team . The opening theme , \" Akari ( Light ) -Tomoshibi- \" ( 灯 @-@ TOMOSHIBI- ) , was sung by Japanese singer Faylan . The ending theme , \" Someday the Flowers of Light Will Bloom \" ( いつか咲く光の花 , Itsuka Saku Hikari no Hana ) , was sung by Minami Kuribayashi . Both songs ' lyrics were written by their respective artists . \n",
+        "token_count": 263
+      },
+      {
+        "chunk_id": "chunk-00000030",
+        "source": "wikitext-103-raw:train:48",
+        "text": " Two manga adaptations were produced , following each of the game 's main female protagonists Imca and Riela . They were Senjō no Valkyria 3 : Namo naki Chikai no Hana ( 戦場のヴァルキュリア3 名もなき誓いの花 , lit . Valkyria of the Battlefield 3 : The Flower of the Nameless Oath ) , illustrated by Naoyuki Fujisawa and eventually released in two volumes after being serialized in Dengeki Maoh between 2011 and 2012 ; and Senjō no Valkyria 3 : -Akaki Unmei no Ikusa Otome- ( 戦場のヴァルキュリア3 -赤き運命の戦乙女- , lit . Valkyria of the Battlefield 3 -The Valkyrie of the Crimson Fate ) , illustrated by Mizuki Tsuge and eventually released in a single volume by Kadokawa Shoten in 2012 . \n",
+        "token_count": 213
+      },
+      {
+        "chunk_id": "chunk-00000031",
+        "source": "wikitext-103-raw:train:51",
+        "text": " = Tower Building of the Little Rock Arsenal = \n",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000032",
+        "source": "wikitext-103-raw:train:53",
+        "text": " The Tower Building of the Little Rock Arsenal , also known as U.S. Arsenal Building , is a building located in MacArthur Park in downtown Little Rock , Arkansas . Built in 1840 , it was part of Little Rock 's first military installation . Since its decommissioning , The Tower Building has housed two museums . It was home to the Arkansas Museum of Natural History and Antiquities from 1942 to 1997 and the MacArthur Museum of Arkansas Military History since 2001 . It has also been the headquarters of the Little Rock Æsthetic Club since 1894 . \n",
+        "token_count": 132
+      },
+      {
+        "chunk_id": "chunk-00000033",
+        "source": "wikitext-103-raw:train:54",
+        "text": " The building receives its name from its distinct octagonal tower . Besides being the last remaining structure of the original Little Rock Arsenal and one of the oldest buildings in central Arkansas , it was also the birthplace of General Douglas MacArthur , who became the supreme commander of US forces in the South Pacific during World War II . It was also the starting place of the Camden Expedition . In 2011 it was named as one of the top 10 attractions in the state of Arkansas by Arkansas.com. \n",
+        "token_count": 102
+      },
+      {
+        "chunk_id": "chunk-00000034",
+        "source": "wikitext-103-raw:train:56",
+        "text": " = = Construction = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000035",
+        "source": "wikitext-103-raw:train:58",
+        "text": " The arsenal was constructed at the request of Governor James Sevier Conway in response to the perceived dangers of frontier life and fears of the many Native Americans who were passing through the state on their way to the newly established Oklahoma Territory . Thirty @-@ six acres were appropriated on the outskirts of Little Rock by Major Robert B. Lee of the U.S. Army . The land had been previously used as a racetrack by the local jockey club . John Wormley Walker , a builder for the Federal Government , supervised the construction . Originally $ 14 @,@ 000 was allocated for the construction of the arsenal , but proved inadequate . The budget was later increased to $ 30 @,@ 000 . Work began on the Tower Building in 1840 , and it was the first permanent structure of the arsenal to be built . Being originally constructed to store ammunition , the building was designed with 3 @-@ foot @-@ thick ( 0 @.@ 91 m ) exterior walls . The original plans called for it to be built of stone , however , masonry was used instead . The Arkansas Gazette referred to the structure as \" A splendid specimen of masonry \" . \n",
+        "token_count": 247
+      },
+      {
+        "chunk_id": "chunk-00000036",
+        "source": "wikitext-103-raw:train:60",
+        "text": " = = Civil War = = \n",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000037",
+        "source": "wikitext-103-raw:train:62",
+        "text": " For several years the arsenal , which was owned by the federal government , served as a simple arms depot and was staffed with only a handful of soldiers . But in November 1860 , with the American Civil War on the horizon , a company of the Second United States Artillery , consisting of sixty @-@ five men , was transferred to Little Rock under the command of Captain James Totten . On January 15 , 1861 , the state legislature decided to hold a referendum to determine if a state convention should be held to consider the issue of secession and to elect delegates to such a convention . It was planned for February 18 ; however , events at the arsenal , would not wait . On January 28 , then Governor Henry Massey Rector informed Captain Totten that he and his soldiers would be \" permitted to remain in the possession of the Federal officers until the State , by authority of the people , shall have determined to sever their connection with the General Government , \" Totten responded to this by telling the Governor that his orders came from the United States Government and began a desperate but ultimately futile dispatch of letters and telegrams asking for reinforcements , although rumors were widely spread that they were already coming . The first telegraph wire to span between Little Rock and Memphis had recently been completed . Local attorney John M Harrel was asked to compose the first telegraph dispatched from Arkansas 's capital . In his message , Harrel reported unconfirmed rumors that more federal troops had been sent to reinforce the Little Rock Arsenal . \n",
+        "token_count": 314
+      },
+      {
+        "chunk_id": "chunk-00000038",
+        "source": "wikitext-103-raw:train:63",
+        "text": " The United States troops at the outposts of the western frontier of the state and in the Indian nation have all been recalled from winter quarters to reinforce the garrison at Fort Smith . The garrison at Fort Smith had been previously transferred to the United States Arsenal in this city ( Little Rock ) . The arsenal is one of the richest depositories of military stores in the United States and is supposed to be the ultimate destination of the tropps [ sic ] ordered from the frontier . \n",
+        "token_count": 96
+      },
+      {
+        "chunk_id": "chunk-00000039",
+        "source": "wikitext-103-raw:train:64",
+        "text": " -John M Harrel Telegram , January 31 , 1861 \n",
+        "token_count": 18
+      },
+      {
+        "chunk_id": "chunk-00000040",
+        "source": "wikitext-103-raw:train:65",
+        "text": " The item was intended simply as a piece of news , but telegraph lines quickly spread the news throughout the state , fueling procession sentiment . The rumor was interpreted by some Arkansans as a call from the governor to assemble to help expel the federal troops from the arsenal . By February 5 , six militia units , consisting of 1 @,@ 000 men , with a guarantee that the numbers could be increased to 5 @,@ 000 if the situations deemed it necessary , had assembled in Little Rock . Governor Rector vehemently denied ordering the troops to assemble or giving any order at all in connection with the troops . Faced with the fact that the military had assembled believing they were following his orders and the consensus of the citizens of Little Rock against any armed conflict between the civilian army and federal troops , Governor Rector was forced to take control of the situation . On February 6 , he sent a formal demand for surrender of the arsenal to Captain Totten , \n",
+        "token_count": 201
+      },
+      {
+        "chunk_id": "chunk-00000041",
+        "source": "wikitext-103-raw:train:66",
+        "text": " This movement is prompted by the feeling that pervades the citizens of this State that in the present emergency the arms and munitions of war in the Arsenal should be under the control of the State authorities , in order to their security . This movement , although not authorized by me , has assumed such an aspect that it becomes my duty , as the executive of this Sate , to interpose my official authority to prevent a collision between the people of the State and the Federal troops under your command . I therefore demand in the name of the State the delivery of the possession of the Arsenal and munitions of war under your charge to the State authorities , to be held subject to the action of the convention to be held on the 4th of March next . \n",
+        "token_count": 151
+      },
+      {
+        "chunk_id": "chunk-00000042",
+        "source": "wikitext-103-raw:train:67",
+        "text": " Perhaps because Abraham Lincoln had not yet been inaugurated as President , Captain Totten received no instructions from his superiors and was forced to withdraw his troops . He agreed to surrender the arsenal as long as the governor agreed to three provisions : \n",
+        "token_count": 48
+      },
+      {
+        "chunk_id": "chunk-00000043",
+        "source": "wikitext-103-raw:train:68",
+        "text": " The governor would take possession of the arsenal in the name of the United States . \n",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000044",
+        "source": "wikitext-103-raw:train:69",
+        "text": " The soldiers would be allowed safe passage in any direction carrying any personal and public property besides munitions of war . \n",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000045",
+        "source": "wikitext-103-raw:train:70",
+        "text": " The soldiers would be allowed to march away as men leaving under orders , not as conquered and surrendering soldiers . \n",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000046",
+        "source": "wikitext-103-raw:train:71",
+        "text": " On the morning of February 8 , 1861 , Rector and Totten signed an agreement placing the arsenal in the hands of state officials . That afternoon , the citizen militia marched to the arsenal with Governor Rector at its head . All of the federal troops had left at this point , except Totten who had stayed behind to listen to the Governor 's speech and to hand the arsenal over in person . \n",
+        "token_count": 86
+      },
+      {
+        "chunk_id": "chunk-00000047",
+        "source": "wikitext-103-raw:train:72",
+        "text": " The Little Rock Arsenal was classified in 1860 as an \" arsenal of deposit , \" meaning that it was simply a warehouse for the storage of weapons intended for the use of the state militia in times of crisis . Thus there were no substantial operations for ordnance fabrication or repairs , nor for the manufacture of cartridges at the time the Arsenal fell into State hands . Most of these operations were started from scratch through the efforts of the Arkansas Military Board . \n",
+        "token_count": 93
+      },
+      {
+        "chunk_id": "chunk-00000048",
+        "source": "wikitext-103-raw:train:73",
+        "text": " Inside the Little Rock Arsenal after its seizure in February , 1861 , the Confederates inventoried some 10 @,@ 247 weapons , 250 @,@ 000 musket cartridges , and 520 @,@ 000 percussion caps , as well as the four bronze cannon of Totten 's battery . Long arms in the Arsenal 's inventory consisted of : \n",
+        "token_count": 88
+      },
+      {
+        "chunk_id": "chunk-00000049",
+        "source": "wikitext-103-raw:train:74",
+        "text": " M1822 .69 cal ( flintlock ) 5 @,@ 625 \n",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000050",
+        "source": "wikitext-103-raw:train:75",
+        "text": " M1822 .69 cal ( percussion @-@ converted ) 53 \n",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000051",
+        "source": "wikitext-103-raw:train:76",
+        "text": " M1842 .69 cal smoothbore ( percussion ) 357 \n",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000052",
+        "source": "wikitext-103-raw:train:77",
+        "text": " M1855 .58 cal rifle @-@ muskets 900 \n",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000053",
+        "source": "wikitext-103-raw:train:78",
+        "text": " M1817 common rifles 125 \n",
+        "token_count": 12
+      },
+      {
+        "chunk_id": "chunk-00000054",
+        "source": "wikitext-103-raw:train:79",
+        "text": " M1841 rifle ( \" Mississippi Rifle \" ) 54 \n",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000055",
+        "source": "wikitext-103-raw:train:80",
+        "text": " M1847 musketoon 2 \n",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000056",
+        "source": "wikitext-103-raw:train:81",
+        "text": " Hall 's carbines 267 \n",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000057",
+        "source": "wikitext-103-raw:train:82",
+        "text": " Hall 's rifles ( flintlock ) 2 @,@ 864 \n",
+        "token_count": 18
+      },
+      {
+        "chunk_id": "chunk-00000058",
+        "source": "wikitext-103-raw:train:83",
+        "text": " Total 10 @,@ 247 \n",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000059",
+        "source": "wikitext-103-raw:train:84",
+        "text": " Of this number , approximately 9600 weapons were serviceable , or ready @-@ for @-@ issue . Note there were only 1 @,@ 364 percussion weapons available . Disposition of the weapons found in the Arsenal is somewhat sketchy , but from various records it can be surmised that the 5th , 6th , 7th , and 8th Arkansas Infantry Regiments , mustered in June , 1861 , were issued M1816 / M1822 .69 caliber flintlocks . The 9th and 10th Arkansas , four companies of Kelly 's 9th Arkansas Battalion , and the 3rd Arkansas Cavalry Regiment were issued flintlock Hall 's Rifles . The units comprising the infantry force of Van Dorn 's Army of the West were the 1st and 2nd Arkansas Mounted Rifles were also armed with M1822 flintlocks from the Little Rock Arsenal . By the time the 11th and 12th Arkansas Infantry Regiments mustered in at Little Rock , the supply of arms had been almost completely exhausted , and only old \" junker \" weapons were left . \n",
+        "token_count": 257
+      },
+      {
+        "chunk_id": "chunk-00000060",
+        "source": "wikitext-103-raw:train:85",
+        "text": " Most of the equipment , arms , and machinery at the Little Rock Arsenal was removed to east of the Mississippi River by order of Maj. Gen. Earl Van Dorn in April and May 1862 , and accountability for it is lost at that point . By all appearances , the equipment was sent down the river to Napoleon , Arkansas , and from there to Jackson Mississippi , where it was probably destroyed during the Vicksburg campaign in the early summer of 1863 . \n",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000061",
+        "source": "wikitext-103-raw:train:86",
+        "text": " Major General Thomas C. Hindman , sent to command the district of Arkansas in May , 1862 , found the state nearly destitute of military material . Hindman established another armory at Arkadelphia , and revived the Little Rock Arsenal as a collection point and depot for armaments and ammunition manufacture for small arms . Hindman recorded : \n",
+        "token_count": 72
+      },
+      {
+        "chunk_id": "chunk-00000062",
+        "source": "wikitext-103-raw:train:87",
+        "text": " \" Machinery was made for manufacturing percussion caps and small arms , and both were turned out in small quantity , but of excellent quality . Lead mines were opened and worked , and a chemical laboratory was established and successfully operated in aid of the Ordnance Department and in the manufacture of calomel , castor oil , spirits of nitre , the various tinctures of iron , and other valuable medicines . Most of these works were located at or near Arkadelphia on the Ouachita River , 75 miles south from Little Rock . The tools , machinery , and the material were gathered piecemeal or else made by hand labor . Nothing of this sort had been before attempted on Government account in Arkansas to my knowledge , except for the manufacture of small arms , the machinery for which was taken away by General Van Dorn and there was neither capital nor sufficient enterprise among the citizens to engage in such undertakings � A further supply , along with lead and caps , was procured from the citizens of Little Rock and vicinity by donation , purchases , and impressments . \n",
+        "token_count": 216
+      },
+      {
+        "chunk_id": "chunk-00000063",
+        "source": "wikitext-103-raw:train:88",
+        "text": " This ammunition , and that which I brought with me , was rapidly prepared for use at the Laboratory established at the Little Rock Arsenal for that purpose . As illustrating as the pitiful scarcity of material in the country , the fact may be stated that it was found necessary to use public documents of the State Library for cartridge paper . Gunsmiths were employed or conscripted , tools purchased or impressed , and the repair of the damaged guns I brought with me and about an equal number found at Little Rock commenced at once . But , after inspecting the work and observing the spirit of the men I decided that a garrison 500 strong could hold out against Fitch and that I would lead the remainder - about 1500 - to Gen 'l Rust as soon as shotguns and rifles could be obtained from Little Rock instead of pikes and lances , with which most of them were armed . Two days elapsed before the change could be effected . \" \n",
+        "token_count": 195
+      },
+      {
+        "chunk_id": "chunk-00000064",
+        "source": "wikitext-103-raw:train:89",
+        "text": " The Confederate ordnance establishment at Little Rock was reactivated in August , 1862 . Looking around for a suitable person to head this activity , General Hindman turned to the Confederate Navy and borrowed Lieutenant John W. Dunnington . Lt. Dunnington was the commander of the gunboat C.S.S. Ponchartrain , which had been brought to Little Rock in hopes of converting it to an ironclad . Dunnington was selected to head the ordnance works at Little Rock , and although he continued to draw his pay from the Confederate Navy Department , he was placed in charge of all Confederate ordnance activities ( which included artillery functions ) there with the rank of lieutenant colonel . \n",
+        "token_count": 146
+      },
+      {
+        "chunk_id": "chunk-00000065",
+        "source": "wikitext-103-raw:train:90",
+        "text": " Lt. Col. Dunnington 's \" Returns for the month of August , 1862 , at Little Rock Arsenal , C.S.A. , \" are found in Vol . 149 , Chapter IV of the \" Captured Rebel Ordnance Records , \" and are most enlightening as to the scope of Confederate ordnance activities at Little Rock during this crucial time . According to Dunnington , \" When I assumed command at this Post , all material had been removed to Arkadelphia . There were no persons employed . No shops were open for repair of arms or for fabricating ammunition . Material , tools , etc . , had to be procured as well as the employment of laborers . Work commenced the last part of the month . \" \n",
+        "token_count": 157
+      },
+      {
+        "chunk_id": "chunk-00000066",
+        "source": "wikitext-103-raw:train:91",
+        "text": " The military force at Little Rock under Dunnington 's command consisted of four officers : himself , Major John B. Lockman , Captain C.C. Green , and 2nd Lt. W.W. Murphy . In addition to these , he had 20 enlisted men and a civilian force composed of a foreman , 2 clerks , 3 gunsmiths for repairing small arms , a laboratorian , 26 laborers in the ammunition laboratory , and a carpenter for making packing boxes . \n",
+        "token_count": 106
+      },
+      {
+        "chunk_id": "chunk-00000067",
+        "source": "wikitext-103-raw:train:92",
+        "text": " During the month of August , 1862 , the following work was performed : \" Fabricated : one pair of musket bullet moulds ; 10 @,@ 000 buck & ball shot cartridges ; repaired : 750 muskets , shotguns , and rifles ; received and repaired : ordnance stores and ordnances ; performed : guard , office , and police duties ; inspected : Posts at Camden and Arkadelphia . \" \n",
+        "token_count": 96
+      },
+      {
+        "chunk_id": "chunk-00000068",
+        "source": "wikitext-103-raw:train:93",
+        "text": " Lt. Col. Dunnington continued to build up his works at Little Rock until November 1862 , when Captain Sanford C. Faulkner ( composer of The Arkansas Traveler ) was placed in charge of the Arsenal . Dunnington presumably returned to his naval duties and the Ponchartrain . \n",
+        "token_count": 64
+      },
+      {
+        "chunk_id": "chunk-00000069",
+        "source": "wikitext-103-raw:train:94",
+        "text": " A \" Summary of the Work Done for November , 1862 , Little Rock Arsenal \" shows : Fabrication : \n",
+        "token_count": 26
+      },
+      {
+        "chunk_id": "chunk-00000070",
+        "source": "wikitext-103-raw:train:95",
+        "text": " 75 @,@ 000 buck & ball cartridges - percussion \n",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000071",
+        "source": "wikitext-103-raw:train:96",
+        "text": " 14 @,@ 000 buck & ball cartridges - flint \n",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000072",
+        "source": "wikitext-103-raw:train:97",
+        "text": " 275 paper fuzes \n",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000073",
+        "source": "wikitext-103-raw:train:98",
+        "text": " 117 rounds , 6 @-@ pounder canister shot \n",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000074",
+        "source": "wikitext-103-raw:train:99",
+        "text": " 130 rounds , 6 @-@ pounder ball shot \n",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000075",
+        "source": "wikitext-103-raw:train:100",
+        "text": " 96 ammunition packing boxes \n",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000076",
+        "source": "wikitext-103-raw:train:101",
+        "text": " Repaired : \n",
+        "token_count": 4
+      },
+      {
+        "chunk_id": "chunk-00000077",
+        "source": "wikitext-103-raw:train:102",
+        "text": " 2 @,@ 236 shotguns and rifles ( repaired mostly for troops in service ) \n",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000078",
+        "source": "wikitext-103-raw:train:103",
+        "text": " 23 pistols ( repaired mostly for troops in service ) \n",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000079",
+        "source": "wikitext-103-raw:train:104",
+        "text": " Received & Issued : \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000080",
+        "source": "wikitext-103-raw:train:105",
+        "text": " 752 packages of ordnance and ordnance stores received and mostly issued to troops in service . \n",
+        "token_count": 24
+      },
+      {
+        "chunk_id": "chunk-00000081",
+        "source": "wikitext-103-raw:train:106",
+        "text": " Repaired and painted : \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000082",
+        "source": "wikitext-103-raw:train:107",
+        "text": " 4 gun carriages \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000083",
+        "source": "wikitext-103-raw:train:108",
+        "text": " Performed : \n",
+        "token_count": 4
+      },
+      {
+        "chunk_id": "chunk-00000084",
+        "source": "wikitext-103-raw:train:109",
+        "text": " Guard , office , and police duties . \n",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000085",
+        "source": "wikitext-103-raw:train:110",
+        "text": " Perhaps the most illuminating points of the above \" Summary of Work \" and those for following months are that the standard ammunition made was . \" buck & ball \" , indicating that the .69 caliber smoothbores and shotguns remained the predominant caliber weapon in use , and of this , nearly one sixth or more of all small arms ammunition was still for flintlock weapons , indicating that no less than a sixth of the Confederate troops in this vicinity were still armed with obsolete flintlock weapons . \n",
+        "token_count": 101
+      },
+      {
+        "chunk_id": "chunk-00000086",
+        "source": "wikitext-103-raw:train:111",
+        "text": " The \" Summaries of Work done at Little Rock Arsenal , C.S.A. \" continue at about the same pace and scale from August 1862 until August 1863 . Appended to the \" Summary \" for August , 1863 is the ominous notation , \" During the last week in the month , nearly all stores at the Arsenal have been packed and sent to Arkadelphia , in obedience to orders from Chief of Ordnance , District of Arkansas . \" This then marks the beginning of the evacuation of ordnance activities from Little Rock , with the city being surrendered to the advancing Federal troops of Frederick Steele 's Arkansas Expedition on September 11 , 1863 . \n",
+        "token_count": 147
+      },
+      {
+        "chunk_id": "chunk-00000087",
+        "source": "wikitext-103-raw:train:112",
+        "text": " In 1864 , after Little Rock fell to the Union Army and the arsenal had been recaptured , General Fredrick Steele marched 8 @,@ 500 troops from the arsenal beginning the Camden Expedition . \n",
+        "token_count": 46
+      },
+      {
+        "chunk_id": "chunk-00000088",
+        "source": "wikitext-103-raw:train:113",
+        "text": " The arsenal was briefly seized once more by Joseph Brooks loyalists during the Brooks @-@ Baxter War of 1874 . \n",
+        "token_count": 28
+      },
+      {
+        "chunk_id": "chunk-00000089",
+        "source": "wikitext-103-raw:train:115",
+        "text": " = = Decommissioning = = \n",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000090",
+        "source": "wikitext-103-raw:train:117",
+        "text": " In 1873 , the building was renamed Little Rock Barracks and used as a barracks for married officers and their families . The building was drastically altered the inside and outside . Prior to renovation , a rear basement door provided the only entrance to the building , while the tower served as a hoist to move munitions between floors . By 1868 , front and rear porches had been added to the building , as well as interior walls and stairs , some of which remain today , including the central staircase . In 1880 , Douglas MacArthur was born on the northwest upper floor of this building while his father , Captain Arthur MacArthur , was stationed there . \n",
+        "token_count": 140
+      },
+      {
+        "chunk_id": "chunk-00000091",
+        "source": "wikitext-103-raw:train:118",
+        "text": " In the 1880s , the federal government began closing many small arsenals around the country in favor of smaller ones built near railroads for quick deployment . The arsenal commander received word from Washington that the Little Rock site must be abandoned \" not later than October 1 , 1890 . \" On April 12 , 1893 the tower building and the surrounding buildings were traded to the city of Little Rock for 1 @,@ 000 acres ( 4 km ² ) in North Little Rock under the condition that the building and land be \" forever exclusively devoted to the uses and purposes of a public park \" for 1 @,@ 000 acres ( 4 km ² ) in Big Rock Mountain on the north side of the Arkansas River , present day North Little Rock . That site later became Fort Logan H. Roots . All of the original buildings surrounding the Tower Building were demolished . \n",
+        "token_count": 193
+      },
+      {
+        "chunk_id": "chunk-00000092",
+        "source": "wikitext-103-raw:train:120",
+        "text": " = = Æsthetic Club = = \n",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000093",
+        "source": "wikitext-103-raw:train:122",
+        "text": " In 1894 the Little Rock Æsthetic Club , one of the oldest women 's societies west of the Mississippi River , moved into the Tower Building . This was prompted due to increased membership and a need for larger , more permanent quarters . The previous year , club members working with women 's organizations throughout the state , raised money to furnish the Arkansas Building of the Columbian Exposition at The Chicago World 's Fair . At the fair 's conclusion , artifacts from the exhibit were displayed in the Tower Building , with the Æsthetic Club invited to meet in the \" Columbian Room . \" \n",
+        "token_count": 126
+      },
+      {
+        "chunk_id": "chunk-00000094",
+        "source": "wikitext-103-raw:train:123",
+        "text": " Except for Æsthetic Club meetings , the Tower Building remained largely unoccupied for almost fifty years and suffered significant deterioration . The Æsthetic Club provided much @-@ needed financial support during the period and even paid the electric bill during the Great Depression . The Æsthetic Club is still headquartered in the Tower Building . \n",
+        "token_count": 68
+      },
+      {
+        "chunk_id": "chunk-00000095",
+        "source": "wikitext-103-raw:train:125",
+        "text": " = = Public use = = \n",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000096",
+        "source": "wikitext-103-raw:train:127",
+        "text": " The building and the surrounding park were used for many public purposes throughout the early 20th century . The Tower Building served as headquarters for the United Confederate Veterans Reunion , May 15 – 18 , 1911 . Over 106 @,@ 000 Civil War veterans , the largest popular gathering in the history of the city up to that time , attended and were housed in the building or camped in the park , which had also become a popular camping area . Later the building served as an armory for the Arkansas National Guard . In 1912 , the second floor of the Tower Building became Little Rock 's first public library . In 1917 , Little Rock built a fire station in the park , that building is now gone . A band shell named for H. H. Foster also was built in the park during this time , but also no longer exists . In 1936 , Works Progress Administration built the Museum of Fine Arts , now called the Arkansas Arts Center , just south of the Tower Building . \n",
+        "token_count": 221
+      },
+      {
+        "chunk_id": "chunk-00000097",
+        "source": "wikitext-103-raw:train:128",
+        "text": " The arsenal was listed in the National Register of Historic Places in 1970 . Due to its association with the Camden Expedition of 1864 , the arsenal may be included in the Camden Expedition Sites National Historic Landmark designated in 1994 . \n",
+        "token_count": 56
+      },
+      {
+        "chunk_id": "chunk-00000098",
+        "source": "wikitext-103-raw:train:129",
+        "text": " In 1942 , the Tower Building was renovated due to the efforts of the Æsthetic Club , Little Rock philanthropist Frederick W. Allsop , and the Works Progress Administration . It became the new home of The Arkansas Museum of Natural History and Antiquities , which had been located in Little Rock City Hall . The museum remained in the tower building for approximately fifty @-@ five years . The area surrounding the Tower Building had been known as Arsenal Park when the first decommissioned and then later renamed City Park . Due to the efforts of Bernie Babcock , however , the city finally named it MacArthur Park in 1942 in honor of Douglas MacArthur . \n",
+        "token_count": 143
+      },
+      {
+        "chunk_id": "chunk-00000099",
+        "source": "wikitext-103-raw:train:130",
+        "text": " In 1997 , the Museum of Science and Natural History merged with the Little Rock Children 's Museum , which had been located in Union Station , to form the Arkansas Museum of Discovery . The new museum was relocated to a historic building in the Little Rock River Market District . The MacArthur Museum of Arkansas Military History opened on May 19 , 2001 in the Tower Building . The new museum 's goal is to educate and inform visitors about the military history of Arkansas , preserve the Tower Building , honor servicemen and servicewomen of the United States and commemorate the birthplace of Douglas MacArthur . \n",
+        "token_count": 128
+      },
+      {
+        "chunk_id": "chunk-00000100",
+        "source": "wikitext-103-raw:train:133",
+        "text": " = Cicely Mary Barker = \n",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000101",
+        "source": "wikitext-103-raw:train:135",
+        "text": " Cicely Mary Barker ( 28 June 1895 – 16 February 1973 ) was an English illustrator best known for a series of fantasy illustrations depicting fairies and flowers . Barker 's art education began in girlhood with correspondence courses and instruction at the Croydon School of Art . Her earliest professional work included greeting cards and juvenile magazine illustrations , and her first book , Flower Fairies of the Spring , was published in 1923 . Similar books were published in the following decades . \n",
+        "token_count": 109
+      },
+      {
+        "chunk_id": "chunk-00000102",
+        "source": "wikitext-103-raw:train:136",
+        "text": " Barker was a devout Anglican , and donated her artworks to Christian fundraisers and missionary organizations . She produced a few Christian @-@ themed books such as The Children ’ s Book of Hymns and , in collaboration with her sister Dorothy , He Leadeth Me . She designed a stained glass window for St. Edmund 's Church , Pitlake , and her painting of the Christ Child , The Darling of the World Has Come , was purchased by Queen Mary . \n",
+        "token_count": 94
+      },
+      {
+        "chunk_id": "chunk-00000103",
+        "source": "wikitext-103-raw:train:137",
+        "text": " Barker was equally proficient in watercolour , pen and ink , oils , and pastels . Kate Greenaway and the Pre @-@ Raphaelites were the principal influences on her work . She claimed to paint instinctively and rejected artistic theories . Barker died in 1973 . Though she published Flower Fairy books with spring , summer , and autumn themes , it wasn 't until 1985 that a winter collection was assembled from her remaining work and published posthumously . \n",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000104",
+        "source": "wikitext-103-raw:train:139",
+        "text": " = = Biography = = \n",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000105",
+        "source": "wikitext-103-raw:train:142",
+        "text": " = = = Early life = = = \n",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000106",
+        "source": "wikitext-103-raw:train:144",
+        "text": " Barker was born the second daughter and youngest child of Walter Barker , a partner in a seed supply company and an amateur artist , and his wife Mary Eleanor ( Oswald ) Barker on 28 June 1895 at home at 66 Waddon Road in Croydon , Surrey , England . Barker was an epileptic as a child , and cared for at home by her parents . Later , her sister and elder by two years , Dorothy Oswald Barker , continued the care . \n",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000107",
+        "source": "wikitext-103-raw:train:145",
+        "text": " The family of four was moderately well off , and belonged to the lower end of the upper middle class . A nanny , a governess , and a cook to prepare special meals for Barker were hired . She spent much time in bed at home amusing herself with painting books and a nursery library that included the works of Kate Greenaway and Randolph Caldecott – two artists who exerted strong influences on her later art . \n",
+        "token_count": 84
+      },
+      {
+        "chunk_id": "chunk-00000108",
+        "source": "wikitext-103-raw:train:147",
+        "text": " = = = Art education and first professional work = = = \n",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000109",
+        "source": "wikitext-103-raw:train:149",
+        "text": " Barker took correspondence courses in art , probably until about 1919 . In 1908 at 13 years , she entered an evening class at the Croydon School of Art , and attended the school into the 1940s . In time , she received a teaching position . \n",
+        "token_count": 65
+      },
+      {
+        "chunk_id": "chunk-00000110",
+        "source": "wikitext-103-raw:train:150",
+        "text": " In 1911 , Raphael Tuck & Sons bought four of Barker 's \" little drawings \" for half a sovereign , and published them as postcards . In October 1911 , she won second prize in the Croydon Art",
+        "token_count": 52
+      }
+    ],
+    "maximum_output_tokens": 8192,
+    "model_context_limit": 40960,
+    "input_truncation_status": "final_chunk_trimmed",
+    "peak_vram_gb": 25.033,
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false
+  },
+  "api_equivalent_cost_estimate": {
+    "enabled": false,
+    "pricing_label": null,
+    "input_price_per_million_tokens": null,
+    "output_price_per_million_tokens": null,
+    "currency": "USD",
+    "basis": "disabled",
+    "disclaimer": "Hypothetical hosted API-equivalent estimate; not measured local operating cost."
+  }
+}

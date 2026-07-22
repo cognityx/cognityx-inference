@@ -407,6 +407,7 @@ class QualityIndicatorTests(unittest.TestCase):
             }
 
         llm = Mock()
+        llm.loading_diagnostics = {}
         llm.generate.side_effect = generate
         with contextlib.redirect_stdout(io.StringIO()):
             benchmark = process_prompt(
@@ -416,6 +417,18 @@ class QualityIndicatorTests(unittest.TestCase):
                 BENCHMARK_NAME,
             )
             interactive = process_prompt(llm, "hello")
+            contextual = process_prompt(
+                llm,
+                " ".join(f"word{number}" for number in range(30)),
+                context_metadata={
+                    "final_prompt_tokens": 1,
+                    "context_name": "sample",
+                    "context_provider": "folder",
+                    "actual_corpus_tokens": 5,
+                    "chunks_used": [],
+                    "input_truncation_status": "not_truncated",
+                },
+            )
 
         self.assertEqual(benchmark["run_type"], "benchmark")
         self.assertEqual(benchmark["benchmark_name"], BENCHMARK_NAME)
@@ -423,6 +436,9 @@ class QualityIndicatorTests(unittest.TestCase):
         self.assertIn("api_equivalent_cost_estimate", benchmark)
         self.assertEqual(interactive["run_type"], "interactive")
         self.assertIsNone(interactive["benchmark_name"])
+        self.assertTrue(contextual["prompt_truncated_for_reporting"])
+        self.assertEqual(contextual["context"]["full_prompt_characters"], 199)
+        self.assertEqual(len(contextual["context"]["full_prompt_sha256"]), 64)
 
 
 class MetricDisplayTests(unittest.TestCase):

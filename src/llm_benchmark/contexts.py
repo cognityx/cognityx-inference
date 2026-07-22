@@ -259,7 +259,14 @@ def build_context_prompt(
         "requested_context_tokens": requested_tokens,
         "actual_corpus_tokens": corpus_tokens,
         "final_prompt_tokens": prompt_tokens,
-        "chunks_used": [asdict(chunk) for chunk in selected],
+        "chunks_used": [
+            {
+                "chunk_id": chunk.chunk_id,
+                "source": chunk.source,
+                "token_count": chunk.token_count,
+            }
+            for chunk in selected
+        ],
         "maximum_output_tokens": max_new_tokens,
         "model_context_limit": model_context_limit,
         "input_truncation_status": "final_chunk_trimmed" if final_chunk_trimmed else "not_truncated",

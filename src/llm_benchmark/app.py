@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shlex
 from dataclasses import asdict
@@ -50,6 +51,14 @@ DEFAULT_LOAD_PROFILE = "bf16"
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
 BENCHMARK_PROMPT = "Can AI be applied to the travelling salesman problem?"
 BENCHMARK_NAME = "travelling_salesman_problem"
+CONTEXT_PROMPT_PREVIEW_WORDS = 24
+
+
+def prompt_preview(prompt: str, word_limit: int = CONTEXT_PROMPT_PREVIEW_WORDS) -> str:
+    words = prompt.split()
+    if len(words) <= word_limit:
+        return prompt
+    return " ".join(words[:word_limit]) + " … [truncated]"
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
@@ -379,6 +388,35 @@ def print_metrics(result: dict[str, Any]) -> None:
         "GPU reserved after: "
         f"{format_gb(metrics['gpu_reserved_after_gb'])}"
     )
+    breakdown = metrics.get("gpu_memory_breakdown")
+    if breakdown:
+        print("\nGPU memory after — measured/estimated breakdown")
+        print("------------------------------------------------")
+        print(
+            "CUDA model parameter/buffer tensors (measured lower bound): "
+            f"{format_gb(breakdown['cuda_model_parameter_and_buffer_tensors_gb'])}"
+        )
+        print(
+            "Encoded prompt tensors: "
+            f"{format_gb(breakdown['encoded_prompt_tensors_gb'])}"
+        )
+        print(
+            "Estimated KV cache at final sequence length: "
+            f"{format_gb(breakdown['estimated_kv_cache_at_final_sequence_gb'])}"
+        )
+        print(
+            "Other allocated after generation: "
+            f"{format_gb(breakdown['other_allocated_after_gb'])}"
+        )
+        print(
+            "Unused reserved allocator memory: "
+            f"{format_gb(breakdown['unused_reserved_allocator_gb'])}"
+        )
+        print(
+            "Estimated peak transient runtime (activations/workspaces): "
+            f"{format_gb(breakdown['estimated_peak_transient_runtime_gb'])}"
+        )
+        print("Prefill cache: not separate; see gpu_memory_breakdown.prefill_note in JSON")
     performance = result.get("performance", {})
     if performance:
         print("\nPerformance")
@@ -497,7 +535,17 @@ def process_prompt(
             "uses_disk_offload": (getattr(llm, "loading_diagnostics", None) or {}).get(
                 "disk_offload_used", False
             ),
+            "full_prompt_sha256": hashlib.sha256(
+                result["prompt"].encode("utf-8")
+            ).hexdigest(),
+            "full_prompt_characters": len(result["prompt"]),
         }
+        original_prompt = result["prompt"]
+        result["prompt"] = prompt_preview(original_prompt)
+        result["prompt_truncated_for_reporting"] = result["prompt"] != original_prompt
+        result["prompt_preview_words"] = CONTEXT_PROMPT_PREVIEW_WORDS
+    else:
+        result["prompt_truncated_for_reporting"] = False
     result["context"] = context_metadata
     result["api_equivalent_cost_estimate"] = estimate_api_equivalent_cost(
         cost_config or CostConfig(),
