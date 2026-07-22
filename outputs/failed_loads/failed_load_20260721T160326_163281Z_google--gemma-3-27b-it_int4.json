@@ -1,0 +1,25 @@
+{
+  "timestamp_utc": "2026-07-21T16:03:26.163281+00:00",
+  "model": "google/gemma-3-27b-it",
+  "profile": "int4",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "total_memory_gb": 31.842
+  },
+  "cuda_version": "13.0",
+  "pytorch_version": "2.13.0+cu130",
+  "failure_category": "download_failure",
+  "exception_message": "You are trying to access a gated repo.\nMake sure to have access to it at https://huggingface.co/google/gemma-3-27b-it.\n401 Client Error. (Request ID: Root=1-6a5f984e-38423588702edea138d8207c;894604a4-f184-4a1e-8c2f-2edfae00dee6)\n\nCannot access gated repo for url https://huggingface.co/google/gemma-3-27b-it/resolve/main/config.json.\nAccess to model google/gemma-3-27b-it is restricted. You must have access to it and be authenticated to access it. Please log in.",
+  "diagnostic_summary": "The tokenizer or model files could not be downloaded or resolved.",
+  "attempted_configuration": {
+    "requested_load_profile": "int4",
+    "effective_load_profile": null,
+    "quantization_enabled": true,
+    "quantization_bits": 4,
+    "quantization_method": "bitsandbytes",
+    "compute_dtype": "torch.bfloat16",
+    "storage_dtype": "torch.uint8"
+  },
+  "loading_stage": "configuration",
+  "model_loader": null
+}

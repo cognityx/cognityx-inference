@@ -12,6 +12,7 @@ dependencies = [
     "huggingface-hub[cli]>=1.24.0",
     "ipywidgets>=8.1.8",
     "jupyterlab>=4.6.1",
+    "kernels>=0.15.2,<0.16",
     "safetensors>=0.8.0",
     "sentencepiece>=0.2.2",
     "torch>=2.13.0",

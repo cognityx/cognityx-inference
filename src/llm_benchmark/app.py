@@ -5,6 +5,7 @@ import json
 import shlex
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -15,6 +16,7 @@ from llm_benchmark.comparison import (
     render_table,
     save_comparison,
 )
+from llm_benchmark.configuration import ConfigurationError, load_generation_settings
 from llm_benchmark.cost_estimation import (
     CostConfig,
     configure_cost_model,
@@ -22,7 +24,6 @@ from llm_benchmark.cost_estimation import (
 )
 from llm_benchmark.llm import (
     LOAD_PROFILES,
-    GenerationSettings,
     LocalLLM,
     validate_load_profile,
 )
@@ -35,6 +36,7 @@ from llm_benchmark.reporting import (
 
 DEFAULT_MODEL = "Qwen/Qwen3-8B"
 DEFAULT_LOAD_PROFILE = "bf16"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config.toml"
 BENCHMARK_PROMPT = "Can AI be applied to the travelling salesman problem?"
 BENCHMARK_NAME = "travelling_salesman_problem"
 
@@ -46,6 +48,7 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
         epilog="""Examples:
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-8B --profile bf16
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-14B --profile int4
+  uv run python src/llm_benchmark/main.py --config config.toml
 """,
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face model name")
@@ -53,7 +56,17 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
         "--profile",
         choices=LOAD_PROFILES,
         default=DEFAULT_LOAD_PROFILE,
-        help="Model-loading profile (default: bf16)",
+        help=(
+            "bf16/fp16: explicit dtype; int4/int8: bitsandbytes for unquantized "
+            "checkpoints; native: embedded checkpoint quantization; auto: native "
+            "when present, otherwise bf16"
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help="TOML configuration file containing generation defaults",
     )
     return parser.parse_args(arguments)
 
@@ -141,6 +154,7 @@ Commands
         /model Qwen/Qwen3-8B bf16
         /model Qwen/Qwen3-14B int8
         /model Qwen/Qwen3-14B int4
+        /model openai/gpt-oss-20b native
 
  /benchmark
     Run the travelling-salesman benchmark prompt through normal generation.
@@ -190,6 +204,12 @@ def print_metrics(result: dict[str, Any]) -> None:
     print(f"Prompt tokens: {metrics['prompt_tokens']}")
     print(f"Output tokens: {metrics['generated_tokens']}")
     print(f"Total tokens: {metrics['total_tokens']}")
+    context_length = metrics.get("total_context_length_tokens")
+    print(
+        f"Total context length supported: {context_length} tokens"
+        if context_length is not None
+        else "Total context length supported: unknown"
+    )
     print(f"Output tokens per second: {metrics['tokens_per_second']}")
     print(f"Finish reason: {result['finish_reason']}")
     print(f"Generation truncated: {result['generation_truncated']}")
@@ -275,6 +295,7 @@ def build_status(
         "requested_load_profile": llm.requested_load_profile,
         "effective_load_profile": llm.effective_load_profile,
         "load_profile": llm.load_profile_metadata,
+        "quantization_resolution": getattr(llm, "quantization_resolution", None),
         "model_load_metrics": llm.model_load_metrics,
         "model_runtime": runtime_status,
         "settings": asdict(llm.settings),
@@ -340,8 +361,10 @@ def process_prompt(
 def run(
     model_name: str = DEFAULT_MODEL,
     load_profile: str = DEFAULT_LOAD_PROFILE,
+    config_path: Path = DEFAULT_CONFIG_PATH,
 ) -> None:
-    settings = GenerationSettings()
+    settings = load_generation_settings(config_path)
+    print(f"Generation settings loaded from: {config_path}")
     llm = LocalLLM(model_name, settings, load_profile)
     last_result: dict[str, Any] | None = None
     cost_config = CostConfig()
@@ -370,6 +393,9 @@ def run(
                             "requested_load_profile": llm.requested_load_profile,
                             "effective_load_profile": llm.effective_load_profile,
                             "load_profile": llm.load_profile_metadata,
+                            "quantization_resolution": getattr(
+                                llm, "quantization_resolution", None
+                            ),
                             "settings": asdict(llm.settings),
                         },
                         indent=2,
@@ -508,6 +534,8 @@ def run(
 def main(arguments: list[str] | None = None) -> None:
     args = parse_args(arguments)
     try:
-        run(args.model, args.profile)
+        run(args.model, args.profile, args.config)
+    except ConfigurationError as exc:
+        print(f"Configuration error: {exc}")
     except ModelPlacementError as exc:
         report_model_load_failure(exc)

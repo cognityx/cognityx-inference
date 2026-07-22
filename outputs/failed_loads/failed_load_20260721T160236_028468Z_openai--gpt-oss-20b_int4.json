@@ -1,0 +1,31 @@
+{
+  "timestamp_utc": "2026-07-21T16:02:36.028468+00:00",
+  "model": "openai/gpt-oss-20b",
+  "profile": "int4",
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "total_memory_gb": 31.842
+  },
+  "cuda_version": "13.0",
+  "pytorch_version": "2.13.0+cu130",
+  "failure_category": "quantization_failure",
+  "exception_message": "The model is quantized with Mxfp4Config but you are passing a BitsAndBytesConfig config. Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes.",
+  "diagnostic_summary": "The requested quantized loading configuration was rejected.",
+  "attempted_configuration": {
+    "requested_load_profile": "int4",
+    "effective_load_profile": null,
+    "quantization_enabled": true,
+    "quantization_bits": 4,
+    "quantization_method": "bitsandbytes",
+    "compute_dtype": "torch.bfloat16",
+    "storage_dtype": "torch.uint8"
+  },
+  "loading_stage": "model_loading",
+  "model_loader": {
+    "config_class": "GptOssConfig",
+    "task": "causal-lm",
+    "auto_model_class": "AutoModelForCausalLM",
+    "selection_source": "transformers_auto_mapping",
+    "text_only_execution": true
+  }
+}

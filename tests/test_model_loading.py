@@ -92,9 +92,45 @@ class FailureClassificationTests(unittest.TestCase):
         error = RuntimeError("Accelerate device_map could not fit the model")
         self.assertEqual(classify_model_load_failure(error), "placement_failure")
 
-    def test_download_failure(self) -> None:
+    def test_repository_not_found(self) -> None:
         error = OSError("Repository not found: private/model")
-        self.assertEqual(classify_model_load_failure(error), "download_failure")
+        self.assertEqual(classify_model_load_failure(error), "repository_not_found")
+
+    def test_gated_repository(self) -> None:
+        error_type = type("GatedRepoError", (OSError,), {})
+        self.assertEqual(
+            classify_model_load_failure(error_type("Cannot access gated repo")),
+            "gated_repository",
+        )
+
+    def test_authentication_required_from_http_status(self) -> None:
+        error = OSError("Hub request failed")
+        error.response = Mock(status_code=401)
+        self.assertEqual(
+            classify_model_load_failure(error), "authentication_required"
+        )
+
+    def test_network_failure_from_nested_cause(self) -> None:
+        cause_type = type("ConnectError", (OSError,), {})
+        cause = cause_type("temporary failure in name resolution")
+        error = OSError("Can't load the configuration")
+        error.__cause__ = cause
+        self.assertEqual(classify_model_load_failure(error), "network_failure")
+
+    def test_generic_download_failure_remains_fallback(self) -> None:
+        error_type = type("LocalEntryNotFoundError", (OSError,), {})
+        self.assertEqual(
+            classify_model_load_failure(error_type("files unavailable")),
+            "download_failure",
+        )
+
+    def test_missing_image_processor_is_download_failure(self) -> None:
+        error = OSError(
+            "Can't load image processor: directory lacks preprocessor_config.json"
+        )
+        self.assertEqual(
+            classify_model_load_failure(error), "missing_processor_metadata"
+        )
 
     def test_unknown_exception_is_not_wrapped(self) -> None:
         error = RuntimeError("unexpected programming invariant")
@@ -191,6 +227,43 @@ class FailureReportingTests(unittest.TestCase):
         self.assertNotIn("Automatic placement determined", message)
 
     @patch(
+        "llm_benchmark.model_loading.get_gpu_status",
+        return_value={
+            "name": "Mock GPU",
+            "allocated_gb": 0.0,
+            "reserved_gb": 0.0,
+            "total_memory_gb": 31.84,
+        },
+    )
+    def test_download_advice_does_not_recommend_gpu_changes(
+        self, _gpu: object
+    ) -> None:
+        message = format_model_load_failure(self._error("download_failure"))
+
+        self.assertIn("Possible causes", message)
+        self.assertIn("licence may not have been accepted", message)
+        self.assertIn("authentication may be missing", message)
+        self.assertNotIn("Use a smaller model", message)
+        self.assertNotIn("Use multiple GPUs", message)
+        self.assertIn("before GPU memory placement was evaluated", message)
+
+    @patch(
+        "llm_benchmark.model_loading.get_gpu_status",
+        return_value={
+            "name": "Mock GPU",
+            "allocated_gb": 0.0,
+            "reserved_gb": 0.0,
+            "total_memory_gb": 31.84,
+        },
+    )
+    def test_gated_repository_advice_is_specific(self, _gpu: object) -> None:
+        message = format_model_load_failure(self._error("gated_repository"))
+
+        self.assertIn("accept its licence", message)
+        self.assertIn("hf auth login", message)
+        self.assertNotIn("Use a smaller model", message)
+
+    @patch(
         "llm_benchmark.model_loading.get_system_metadata",
         return_value={
             "gpu_name": "Mock GPU",
@@ -206,8 +279,14 @@ class FailureReportingTests(unittest.TestCase):
 
         self.assertEqual(payload["model"], "Test/MoE")
         self.assertEqual(payload["profile"], "int4")
-        self.assertEqual(payload["failure_category"], "cpu_offload_required")
+        self.assertEqual(payload["failure_category"], "placement")
+        self.assertEqual(payload["failure_code"], "cpu_offload_required")
         self.assertEqual(payload["gpu"]["total_memory_gb"], 31.84)
+        self.assertEqual(payload["exception_type"], "RuntimeError")
+        self.assertEqual(
+            payload["exception_chain"][0]["exception_message"],
+            "modules dispatched on the CPU",
+        )
 
 
 class LoaderBehaviorTests(unittest.TestCase):
@@ -272,11 +351,15 @@ class LoaderBehaviorTests(unittest.TestCase):
         _model_loader: object,
         _cuda: object,
     ) -> None:
-        with contextlib.redirect_stdout(io.StringIO()):
+        with contextlib.redirect_stdout(io.StringIO()) as output:
             with self.assertRaises(ModelPlacementError) as raised:
                 LocalLLM("test/model", GenerationSettings(), "bf16")
 
-        self.assertEqual(raised.exception.failure_category, "cuda_out_of_memory")
+        self.assertEqual(raised.exception.failure_category, "memory")
+        self.assertEqual(raised.exception.failure_code, "cuda_out_of_memory")
+        self.assertIn("Loading model weights", output.getvalue())
+        self.assertNotIn("Inspecting device map", output.getvalue())
+        self.assertNotIn("Validating placement", output.getvalue())
 
     @patch("llm_benchmark.llm.torch.cuda.is_available", return_value=False)
     @patch(
@@ -285,7 +368,7 @@ class LoaderBehaviorTests(unittest.TestCase):
     )
     @patch("llm_benchmark.llm.AutoTokenizer.from_pretrained", return_value=Mock())
     @patch("llm_benchmark.llm.AutoConfig.from_pretrained", return_value=Qwen3Config())
-    def test_unknown_loader_failure_propagates_original_exception(
+    def test_unknown_loader_failure_preserves_original_exception(
         self,
         _config: object,
         _tokenizer: object,
@@ -293,8 +376,11 @@ class LoaderBehaviorTests(unittest.TestCase):
         _cuda: object,
     ) -> None:
         with contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(RuntimeError, "programming bug"):
+            with self.assertRaises(ModelPlacementError) as raised:
                 LocalLLM("test/model", GenerationSettings(), "bf16")
+
+        self.assertEqual(raised.exception.failure_code, "model_load_runtime_error")
+        self.assertEqual(str(raised.exception.original_exception), "programming bug")
 
     @patch("llm_benchmark.llm.torch.cuda.is_available", return_value=False)
     @patch("llm_benchmark.llm.AutoConfig.from_pretrained")
@@ -310,7 +396,10 @@ class LoaderBehaviorTests(unittest.TestCase):
                 LocalLLM("test/unknown", GenerationSettings(), "bf16")
 
         self.assertEqual(
-            raised.exception.failure_category, "unsupported_model_architecture"
+            raised.exception.failure_category, "architecture"
+        )
+        self.assertEqual(
+            raised.exception.failure_code, "unsupported_model_architecture"
         )
         self.assertEqual(raised.exception.loading_stage, "architecture_selection")
         self.assertNotIn("Validating placement", output.getvalue())
@@ -335,10 +424,8 @@ class LoaderBehaviorTests(unittest.TestCase):
     )
     @patch("llm_benchmark.llm.AutoProcessor.from_pretrained")
     @patch("llm_benchmark.llm.AutoConfig.from_pretrained", return_value=Mistral3Config())
-    @patch("llm_benchmark.llm.build_model_load_kwargs")
     def test_multimodal_loader_preserves_model_kwargs(
         self,
-        build_kwargs: Mock,
         _config: object,
         processor_loader: Mock,
         model_loader: Mock,
@@ -346,16 +433,16 @@ class LoaderBehaviorTests(unittest.TestCase):
         _runtime: object,
         _cuda: object,
     ) -> None:
-        quantization_config = object()
-        load_kwargs = {"quantization_config": quantization_config, "device_map": "auto"}
-        build_kwargs.return_value = (load_kwargs, torch.float16)
         processor_loader.return_value = Mock(tokenizer=Mock())
         model_loader.return_value = self.Model()
 
         LocalLLM("test/multimodal", GenerationSettings(), "int4")
 
         called_kwargs = model_loader.call_args.kwargs
-        self.assertIs(called_kwargs["quantization_config"], quantization_config)
+        self.assertTrue(called_kwargs["quantization_config"].load_in_4bit)
+        self.assertEqual(
+            called_kwargs["quantization_config"].bnb_4bit_quant_type, "nf4"
+        )
         self.assertEqual(called_kwargs["device_map"], "auto")
         self.assertIsInstance(called_kwargs["config"], Mistral3Config)
 

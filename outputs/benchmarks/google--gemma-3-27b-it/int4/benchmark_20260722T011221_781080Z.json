@@ -1,0 +1,204 @@
+{
+  "model": "google/gemma-3-27b-it",
+  "requested_load_profile": "int4",
+  "effective_load_profile": "int4",
+  "quantization_enabled": true,
+  "quantization_bits": 4,
+  "quantization_method": "bitsandbytes",
+  "compute_dtype": "torch.bfloat16",
+  "storage_dtype": "torch.uint8",
+  "run_type": "interactive",
+  "benchmark_name": null,
+  "prompt": "\u001b[A\u001b[A",
+  "settings": {
+    "enable_thinking": true,
+    "max_new_tokens": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "do_sample": true,
+    "repetition_penalty": 1.0
+  },
+  "finish_reason": "eos",
+  "generation_truncated": false,
+  "model_runtime": {
+    "device_map": null,
+    "devices_used": [
+      "cuda:0"
+    ],
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false,
+    "uses_non_cuda_device": false,
+    "non_cuda_devices": [],
+    "model_dtype": "mixed",
+    "parameter_dtypes": [
+      "torch.bfloat16",
+      "torch.uint8"
+    ],
+    "uses_mixed_dtypes": true,
+    "load_profile": {
+      "requested_load_profile": "int4",
+      "effective_load_profile": "int4",
+      "quantization_enabled": true,
+      "quantization_bits": 4,
+      "quantization_method": "bitsandbytes",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8"
+    },
+    "model_size": {
+      "logical_parameters": 27432406640,
+      "logical_parameters_billions": 27.432,
+      "parameter_count_source": "quantization_aware_parameter_tensors",
+      "parameter_count_reliable": true,
+      "requested_profile": "int4",
+      "effective_profile": "int4",
+      "nominal_bits_per_weight": 4,
+      "estimated_raw_weight_storage_bytes": 13716203320,
+      "estimated_raw_weight_storage_gib": 12.774,
+      "actual_parameter_storage_bytes": null,
+      "actual_parameter_storage_gib": null,
+      "actual_storage_notes": "Quantized wrapper storage is not reported as actual physical size because packed weights and quantization state are not exposed uniformly.",
+      "storage_estimate_notes": "Nominal weight-only estimate. It excludes quantization scales and zero points, packing metadata, non-quantized layers, allocator overhead, KV cache, activations, and runtime buffers; it is not an estimate of total VRAM usage.",
+      "compute_dtype": "torch.bfloat16",
+      "storage_dtype": "torch.uint8",
+      "uses_mixed_dtypes": true,
+      "quantization_method": "bitsandbytes",
+      "quantization_bits": 4,
+      "active_parameters_per_token": 27432406640,
+      "active_parameters_billions": 27.432,
+      "active_parameter_fraction": 1.0
+    },
+    "model_family": {
+      "family": "Gemma3",
+      "architecture_type": "dense",
+      "dense_or_moe": "dense",
+      "logical_parameters": 27432406640,
+      "active_parameters_per_token": 27432406640,
+      "active_parameters_billions": 27.432,
+      "active_parameter_fraction": 1.0,
+      "active_parameter_count_source": "logical_parameter_count",
+      "active_parameter_count_reliable": true,
+      "active_parameter_count_notes": "Dense model: all logical model parameters are treated as active per token.",
+      "num_experts": null,
+      "num_experts_per_token": null,
+      "shared_experts": null,
+      "moe_config": {
+        "num_experts": null,
+        "num_experts_per_token": null,
+        "moe_intermediate_size": null,
+        "shared_expert_intermediate_size": null,
+        "num_shared_experts": null,
+        "decoder_sparse_step": null,
+        "num_dense_layers": null,
+        "router_aux_loss_coef": null
+      }
+    },
+    "attention_implementation": "sdpa",
+    "kv_cache": {
+      "use_cache": true,
+      "use_cache_source": "model_config",
+      "cache_implementation": "hybrid",
+      "cache_implementation_explicit": true,
+      "cache_implementation_source": "generation_config"
+    },
+    "architecture": {
+      "model_type": "gemma3",
+      "architecture": "Gemma3ForConditionalGeneration",
+      "total_parameters": 27432406640,
+      "num_hidden_layers": 62,
+      "hidden_size": 5376,
+      "intermediate_size": 21504,
+      "num_attention_heads": 32,
+      "num_key_value_heads": 16,
+      "vocab_size": 262208,
+      "max_position_embeddings": 131072,
+      "rope": {
+        "theta": null,
+        "scaling": {
+          "sliding_attention": {
+            "rope_type": "default",
+            "rope_theta": 10000.0
+          },
+          "full_attention": {
+            "rope_type": "linear",
+            "factor": 8.0,
+            "rope_theta": 1000000.0
+          }
+        }
+      }
+    },
+    "model_loader": {
+      "config_class": "Gemma3Config",
+      "task": "causal-lm",
+      "auto_model_class": "AutoModelForCausalLM",
+      "selection_source": "transformers_auto_mapping",
+      "text_only_execution": true
+    }
+  },
+  "quality_indicators": {
+    "answer_complete": true,
+    "reasoning_detected": false,
+    "thinking_characters": 0,
+    "thinking_tokens": 0,
+    "answer_characters": 969,
+    "answer_tokens": 246,
+    "raw_output_characters": 969,
+    "empty_answer": false,
+    "finish_reason": "eos",
+    "generation_truncated": false
+  },
+  "performance": {
+    "prompt_tokenization_seconds": 0.001,
+    "prefill_seconds": 0.397,
+    "prefill_measurement_method": "generation_start_to_first_raw_streamer_token",
+    "prompt_tokens": 14,
+    "prompt_tokens_per_second": 35.23,
+    "time_to_first_token_seconds": 0.397,
+    "first_token_latency_after_prompt_preparation_seconds": 0.397,
+    "time_to_first_streamed_output_seconds": 0.5,
+    "decode_seconds": 27.493,
+    "decode_token_count": 247,
+    "generated_tokens": 248,
+    "decode_tokens_per_second": 8.98,
+    "generation_seconds": 27.891,
+    "end_to_end_seconds": 27.895,
+    "decode_measurement_method": "generation_finish_minus_first_raw_token; throughput excludes the first token"
+  },
+  "result": {
+    "raw_output": "It appears you've sent a sequence of ANSI escape codes: `\u001b[A\u001b[A`. Let's break down what that means:\n\n*   `[`: This is the escape character, signaling the start of an ANSI escape sequence.\n*   `A`: This is the control code. `A` specifically means \"Cursor Up one line\".\n\nTherefore, `\u001b[A\u001b[A` means \"Cursor Up one line, and then Cursor Up one line again\".  In effect, it moves the cursor up two lines in a terminal or console.\n\n**What would you like to do with this information?**  For example:\n\n*   **Are you trying to understand why something is happening in a terminal?** If so, knowing this helps you diagnose issues where the cursor is moving unexpectedly.\n*   **Are you trying to generate this sequence in code?** I can help you with that in various programming languages (Python, C++, etc.).\n*   **Are you seeing this in a log file or output?**  Knowing the context might help me understand *why* it's being generated.\n*   **Are you just curious?**  That's fine too!",
+    "thinking": "",
+    "answer": "It appears you've sent a sequence of ANSI escape codes: `\u001b[A\u001b[A`. Let's break down what that means:\n\n*   `[`: This is the escape character, signaling the start of an ANSI escape sequence.\n*   `A`: This is the control code. `A` specifically means \"Cursor Up one line\".\n\nTherefore, `\u001b[A\u001b[A` means \"Cursor Up one line, and then Cursor Up one line again\".  In effect, it moves the cursor up two lines in a terminal or console.\n\n**What would you like to do with this information?**  For example:\n\n*   **Are you trying to understand why something is happening in a terminal?** If so, knowing this helps you diagnose issues where the cursor is moving unexpectedly.\n*   **Are you trying to generate this sequence in code?** I can help you with that in various programming languages (Python, C++, etc.).\n*   **Are you seeing this in a log file or output?**  Knowing the context might help me understand *why* it's being generated.\n*   **Are you just curious?**  That's fine too!"
+  },
+  "metrics": {
+    "time_to_first_token_seconds": 0.5,
+    "prompt_tokens": 14,
+    "generated_tokens": 248,
+    "total_tokens": 262,
+    "generation_seconds": 27.891,
+    "tokens_per_second": 8.89,
+    "peak_vram_gb": 16.556,
+    "gpu_allocated_before_gb": 16.333,
+    "gpu_reserved_before_gb": 17.047,
+    "gpu_allocated_after_gb": 16.333,
+    "gpu_reserved_after_gb": 17.049
+  },
+  "timestamp_utc": "2026-07-22T01:12:21.779970+00:00",
+  "metadata": {
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_total_memory_gb": 31.842,
+    "pytorch_version": "2.13.0+cu130",
+    "cuda_version": "13.0",
+    "transformers_version": "5.14.1",
+    "python_version": "3.12.3"
+  },
+  "schema_version": 2,
+  "api_equivalent_cost_estimate": {
+    "enabled": false,
+    "pricing_label": null,
+    "input_price_per_million_tokens": null,
+    "output_price_per_million_tokens": null,
+    "currency": "USD",
+    "basis": "disabled",
+    "disclaimer": "Hypothetical hosted API-equivalent estimate; not measured local operating cost."
+  }
+}

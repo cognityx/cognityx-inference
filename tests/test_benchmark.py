@@ -17,6 +17,7 @@ from llm_benchmark.app import (
     benchmark_request,
     parse_args,
     parse_model_command,
+    print_metrics,
     process_prompt,
 )
 from llm_benchmark.llm import (
@@ -271,13 +272,18 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(args.model, "Qwen/Qwen3-14B")
         self.assertEqual(args.profile, "int4")
 
+    def test_startup_accepts_config_path(self) -> None:
+        args = parse_args(["--config", "custom.toml"])
+
+        self.assertEqual(args.config, Path("custom.toml"))
+
     def test_startup_arguments_reject_unknown_profile(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 parse_args(["--profile", "unknown"])
 
     def test_load_profile_validation(self) -> None:
-        for profile in ("bf16", "fp16", "int8", "int4"):
+        for profile in ("bf16", "fp16", "int8", "int4", "native", "auto"):
             self.assertEqual(validate_load_profile(profile), profile)
         with self.assertRaises(LoadProfileError):
             validate_load_profile("fp32")
@@ -404,6 +410,33 @@ class QualityIndicatorTests(unittest.TestCase):
         self.assertIn("api_equivalent_cost_estimate", benchmark)
         self.assertEqual(interactive["run_type"], "interactive")
         self.assertIsNone(interactive["benchmark_name"])
+
+
+class MetricDisplayTests(unittest.TestCase):
+    def test_context_length_is_displayed(self) -> None:
+        result = {
+            "finish_reason": "eos",
+            "generation_truncated": False,
+            "metrics": {
+                "time_to_first_token_seconds": 0.1,
+                "generation_seconds": 0.2,
+                "prompt_tokens": 10,
+                "generated_tokens": 5,
+                "total_tokens": 15,
+                "total_context_length_tokens": 131072,
+                "tokens_per_second": 25.0,
+                "peak_vram_gb": None,
+                "gpu_allocated_before_gb": None,
+                "gpu_reserved_before_gb": None,
+                "gpu_allocated_after_gb": None,
+                "gpu_reserved_after_gb": None,
+            },
+        }
+
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            print_metrics(result)
+
+        self.assertIn("Total context length supported: 131072 tokens", output.getvalue())
 
 
 if __name__ == "__main__":

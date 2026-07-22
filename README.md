@@ -7,6 +7,32 @@ diagnostics.
 uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-8B --profile bf16
 ```
 
+Generation defaults are read from `config.toml`. A different file can be selected
+with `--config PATH`; interactive `/set` changes still apply to the running process.
+
+```toml
+[generation]
+enable_thinking = true
+max_new_tokens = 1024
+temperature = 0.6
+top_p = 0.95
+top_k = 20
+do_sample = true
+repetition_penalty = 1.0
+```
+
+Load profiles distinguish checkpoint-native quantization from runtime quantization:
+
+- `native` uses an embedded checkpoint `quantization_config` and fails if none exists.
+- `auto` uses embedded quantization when present and otherwise defaults to BF16.
+- `int4` and `int8` apply bitsandbytes only to unquantized checkpoints; requests for
+  an already quantized checkpoint adapt to its native format with a warning.
+
+For native checkpoints, diagnostics separately report the checkpoint format and the
+actual runtime path. MXFP4 checks use the installed Transformers requirements for GPU
+capability, Triton, and `kernels`, then confirm any BF16 dequantization fallback from
+the loaded model's quantizer state.
+
 Saved schema-version 2 results retain the legacy `metrics` object for backward
 compatibility. For new readers, `performance` is canonical for timing and throughput,
 `model_runtime.model_size` is canonical for logical parameter count and weight-storage

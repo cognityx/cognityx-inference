@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gc
-import importlib.util
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -12,7 +11,6 @@ from transformers import (
     AutoConfig,
     AutoProcessor,
     AutoTokenizer,
-    BitsAndBytesConfig,
     TextIteratorStreamer,
 )
 
@@ -26,6 +24,12 @@ from llm_benchmark.model_loading import (
     wrap_expected_model_load_failure,
 )
 from llm_benchmark.model_selection import select_model_loader
+from llm_benchmark.quantization import (
+    BitsAndBytesUnavailableError,
+    bitsandbytes_available,
+    detect_loaded_native_quantization_runtime,
+    resolve_load_profile,
+)
 from llm_benchmark.reporting import bytes_to_gb, get_gpu_status
 
 
@@ -40,7 +44,7 @@ class GenerationSettings:
     repetition_penalty: float = 1.0
 
 
-LOAD_PROFILES = ("bf16", "fp16", "int8", "int4")
+LOAD_PROFILES = ("bf16", "fp16", "int8", "int4", "native", "auto")
 
 
 class LoadProfileError(ValueError):
@@ -70,48 +74,30 @@ def validate_load_profile(profile: str) -> str:
     return normalized
 
 
-def bitsandbytes_available() -> bool:
-    return importlib.util.find_spec("bitsandbytes") is not None
-
-
 def build_model_load_kwargs(
     profile: str,
     *,
     has_bitsandbytes: bool | None = None,
 ) -> tuple[dict[str, Any], torch.dtype]:
+    """Build legacy kwargs for an unquantized checkpoint."""
     profile = validate_load_profile(profile)
-    if profile == "bf16":
-        return {"torch_dtype": torch.bfloat16, "device_map": "auto"}, torch.bfloat16
-    if profile == "fp16":
-        return {"torch_dtype": torch.float16, "device_map": "auto"}, torch.float16
+    if profile == "native":
+        raise LoadProfileError("The native profile requires checkpoint configuration")
 
-    available = bitsandbytes_available() if has_bitsandbytes is None else has_bitsandbytes
-    if not available:
-        raise LoadProfileError(
-            f"The {profile} profile requires bitsandbytes. "
-            "Install it with: uv add bitsandbytes"
-        )
+    class UnquantizedConfig:
+        quantization_config = None
 
-    if profile == "int8":
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        compute_dtype = torch.float16
-    else:
-        bf16_supported = bool(
-            torch.cuda.is_available()
-            and getattr(torch.cuda, "is_bf16_supported", lambda: False)()
+    try:
+        resolution = resolve_load_profile(
+            profile,
+            UnquantizedConfig(),
+            has_bitsandbytes=has_bitsandbytes,
         )
-        compute_dtype = torch.bfloat16 if bf16_supported else torch.float16
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=compute_dtype,
-            bnb_4bit_use_double_quant=False,
-        )
-
-    return {
-        "quantization_config": quantization_config,
-        "device_map": "auto",
-    }, compute_dtype
+    except BitsAndBytesUnavailableError as exc:
+        raise LoadProfileError(str(exc)) from exc
+    if resolution.compute_dtype is None:
+        raise LoadProfileError(f"Could not determine a compute dtype for {profile}")
+    return resolution.load_kwargs(), resolution.compute_dtype
 
 
 def count_text_tokens(tokenizer: Any, text: str) -> int:
@@ -251,21 +237,7 @@ class LocalLLM:
 
     def load_model(self, model_name: str, load_profile: str = "bf16") -> None:
         load_profile = validate_load_profile(load_profile)
-        try:
-            load_kwargs, requested_compute_dtype = build_model_load_kwargs(load_profile)
-        except Exception as exc:
-            attempted = attempted_load_configuration(load_profile)
-            wrapped = wrap_expected_model_load_failure(
-                exc, model_name, load_profile, attempted
-            )
-            if wrapped is not None:
-                raise wrapped from exc
-            raise
-        attempted = attempted_load_configuration(
-            load_profile,
-            requested_compute_dtype,
-            load_kwargs,
-        )
+        attempted = attempted_load_configuration(load_profile)
         if self.model is not None:
             print(f"\nUnloading {self.model_name}...")
             self.unload_model()
@@ -276,7 +248,11 @@ class LocalLLM:
             config = AutoConfig.from_pretrained(model_name)
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
-                exc, model_name, load_profile, attempted, loading_stage="configuration"
+                exc,
+                model_name,
+                load_profile,
+                attempted,
+                loading_stage="configuration_download",
             )
             if wrapped is not None:
                 raise wrapped from exc
@@ -325,16 +301,61 @@ class LocalLLM:
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
                 exc, model_name, load_profile, attempted,
-                loader_diagnostic, "tokenizer_or_processor"
+                loader_diagnostic, "preprocessing_download"
             )
             if wrapped is not None:
                 raise wrapped from exc
             raise
         tokenizer_seconds = time.perf_counter() - tokenizer_started
 
-        print("Loading model...")
-        print("Building device map...")
-        print("Validating placement...")
+        print("Resolving quantization...")
+        try:
+            resolution = resolve_load_profile(load_profile, config)
+        except Exception as exc:
+            wrapped = wrap_expected_model_load_failure(
+                exc,
+                model_name,
+                load_profile,
+                attempted,
+                loader_diagnostic,
+                "quantization_resolution",
+            )
+            if wrapped is not None:
+                raise wrapped from exc
+            raise
+        load_kwargs = resolution.load_kwargs()
+        resolution_preload_diagnostic = resolution.diagnostic()
+        native_runtime_preflight = resolution_preload_diagnostic[
+            "native_quantization_runtime_preflight"
+        ]
+        requested_compute_dtype = resolution.compute_dtype
+        attempted = attempted_load_configuration(
+            load_profile,
+            requested_compute_dtype,
+            load_kwargs,
+            resolution.diagnostic(),
+        )
+        print(f"Requested profile: {load_profile}")
+        print(
+            "Checkpoint quantization: "
+            f"{resolution.checkpoint_quantization_method or 'none'}"
+        )
+        print(f"Effective profile: {resolution.effective_profile}")
+        print(
+            "Runtime bitsandbytes quantization: "
+            f"{'enabled' if resolution.runtime_quantization_method == 'bitsandbytes' else 'none'}"
+        )
+        if resolution.warning:
+            print(f"Warning: {resolution.warning}")
+        if resolution.checkpoint_quantized:
+            print(
+                "Native quantization runtime preflight: "
+                f"{native_runtime_preflight['status']}"
+            )
+            if native_runtime_preflight.get("reason"):
+                print(f"Preflight reason: {native_runtime_preflight['reason']}")
+
+        print("Loading model weights...")
         model_started = time.perf_counter()
 
         try:
@@ -346,24 +367,26 @@ class LocalLLM:
         except Exception as exc:
             wrapped = wrap_expected_model_load_failure(
                 exc, model_name, load_profile, attempted,
-                loader_diagnostic, "model_loading"
+                loader_diagnostic, "model_initialization"
             )
             if wrapped is not None:
-                if wrapped.failure_category in {
-                    "cuda_out_of_memory",
-                    "cpu_offload_required",
-                    "disk_offload_required",
-                    "placement_failure",
-                }:
-                    print("Placement validation failed.")
-                elif wrapped.failure_category in {
-                    "unsupported_model_architecture",
-                    "incorrect_auto_model_class",
-                }:
+                if wrapped.failure_category == "architecture":
                     print("Model architecture selection failed.")
                 raise wrapped from exc
             raise
         self.model.eval()
+        native_runtime = detect_loaded_native_quantization_runtime(
+            self.model,
+            resolution.checkpoint_quantization_method,
+            native_runtime_preflight,
+        )
+        resolution_diagnostic = resolution.diagnostic()
+        resolution_diagnostic["native_quantization_runtime"] = native_runtime
+        resolution_diagnostic["bf16_dequantization_fallback_attempted"] = (
+            native_runtime.get("runtime_fallback") == "bf16"
+        )
+        print("Inspecting device map...")
+        print("Validating placement...")
         print("Placement validated.")
 
         model_seconds = time.perf_counter() - model_started
@@ -372,9 +395,42 @@ class LocalLLM:
         self.requested_load_profile = load_profile
         self.load_profile_metadata = extract_quantization_metadata(
             self.model,
-            load_profile,
+            resolution.effective_profile,
             requested_compute_dtype,
         )
+        self.load_profile_metadata["requested_load_profile"] = load_profile
+        self.load_profile_metadata["effective_load_profile"] = resolution.effective_profile
+        if resolution.checkpoint_quantized:
+            native_method = resolution.checkpoint_quantization_method
+            native_bits = 4 if native_method == "mxfp4" else None
+            model_config = getattr(self.model, "config", None)
+            native_compute_dtype = (
+                getattr(model_config, "dtype", None)
+                or getattr(model_config, "torch_dtype", None)
+            )
+            self.load_profile_metadata.update(
+                {
+                    "quantization_enabled": True,
+                    "quantization_bits": native_bits,
+                    "quantization_method": native_method,
+                    "storage_dtype": native_method,
+                    "compute_dtype": (
+                        str(native_compute_dtype)
+                        if native_compute_dtype is not None
+                        else self.load_profile_metadata.get("compute_dtype")
+                    ),
+                }
+            )
+            if native_runtime.get("runtime_fallback") == "bf16":
+                self.load_profile_metadata.update(
+                    {
+                        "quantization_enabled": False,
+                        "quantization_bits": None,
+                        "quantization_method": None,
+                        "storage_dtype": "torch.bfloat16",
+                        "compute_dtype": "torch.bfloat16",
+                    }
+                )
         self.effective_load_profile = self.load_profile_metadata[
             "effective_load_profile"
         ]
@@ -383,6 +439,15 @@ class LocalLLM:
             self.load_profile_metadata,
         )
         self.model_runtime["model_loader"] = loader_diagnostic
+        self.model_runtime["quantization_resolution"] = resolution_diagnostic
+        self.quantization_resolution = resolution_diagnostic
+        architecture = self.model_runtime.get("architecture", {})
+        context_length = architecture.get("max_position_embeddings")
+        self.context_length_tokens = (
+            context_length
+            if isinstance(context_length, int) and context_length > 0
+            else None
+        )
         self.model_load_metrics = {
             "tokenizer_seconds": round(tokenizer_seconds, 3),
             "model_seconds": round(model_seconds, 3),
@@ -401,6 +466,23 @@ class LocalLLM:
         print(f"Quantization bits: {self.load_profile_metadata['quantization_bits']}")
         print(f"Compute dtype: {self.load_profile_metadata['compute_dtype']}")
         print(f"Storage dtype: {self.load_profile_metadata['storage_dtype']}")
+        if resolution.checkpoint_quantized:
+            print(f"Native quantization runtime: {native_runtime['status']}")
+            print(
+                "Runtime backend: "
+                f"{native_runtime.get('runtime_backend') or 'unavailable'}"
+            )
+            print(
+                "Runtime fallback: "
+                f"{native_runtime.get('runtime_fallback') or 'none'}"
+            )
+            if native_runtime.get("reason"):
+                print(f"Runtime reason: {native_runtime['reason']}")
+            if native_runtime.get("expected_performance_impact"):
+                print(
+                    "Expected performance impact: "
+                    f"{native_runtime['expected_performance_impact']}"
+                )
         print(f"Device: {next(self.model.parameters()).device}")
 
         if torch.cuda.is_available():
@@ -411,16 +493,6 @@ class LocalLLM:
 
     def switch_model(self, model_name: str, load_profile: str = "bf16") -> None:
         load_profile = validate_load_profile(load_profile)
-        try:
-            load_kwargs, compute_dtype = build_model_load_kwargs(load_profile)
-        except Exception as exc:
-            attempted = attempted_load_configuration(load_profile)
-            wrapped = wrap_expected_model_load_failure(
-                exc, model_name, load_profile, attempted
-            )
-            if wrapped is not None:
-                raise wrapped from exc
-            raise
         previous_model = self.model_name
         previous_profile = self.requested_load_profile
         try:
@@ -629,6 +701,7 @@ class LocalLLM:
             ],
             "compute_dtype": self.load_profile_metadata["compute_dtype"],
             "storage_dtype": self.load_profile_metadata["storage_dtype"],
+            "quantization_resolution": self.quantization_resolution,
             "run_type": run_type,
             "benchmark_name": benchmark_name,
             "prompt": prompt,
@@ -652,6 +725,7 @@ class LocalLLM:
                 "prompt_tokens": prompt_tokens,
                 "generated_tokens": generated_tokens,
                 "total_tokens": prompt_tokens + generated_tokens,
+                "total_context_length_tokens": self.context_length_tokens,
                 "generation_seconds": round(elapsed, 3),
                 "tokens_per_second": (
                     round(generated_tokens / elapsed, 2)
