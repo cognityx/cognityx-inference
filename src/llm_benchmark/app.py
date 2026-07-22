@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from transformers import AutoProcessor, AutoTokenizer
 
 from llm_benchmark.comparison import (
     load_comparison_rows,
@@ -23,6 +24,7 @@ from llm_benchmark.cost_estimation import (
     estimate_api_equivalent_cost,
 )
 from llm_benchmark.llm import (
+    GenerationCancelled,
     LOAD_PROFILES,
     LocalLLM,
     validate_load_profile,
@@ -34,6 +36,11 @@ from llm_benchmark.reporting import (
     save_benchmark_result,
 )
 from llm_benchmark.download_preflight import format_bytes, inspect_download
+from llm_benchmark.contexts import (
+    ContextError,
+    build_context_prompt,
+    prepare_folder_context,
+)
 from llm_benchmark.loading_decision import ModelLoadOptions, controlled_max_memory, estimate_capacity
 from llm_benchmark.model_size import estimate_parameter_count_from_config
 from transformers import AutoConfig
@@ -53,6 +60,8 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-8B --profile bf16
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-14B --profile int4
   uv run python src/llm_benchmark/main.py --config config.toml
+  uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-32B --prepare-context wikitext --corpus wikitext-103-raw
+  uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-32B --profile int4 --context wikitext --context-tokens 32000
 """,
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face model name")
@@ -71,13 +80,26 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
     download.add_argument("--no-download", action="store_true", help="Use cached files only; never download")
     parser.add_argument("--non-interactive", action="store_true", help="Disable all prompts; download permission must be explicit")
     parser.add_argument("--allow-cpu-offload", action="store_true", help="Allow controlled GPU-first CPU overflow placement")
+    parser.add_argument("--context", help="Prepared context name under data/contexts")
+    parser.add_argument("--context-tokens", type=int, help="Requested corpus-token budget")
+    parser.add_argument("--prepare-context", metavar="NAME", help="Prepare a named folder context and exit")
+    parser.add_argument("--corpus", help="Corpus path or wikitext-103-raw")
+    parser.add_argument("--chunk-tokens", type=int, default=1024, help="Tokens per prepared chunk (default: 1024)")
+    parser.add_argument("--chunk-overlap", type=int, default=128, help="Overlapping tokens between chunks (default: 128)")
     parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
         help="TOML configuration file containing generation defaults",
     )
-    return parser.parse_args(arguments)
+    args = parser.parse_args(arguments)
+    if bool(args.context) != bool(args.context_tokens):
+        parser.error("--context and --context-tokens must be supplied together")
+    if args.context_tokens is not None and args.context_tokens <= 0:
+        parser.error("--context-tokens must be greater than zero")
+    if args.prepare_context and not args.corpus:
+        parser.error("--prepare-context requires --corpus")
+    return args
 
 
 def parse_model_command(user_input: str) -> tuple[str, str]:
@@ -203,6 +225,23 @@ def parse_cost_command(user_input: str) -> tuple[str, CostConfig | None]:
     raise ValueError("Unknown cost command")
 
 
+def parse_context_command(user_input: str) -> tuple[str | None, int | None]:
+    parts = user_input.split()
+    if parts == ["/context"]:
+        raise ValueError("status")
+    if parts == ["/context", "off"]:
+        return None, None
+    if len(parts) != 3:
+        raise ValueError("Usage: /context CONTEXT_NAME TOKEN_COUNT, or /context off")
+    try:
+        token_count = int(parts[2])
+    except ValueError as exc:
+        raise ValueError("Context token count must be an integer") from exc
+    if token_count <= 0:
+        raise ValueError("Context token count must be greater than zero")
+    return parts[1], token_count
+
+
 def parse_value(current_value: Any, new_value: str) -> Any:
     if isinstance(current_value, bool):
         normalized = new_value.lower()
@@ -256,6 +295,18 @@ Commands
 
  /benchmark
     Run the travelling-salesman benchmark prompt through normal generation.
+
+ /context CONTEXT_NAME TOKEN_COUNT
+    Change the prepared context and token budget without reloading the model.
+
+    Example:
+        /context wikitext 32000
+
+ /context
+    Show the active context.
+
+ /context off
+    Disable context for subsequent benchmark runs.
 
  /status
     Show model, settings, GPU status, and the most recent query metrics.
@@ -345,6 +396,7 @@ def build_status(
     last_result: dict[str, Any] | None,
     cost_config: CostConfig | None = None,
     detailed: bool = False,
+    active_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime = llm.model_runtime or {}
     cache = runtime.get("kv_cache", {})
@@ -403,6 +455,7 @@ def build_status(
             last_result["metrics"] if last_result is not None else None
         ),
         "cost_estimation": (cost_config or CostConfig()).to_dict(),
+        "context": active_context,
     }
 
 
@@ -412,9 +465,11 @@ def process_prompt(
     run_type: str = "interactive",
     benchmark_name: str | None = None,
     cost_config: CostConfig | None = None,
+    context_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     print("\nResponse")
     print("--------")
+    print("Press Ctrl+C to stop this generation and keep the model loaded.\n")
     result = llm.generate(
         prompt,
         on_text=lambda text: print(text, end="", flush=True),
@@ -426,6 +481,24 @@ def process_prompt(
     result["timestamp_utc"] = datetime.now(timezone.utc).isoformat()
     result["metadata"] = get_system_metadata()
     result["schema_version"] = 2
+    if context_metadata is not None:
+        measured_prompt_tokens = result["metrics"]["prompt_tokens"]
+        if measured_prompt_tokens != context_metadata["final_prompt_tokens"]:
+            raise RuntimeError(
+                "Context prompt token count changed between budgeting and generation; "
+                "the run was not saved."
+            )
+        context_metadata = {
+            **context_metadata,
+            "peak_vram_gb": result["metrics"]["peak_vram_gb"],
+            "uses_cpu_offload": (getattr(llm, "loading_diagnostics", None) or {}).get(
+                "uses_cpu_offload", False
+            ),
+            "uses_disk_offload": (getattr(llm, "loading_diagnostics", None) or {}).get(
+                "disk_offload_used", False
+            ),
+        }
+    result["context"] = context_metadata
     result["api_equivalent_cost_estimate"] = estimate_api_equivalent_cost(
         cost_config or CostConfig(),
         result["metrics"]["prompt_tokens"],
@@ -433,6 +506,15 @@ def process_prompt(
     )
 
     print_metrics(result)
+    if context_metadata is not None:
+        print(
+            "Context: "
+            f"{context_metadata['context_name']} ({context_metadata['context_provider']}), "
+            f"{context_metadata['actual_corpus_tokens']} corpus tokens, "
+            f"{context_metadata['final_prompt_tokens']} final prompt tokens, "
+            f"{len(context_metadata['chunks_used'])} chunks, "
+            f"input {context_metadata['input_truncation_status']}"
+        )
     cost_estimate = result["api_equivalent_cost_estimate"]
     if cost_estimate["enabled"]:
         print(
@@ -466,6 +548,8 @@ def run(
     no_download: bool = False,
     non_interactive: bool = False,
     allow_cpu_offload: bool = False,
+    context_name: str | None = None,
+    context_tokens: int | None = None,
 ) -> None:
     settings = load_generation_settings(config_path)
     print(f"Generation settings loaded from: {config_path}")
@@ -524,11 +608,48 @@ def run(
                                 llm, "quantization_resolution", None
                             ),
                             "loading": getattr(llm, "loading_diagnostics", None),
+                            "context": {
+                                "name": context_name,
+                                "requested_tokens": context_tokens,
+                                "provider": "folder" if context_name else None,
+                            },
                             "settings": asdict(llm.settings),
                         },
                         indent=2,
                     )
                 )
+                continue
+
+            if user_input == "/context" or user_input.startswith("/context "):
+                try:
+                    requested_context, requested_tokens = parse_context_command(
+                        user_input
+                    )
+                except ValueError as exc:
+                    if str(exc) == "status":
+                        print(
+                            json.dumps(
+                                {
+                                    "context": context_name,
+                                    "provider": "folder" if context_name else None,
+                                    "requested_context_tokens": context_tokens,
+                                    "model_remains_loaded": True,
+                                },
+                                indent=2,
+                            )
+                        )
+                    else:
+                        print(f"Invalid context command: {exc}")
+                    continue
+                context_name = requested_context
+                context_tokens = requested_tokens
+                if context_name is None:
+                    print("Context disabled. The model remains loaded.")
+                else:
+                    print(
+                        f"Context set to {context_name!r} with a "
+                        f"{context_tokens}-token budget. The model remains loaded."
+                    )
                 continue
 
             if user_input in {"/status", "/status detailed"}:
@@ -539,6 +660,11 @@ def run(
                             last_result,
                             cost_config,
                             detailed=user_input.endswith(" detailed"),
+                            active_context={
+                                "name": context_name,
+                                "provider": "folder" if context_name else None,
+                                "requested_tokens": context_tokens,
+                            },
                         ),
                         indent=2,
                     )
@@ -583,17 +709,38 @@ def run(
             if user_input == "/benchmark":
                 prompt, run_type, benchmark_name = benchmark_request()
                 try:
+                    context_metadata = None
+                    if context_name is not None and context_tokens is not None:
+                        if llm.context_length_tokens is None:
+                            raise ContextError(
+                                "The model does not expose a reliable context limit"
+                            )
+                        contextual = build_context_prompt(
+                            name=context_name,
+                            requested_tokens=context_tokens,
+                            question=prompt,
+                            tokenizer=llm.tokenizer,
+                            count_prompt_tokens=llm.count_prompt_tokens,
+                            model_context_limit=llm.context_length_tokens,
+                            max_new_tokens=llm.settings.max_new_tokens,
+                        )
+                        prompt = contextual.prompt
+                        context_metadata = contextual.metadata
                     last_result = process_prompt(
                         llm,
                         prompt,
                         run_type,
                         benchmark_name,
                         cost_config,
+                        context_metadata,
                     )
                 except torch.cuda.OutOfMemoryError:
                     print("\nCUDA out of memory.")
                     print("Try lowering max_new_tokens or loading a smaller model.")
                     torch.cuda.empty_cache()
+                except GenerationCancelled as exc:
+                    print(f"\n{exc}")
+                    print("Adjust /context, /set, or other settings and try again.")
                 except Exception as exc:
                     print(f"\nGeneration failed: {type(exc).__name__}: {exc}")
                 continue
@@ -652,6 +799,10 @@ def run(
                 print("Try lowering max_new_tokens or loading a smaller model.")
                 torch.cuda.empty_cache()
 
+            except GenerationCancelled as exc:
+                print(f"\n{exc}")
+                print("Adjust /context, /set, or other settings and try again.")
+
             except Exception as exc:
                 print(f"\nGeneration failed: {type(exc).__name__}: {exc}")
 
@@ -663,10 +814,30 @@ def run(
 def main(arguments: list[str] | None = None) -> None:
     args = parse_args(arguments)
     try:
-        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload)
+        if args.prepare_context:
+            local_only = args.no_download
+            try:
+                tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=local_only)
+            except (OSError, ValueError):
+                processor = AutoProcessor.from_pretrained(args.model, local_files_only=local_only)
+                tokenizer = getattr(processor, "tokenizer", None)
+                if tokenizer is None:
+                    raise ContextError("The selected processor does not expose a tokenizer")
+            prepared = prepare_folder_context(
+                args.prepare_context,
+                args.corpus,
+                tokenizer,
+                chunk_tokens=args.chunk_tokens,
+                overlap=args.chunk_overlap,
+            )
+            print(json.dumps(asdict(prepared), indent=2))
+            return
+        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload, context_name=args.context, context_tokens=args.context_tokens)
     except ConfigurationError as exc:
         print(f"Configuration error: {exc}")
     except ModelPlacementError as exc:
         report_model_load_failure(exc)
     except RuntimeError as exc:
         print(f"Model loading stopped: {exc}")
+    except ContextError as exc:
+        print(f"Context error: {exc}")

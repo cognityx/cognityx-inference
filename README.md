@@ -51,6 +51,47 @@ uv run python src/llm_benchmark/main.py \
   --profile int4
 ```
 
+## Long-context benchmarks
+
+Prepare WikiText-103 Raw with the tokenizer belonging to the model being tested:
+
+```bash
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-32B \
+  --prepare-context wikitext \
+  --corpus wikitext-103-raw \
+  --chunk-tokens 1024 \
+  --chunk-overlap 128
+```
+
+Prepared JSONL chunks are stored under `data/contexts/wikitext/`. Run the normal
+interactive application with a requested context budget, then enter `/benchmark`:
+
+```bash
+uv run python src/llm_benchmark/main.py \
+  --model Qwen/Qwen3-32B \
+  --profile int4 \
+  --context wikitext \
+  --context-tokens 32000
+```
+
+The application reserves `max_new_tokens`, measures the exact chat-templated input,
+and reports whenever the final context chunk was shortened. It refuses prompts
+that cannot fit instead of enabling tokenizer-side silent truncation.
+
+While the model remains loaded, change or disable the context used by subsequent
+`/benchmark` runs:
+
+```text
+/context wikitext 64000
+/context
+/context off
+```
+
+During streamed generation, press `Ctrl+C` once to cancel only the current request.
+The decoder stops at the next safe generation step and returns to the `You>` prompt;
+the model remains loaded, so `/context` and `/set` can be adjusted immediately.
+
 For native checkpoints, diagnostics separately report the checkpoint format and the
 actual runtime path. MXFP4 checks use the installed Transformers requirements for GPU
 capability, Triton, and `kernels`, then confirm any BF16 dequantization fallback from

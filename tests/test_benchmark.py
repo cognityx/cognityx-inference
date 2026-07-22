@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ from llm_benchmark.app import (
     process_prompt,
 )
 from llm_benchmark.llm import (
+    InterruptStoppingCriteria,
     LoadProfileError,
     build_model_load_kwargs,
     build_quality_indicators,
@@ -41,6 +43,17 @@ from llm_benchmark.reporting import (
     sanitize_model_name,
     save_benchmark_result,
 )
+
+
+class GenerationCancellationTests(unittest.TestCase):
+    def test_interrupt_stopping_criteria_tracks_event(self) -> None:
+        cancelled = threading.Event()
+        criteria = InterruptStoppingCriteria(cancelled)
+        input_ids = torch.zeros((2, 4), dtype=torch.long)
+
+        self.assertEqual(criteria(input_ids, torch.empty(0)).tolist(), [False, False])
+        cancelled.set()
+        self.assertEqual(criteria(input_ids, torch.empty(0)).tolist(), [True, True])
 
 
 class FinishReasonTests(unittest.TestCase):

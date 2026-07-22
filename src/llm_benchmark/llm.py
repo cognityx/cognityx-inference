@@ -12,6 +12,8 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     TextIteratorStreamer,
+    StoppingCriteria,
+    StoppingCriteriaList,
 )
 
 from llm_benchmark.model_diagnostics import (
@@ -50,6 +52,30 @@ LOAD_PROFILES = ("bf16", "fp16", "int8", "int4", "int4-double", "gptq3", "gptq2"
 
 class LoadProfileError(ValueError):
     pass
+
+
+class GenerationCancelled(RuntimeError):
+    """Raised after an in-progress generation is stopped by the user."""
+
+
+class InterruptStoppingCriteria(StoppingCriteria):
+    """Stop every sequence when the main thread requests cancellation."""
+
+    def __init__(self, cancelled: threading.Event) -> None:
+        self.cancelled = cancelled
+
+    def __call__(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        **kwargs: Any,
+    ) -> torch.BoolTensor:
+        return torch.full(
+            (input_ids.shape[0],),
+            self.cancelled.is_set(),
+            dtype=torch.bool,
+            device=input_ids.device,
+        )
 
 
 class TimingTextIteratorStreamer(TextIteratorStreamer):
@@ -603,6 +629,10 @@ class LocalLLM:
         )
         return self.processor(text=rendered_prompt, return_tensors="pt")
 
+    def count_prompt_tokens(self, prompt: str) -> int:
+        """Count the exact input produced by the active model's chat template."""
+        return int(self._prepare_text_inputs(prompt).input_ids.shape[1])
+
     def generate(
         self,
         prompt: str,
@@ -629,6 +659,10 @@ class LocalLLM:
             "repetition_penalty": self.settings.repetition_penalty,
             "pad_token_id": self.tokenizer.eos_token_id,
         }
+        cancellation_requested = threading.Event()
+        generation_kwargs["stopping_criteria"] = StoppingCriteriaList(
+            [InterruptStoppingCriteria(cancellation_requested)]
+        )
 
         if self.settings.do_sample:
             generation_kwargs.update(
@@ -663,11 +697,20 @@ class LocalLLM:
         generation_thread.start()
 
         first_output_at: float | None = None
-        for text in streamer:
-            if text and first_output_at is None:
-                first_output_at = time.perf_counter()
-            if on_text is not None:
-                on_text(text)
+        cancelled = False
+        try:
+            for text in streamer:
+                if text and first_output_at is None:
+                    first_output_at = time.perf_counter()
+                if on_text is not None:
+                    on_text(text)
+        except KeyboardInterrupt:
+            cancelled = True
+            cancellation_requested.set()
+            # The worker sends the stream terminator after the stopping criterion
+            # is observed. Drain queued text without displaying more partial output.
+            for _ in streamer:
+                pass
 
         generation_thread.join()
 
@@ -683,6 +726,11 @@ class LocalLLM:
         first_streamed_output_seconds = (
             first_output_at - started if first_output_at is not None else None
         )
+
+        if cancelled:
+            raise GenerationCancelled(
+                "Generation stopped by the user; the model remains loaded."
+            )
 
         if "error" in generation_result:
             raise generation_result["error"]

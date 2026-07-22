@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 configs/secrets
+
+# Generated long-context artifacts (the registry documentation is tracked)
+data/contexts/*/chunks.jsonl
+data/contexts/*/manifest.json
