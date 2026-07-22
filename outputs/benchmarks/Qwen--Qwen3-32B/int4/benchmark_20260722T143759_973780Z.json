@@ -1,0 +1,1237 @@
+{
+  "model": "Qwen/Qwen3-32B",
+  "engine": "vllm",
+  "requested_load_profile": "int4",
+  "effective_load_profile": "int4",
+  "quantization_enabled": true,
+  "quantization_bits": 4,
+  "quantization_method": "bitsandbytes",
+  "compute_dtype": "bfloat16",
+  "storage_dtype": "int4",
+  "quantization_resolution": {
+    "engine": "vllm",
+    "quantization_source": "runtime_bitsandbytes",
+    "inflight_quantization": true
+  },
+  "run_type": "benchmark",
+  "benchmark_name": "travelling_salesman_problem",
+  "prompt": "Use the supplied context when it is relevant. Answer the question after the context. Context: [Context chunk chunk-00000000; source: wikitext-103-raw:train:1] = Valkyria Chronicles III … [truncated]",
+  "settings": {
+    "enable_thinking": true,
+    "max_new_tokens": 8192,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "do_sample": true,
+    "repetition_penalty": 1.0
+  },
+  "finish_reason": "stop",
+  "generation_truncated": false,
+  "model_runtime": {
+    "engine": "vllm",
+    "engine_version": "0.25.1",
+    "model_dtype": "bfloat16",
+    "devices_used": [
+      "cuda:0"
+    ],
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false,
+    "attention_implementation": "vllm_selected",
+    "kv_cache": {
+      "use_cache": true,
+      "cache_implementation": "vllm_paged_attention",
+      "cache_dtype": "auto"
+    },
+    "architecture": {
+      "model_type": "qwen3",
+      "architecture": "Qwen3ForCausalLM",
+      "total_parameters": null,
+      "num_hidden_layers": 64,
+      "hidden_size": 5120,
+      "intermediate_size": 25600,
+      "num_attention_heads": 64,
+      "num_key_value_heads": 8,
+      "vocab_size": 151936,
+      "max_position_embeddings": 40960,
+      "rope": {
+        "theta": null,
+        "scaling": {
+          "rope_theta": 1000000,
+          "rope_type": "default"
+        }
+      }
+    },
+    "model_size": {
+      "logical_parameters": null
+    },
+    "model_family": {},
+    "vllm": {
+      "max_model_len": 29616,
+      "gpu_memory_utilization": 0.9,
+      "kv_cache_dtype": "auto",
+      "wsl_legacy_runner": true,
+      "flashinfer_sampler_disabled": true,
+      "streaming_mode": "offline_delta",
+      "kv_cache_scale_calibration": null
+    }
+  },
+  "quality_indicators": {
+    "answer_complete": true,
+    "reasoning_detected": true,
+    "thinking_characters": 3148,
+    "thinking_tokens": 579,
+    "answer_characters": 3370,
+    "answer_tokens": 687,
+    "raw_output_characters": 6537,
+    "empty_answer": false,
+    "finish_reason": "stop",
+    "generation_truncated": false
+  },
+  "performance": {
+    "prompt_tokenization_seconds": 0.064,
+    "prefill_seconds": null,
+    "prefill_measurement_method": "generation_start_to_first_raw_streamer_token",
+    "prompt_tokens": 21392,
+    "prompt_tokens_per_second": null,
+    "time_to_first_token_seconds": null,
+    "first_token_latency_after_prompt_preparation_seconds": null,
+    "time_to_first_streamed_output_seconds": 0.548,
+    "decode_seconds": null,
+    "decode_token_count": 1270,
+    "generated_tokens": 1271,
+    "decode_tokens_per_second": null,
+    "generation_seconds": 97.386,
+    "end_to_end_seconds": 97.45,
+    "decode_measurement_method": "generation_finish_minus_first_raw_token; throughput excludes the first token"
+  },
+  "result": {
+    "raw_output": "<think>\nOkay, let's see. The user is asking if AI can be applied to the Traveling Salesman Problem. First, I need to recall what the Traveling Salesman Problem (TSP) is. From what I remember, TSP is a classic optimization problem where the goal is to find the shortest possible route that visits each city exactly once and returns to the origin city. It's known to be NP-hard, which means that as the number of cities increases, the time required to find an exact solution grows exponentially.\n\nNow, the question is about applying AI to this problem. AI techniques, especially in optimization and machine learning, have been used for various complex problems. I should think about which AI methods are typically used for optimization problems like TSP. Genetic algorithms come to mind—they use principles of natural selection to evolve solutions over generations. Then there's simulated annealing, which is a probabilistic technique that can escape local minima. Also, neural networks, particularly recurrent neural networks (RNNs) or more recently, transformer models, have been explored for sequence prediction tasks, which might be relevant here since TSP involves finding an optimal sequence.\n\nI should also consider reinforcement learning. In reinforcement learning, an agent learns to make decisions by performing actions to maximize some notion of cumulative reward. For TSP, the agent could be trained to build a tour step by step, receiving rewards for shorter paths. There's also the possibility of using machine learning to predict good initial solutions that can then be refined by traditional algorithms like Lin-Kernighan.\n\nAnother angle is using AI to approximate solutions when exact algorithms are too slow. Since TSP is NP-hard, exact solutions aren't feasible for large instances, so heuristic or approximation algorithms are necessary. AI can help create better heuristics or combine different strategies effectively.\n\nI should also mention specific examples or studies where AI has been applied to TSP. For instance, Google's OR-Tools includes various optimization algorithms, some of which might incorporate AI techniques. There's also research papers where deep learning models have been trained to solve TSP instances, though they might not outperform traditional methods for all cases but can provide good solutions quickly.\n\nHowever, it's important to note the limitations. AI approaches might not always guarantee the optimal solution, especially for very large TSP instances. They can be computationally intensive to train and might require significant resources. Additionally, the performance can depend heavily on the quality of the training data and the specific problem instance characteristics.\n\nIn summary, yes, AI can be applied to TSP through various methods like genetic algorithms, reinforcement learning, neural networks, and hybrid approaches. These techniques can find good solutions efficiently, though they might not always find the exact optimal solution, especially for large-scale problems. The choice of AI method would depend on the specific requirements, such as the need for speed versus solution accuracy.\n</think>\n\nYes, AI can be applied to the Traveling Salesman Problem (TSP), and various AI techniques have been explored to address this classic optimization challenge. Here's an overview of how AI approaches are used:\n\n### **Key AI Techniques Applied to TSP**\n1. **Genetic Algorithms (GAs):**\n   - **How it works:** Mimics natural selection by evolving a population of solutions through selection, crossover, and mutation.\n   - **Application:** GAs generate diverse routes, iteratively improving them by combining and modifying existing solutions. They are effective for finding near-optimal solutions in complex search spaces.\n\n2. **Reinforcement Learning (RL):**\n   - **How it works:** Trains an agent to construct routes step-by-step by rewarding shorter paths and penalizing longer ones.\n   - **Application:** RL models, such as those using actor-critic frameworks or transformers, learn policies to select cities sequentially, optimizing cumulative rewards. For example, Google’s DeepMind has explored RL for combinatorial optimization problems like TSP.\n\n3. **Neural Networks:**\n   - **How it works:** Uses architectures like Graph Neural Networks (GNNs) or Transformers to learn patterns in TSP instances.\n   - **Application:** Pretrained models can predict good initial solutions or approximate optimal routes. For example, the Pointer Network (2015) uses seq2seq models with attention to generate tours.\n\n4. **Simulated Annealing:**\n   - **How it works:** A probabilistic technique that explores the solution space by accepting worse solutions temporarily to escape local optima.\n   - **Application:** AI can enhance simulated annealing by dynamically adjusting cooling schedules or using learned heuristics to guide the search.\n\n5. **Hybrid Approaches:**\n   - Combines AI with classical algorithms (e.g., Lin-Kernighan). AI might generate candidate solutions, which are then refined by exact methods.\n\n### **Advantages of AI for TSP**\n- **Scalability:** AI methods like RL or GAs can handle large instances where exact algorithms (e.g., branch-and-bound) are computationally infeasible.\n- **Adaptability:** AI models can generalize across different TSP instances and adapt to constraints like time windows or dynamic environments.\n- **Speed:** Heuristic AI solutions often find \"good enough\" answers quickly, even if not mathematically optimal.\n\n### **Limitations**\n- **Optimality:** AI methods typically provide approximate solutions rather than guaranteed optimality (unlike exact algorithms for small TSP instances).\n- **Training Overhead:** Techniques like deep learning require extensive training data and computational resources.\n- **Problem-Specific Tuning:** Performance depends on hyperparameter tuning and may not generalize well to all TSP variants.\n\n### **Notable Examples**\n- **Google OR-Tools:** Integrates AI-inspired heuristics (e.g., local search) for TSP and related problems.\n- **Research Advances:** Papers like \"Neural Combinatorial Optimization with Reinforcement Learning\" (2018) demonstrate AI models achieving competitive results on TSP benchmarks.\n\n### **Conclusion**\nAI is a powerful tool for tackling TSP, especially for large-scale or real-time applications where exact solutions are impractical. While it may not replace classical methods for small problems, AI-driven approaches offer efficient, scalable alternatives for complex scenarios.",
+    "thinking": "Okay, let's see. The user is asking if AI can be applied to the Traveling Salesman Problem. First, I need to recall what the Traveling Salesman Problem (TSP) is. From what I remember, TSP is a classic optimization problem where the goal is to find the shortest possible route that visits each city exactly once and returns to the origin city. It's known to be NP-hard, which means that as the number of cities increases, the time required to find an exact solution grows exponentially.\n\nNow, the question is about applying AI to this problem. AI techniques, especially in optimization and machine learning, have been used for various complex problems. I should think about which AI methods are typically used for optimization problems like TSP. Genetic algorithms come to mind—they use principles of natural selection to evolve solutions over generations. Then there's simulated annealing, which is a probabilistic technique that can escape local minima. Also, neural networks, particularly recurrent neural networks (RNNs) or more recently, transformer models, have been explored for sequence prediction tasks, which might be relevant here since TSP involves finding an optimal sequence.\n\nI should also consider reinforcement learning. In reinforcement learning, an agent learns to make decisions by performing actions to maximize some notion of cumulative reward. For TSP, the agent could be trained to build a tour step by step, receiving rewards for shorter paths. There's also the possibility of using machine learning to predict good initial solutions that can then be refined by traditional algorithms like Lin-Kernighan.\n\nAnother angle is using AI to approximate solutions when exact algorithms are too slow. Since TSP is NP-hard, exact solutions aren't feasible for large instances, so heuristic or approximation algorithms are necessary. AI can help create better heuristics or combine different strategies effectively.\n\nI should also mention specific examples or studies where AI has been applied to TSP. For instance, Google's OR-Tools includes various optimization algorithms, some of which might incorporate AI techniques. There's also research papers where deep learning models have been trained to solve TSP instances, though they might not outperform traditional methods for all cases but can provide good solutions quickly.\n\nHowever, it's important to note the limitations. AI approaches might not always guarantee the optimal solution, especially for very large TSP instances. They can be computationally intensive to train and might require significant resources. Additionally, the performance can depend heavily on the quality of the training data and the specific problem instance characteristics.\n\nIn summary, yes, AI can be applied to TSP through various methods like genetic algorithms, reinforcement learning, neural networks, and hybrid approaches. These techniques can find good solutions efficiently, though they might not always find the exact optimal solution, especially for large-scale problems. The choice of AI method would depend on the specific requirements, such as the need for speed versus solution accuracy.",
+    "answer": "Yes, AI can be applied to the Traveling Salesman Problem (TSP), and various AI techniques have been explored to address this classic optimization challenge. Here's an overview of how AI approaches are used:\n\n### **Key AI Techniques Applied to TSP**\n1. **Genetic Algorithms (GAs):**\n   - **How it works:** Mimics natural selection by evolving a population of solutions through selection, crossover, and mutation.\n   - **Application:** GAs generate diverse routes, iteratively improving them by combining and modifying existing solutions. They are effective for finding near-optimal solutions in complex search spaces.\n\n2. **Reinforcement Learning (RL):**\n   - **How it works:** Trains an agent to construct routes step-by-step by rewarding shorter paths and penalizing longer ones.\n   - **Application:** RL models, such as those using actor-critic frameworks or transformers, learn policies to select cities sequentially, optimizing cumulative rewards. For example, Google’s DeepMind has explored RL for combinatorial optimization problems like TSP.\n\n3. **Neural Networks:**\n   - **How it works:** Uses architectures like Graph Neural Networks (GNNs) or Transformers to learn patterns in TSP instances.\n   - **Application:** Pretrained models can predict good initial solutions or approximate optimal routes. For example, the Pointer Network (2015) uses seq2seq models with attention to generate tours.\n\n4. **Simulated Annealing:**\n   - **How it works:** A probabilistic technique that explores the solution space by accepting worse solutions temporarily to escape local optima.\n   - **Application:** AI can enhance simulated annealing by dynamically adjusting cooling schedules or using learned heuristics to guide the search.\n\n5. **Hybrid Approaches:**\n   - Combines AI with classical algorithms (e.g., Lin-Kernighan). AI might generate candidate solutions, which are then refined by exact methods.\n\n### **Advantages of AI for TSP**\n- **Scalability:** AI methods like RL or GAs can handle large instances where exact algorithms (e.g., branch-and-bound) are computationally infeasible.\n- **Adaptability:** AI models can generalize across different TSP instances and adapt to constraints like time windows or dynamic environments.\n- **Speed:** Heuristic AI solutions often find \"good enough\" answers quickly, even if not mathematically optimal.\n\n### **Limitations**\n- **Optimality:** AI methods typically provide approximate solutions rather than guaranteed optimality (unlike exact algorithms for small TSP instances).\n- **Training Overhead:** Techniques like deep learning require extensive training data and computational resources.\n- **Problem-Specific Tuning:** Performance depends on hyperparameter tuning and may not generalize well to all TSP variants.\n\n### **Notable Examples**\n- **Google OR-Tools:** Integrates AI-inspired heuristics (e.g., local search) for TSP and related problems.\n- **Research Advances:** Papers like \"Neural Combinatorial Optimization with Reinforcement Learning\" (2018) demonstrate AI models achieving competitive results on TSP benchmarks.\n\n### **Conclusion**\nAI is a powerful tool for tackling TSP, especially for large-scale or real-time applications where exact solutions are impractical. While it may not replace classical methods for small problems, AI-driven approaches offer efficient, scalable alternatives for complex scenarios."
+  },
+  "metrics": {
+    "time_to_first_token_seconds": 0.548,
+    "prompt_tokens": 21392,
+    "generated_tokens": 1271,
+    "total_tokens": 22663,
+    "total_context_length_tokens": 29616,
+    "generation_seconds": 97.386,
+    "engine_reported_decode_seconds": 97.386,
+    "tokens_per_second": 13.05,
+    "peak_vram_gb": null,
+    "gpu_allocated_before_gb": 0.0,
+    "gpu_reserved_before_gb": 0.0,
+    "gpu_allocated_after_gb": 0.0,
+    "gpu_reserved_after_gb": 0.0,
+    "gpu_memory_breakdown": null
+  },
+  "timestamp_utc": "2026-07-22T14:37:59.969838+00:00",
+  "metadata": {
+    "gpu_name": "NVIDIA GeForce RTX 5090",
+    "gpu_total_memory_gb": 31.842,
+    "pytorch_version": "2.11.0+cu130",
+    "cuda_version": "13.0",
+    "transformers_version": "5.14.1",
+    "python_version": "3.12.3"
+  },
+  "schema_version": 2,
+  "prompt_truncated_for_reporting": true,
+  "prompt_preview_words": 24,
+  "context": {
+    "context_name": "wikitext",
+    "context_provider": "folder",
+    "benchmark_question": "Can AI be applied to the travelling salesman problem?",
+    "requested_context_tokens": 28000,
+    "actual_corpus_tokens": 14587,
+    "final_prompt_tokens": 21392,
+    "chunks_used": [
+      {
+        "chunk_id": "chunk-00000000",
+        "source": "wikitext-103-raw:train:1",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000001",
+        "source": "wikitext-103-raw:train:3",
+        "token_count": 167
+      },
+      {
+        "chunk_id": "chunk-00000002",
+        "source": "wikitext-103-raw:train:4",
+        "token_count": 110
+      },
+      {
+        "chunk_id": "chunk-00000003",
+        "source": "wikitext-103-raw:train:5",
+        "token_count": 116
+      },
+      {
+        "chunk_id": "chunk-00000004",
+        "source": "wikitext-103-raw:train:7",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000005",
+        "source": "wikitext-103-raw:train:9",
+        "token_count": 230
+      },
+      {
+        "chunk_id": "chunk-00000006",
+        "source": "wikitext-103-raw:train:10",
+        "token_count": 324
+      },
+      {
+        "chunk_id": "chunk-00000007",
+        "source": "wikitext-103-raw:train:11",
+        "token_count": 91
+      },
+      {
+        "chunk_id": "chunk-00000008",
+        "source": "wikitext-103-raw:train:13",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000009",
+        "source": "wikitext-103-raw:train:15",
+        "token_count": 226
+      },
+      {
+        "chunk_id": "chunk-00000010",
+        "source": "wikitext-103-raw:train:16",
+        "token_count": 260
+      },
+      {
+        "chunk_id": "chunk-00000011",
+        "source": "wikitext-103-raw:train:17",
+        "token_count": 241
+      },
+      {
+        "chunk_id": "chunk-00000012",
+        "source": "wikitext-103-raw:train:19",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000013",
+        "source": "wikitext-103-raw:train:21",
+        "token_count": 317
+      },
+      {
+        "chunk_id": "chunk-00000014",
+        "source": "wikitext-103-raw:train:22",
+        "token_count": 274
+      },
+      {
+        "chunk_id": "chunk-00000015",
+        "source": "wikitext-103-raw:train:24",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000016",
+        "source": "wikitext-103-raw:train:26",
+        "token_count": 345
+      },
+      {
+        "chunk_id": "chunk-00000017",
+        "source": "wikitext-103-raw:train:28",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000018",
+        "source": "wikitext-103-raw:train:30",
+        "token_count": 315
+      },
+      {
+        "chunk_id": "chunk-00000019",
+        "source": "wikitext-103-raw:train:31",
+        "token_count": 107
+      },
+      {
+        "chunk_id": "chunk-00000020",
+        "source": "wikitext-103-raw:train:33",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000021",
+        "source": "wikitext-103-raw:train:35",
+        "token_count": 86
+      },
+      {
+        "chunk_id": "chunk-00000022",
+        "source": "wikitext-103-raw:train:36",
+        "token_count": 142
+      },
+      {
+        "chunk_id": "chunk-00000023",
+        "source": "wikitext-103-raw:train:37",
+        "token_count": 157
+      },
+      {
+        "chunk_id": "chunk-00000024",
+        "source": "wikitext-103-raw:train:38",
+        "token_count": 103
+      },
+      {
+        "chunk_id": "chunk-00000025",
+        "source": "wikitext-103-raw:train:40",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000026",
+        "source": "wikitext-103-raw:train:42",
+        "token_count": 80
+      },
+      {
+        "chunk_id": "chunk-00000027",
+        "source": "wikitext-103-raw:train:44",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000028",
+        "source": "wikitext-103-raw:train:46",
+        "token_count": 278
+      },
+      {
+        "chunk_id": "chunk-00000029",
+        "source": "wikitext-103-raw:train:47",
+        "token_count": 263
+      },
+      {
+        "chunk_id": "chunk-00000030",
+        "source": "wikitext-103-raw:train:48",
+        "token_count": 213
+      },
+      {
+        "chunk_id": "chunk-00000031",
+        "source": "wikitext-103-raw:train:51",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000032",
+        "source": "wikitext-103-raw:train:53",
+        "token_count": 132
+      },
+      {
+        "chunk_id": "chunk-00000033",
+        "source": "wikitext-103-raw:train:54",
+        "token_count": 102
+      },
+      {
+        "chunk_id": "chunk-00000034",
+        "source": "wikitext-103-raw:train:56",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000035",
+        "source": "wikitext-103-raw:train:58",
+        "token_count": 247
+      },
+      {
+        "chunk_id": "chunk-00000036",
+        "source": "wikitext-103-raw:train:60",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000037",
+        "source": "wikitext-103-raw:train:62",
+        "token_count": 314
+      },
+      {
+        "chunk_id": "chunk-00000038",
+        "source": "wikitext-103-raw:train:63",
+        "token_count": 96
+      },
+      {
+        "chunk_id": "chunk-00000039",
+        "source": "wikitext-103-raw:train:64",
+        "token_count": 18
+      },
+      {
+        "chunk_id": "chunk-00000040",
+        "source": "wikitext-103-raw:train:65",
+        "token_count": 201
+      },
+      {
+        "chunk_id": "chunk-00000041",
+        "source": "wikitext-103-raw:train:66",
+        "token_count": 151
+      },
+      {
+        "chunk_id": "chunk-00000042",
+        "source": "wikitext-103-raw:train:67",
+        "token_count": 48
+      },
+      {
+        "chunk_id": "chunk-00000043",
+        "source": "wikitext-103-raw:train:68",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000044",
+        "source": "wikitext-103-raw:train:69",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000045",
+        "source": "wikitext-103-raw:train:70",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000046",
+        "source": "wikitext-103-raw:train:71",
+        "token_count": 86
+      },
+      {
+        "chunk_id": "chunk-00000047",
+        "source": "wikitext-103-raw:train:72",
+        "token_count": 93
+      },
+      {
+        "chunk_id": "chunk-00000048",
+        "source": "wikitext-103-raw:train:73",
+        "token_count": 88
+      },
+      {
+        "chunk_id": "chunk-00000049",
+        "source": "wikitext-103-raw:train:74",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000050",
+        "source": "wikitext-103-raw:train:75",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000051",
+        "source": "wikitext-103-raw:train:76",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000052",
+        "source": "wikitext-103-raw:train:77",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000053",
+        "source": "wikitext-103-raw:train:78",
+        "token_count": 12
+      },
+      {
+        "chunk_id": "chunk-00000054",
+        "source": "wikitext-103-raw:train:79",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000055",
+        "source": "wikitext-103-raw:train:80",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000056",
+        "source": "wikitext-103-raw:train:81",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000057",
+        "source": "wikitext-103-raw:train:82",
+        "token_count": 18
+      },
+      {
+        "chunk_id": "chunk-00000058",
+        "source": "wikitext-103-raw:train:83",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000059",
+        "source": "wikitext-103-raw:train:84",
+        "token_count": 257
+      },
+      {
+        "chunk_id": "chunk-00000060",
+        "source": "wikitext-103-raw:train:85",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000061",
+        "source": "wikitext-103-raw:train:86",
+        "token_count": 72
+      },
+      {
+        "chunk_id": "chunk-00000062",
+        "source": "wikitext-103-raw:train:87",
+        "token_count": 216
+      },
+      {
+        "chunk_id": "chunk-00000063",
+        "source": "wikitext-103-raw:train:88",
+        "token_count": 195
+      },
+      {
+        "chunk_id": "chunk-00000064",
+        "source": "wikitext-103-raw:train:89",
+        "token_count": 146
+      },
+      {
+        "chunk_id": "chunk-00000065",
+        "source": "wikitext-103-raw:train:90",
+        "token_count": 157
+      },
+      {
+        "chunk_id": "chunk-00000066",
+        "source": "wikitext-103-raw:train:91",
+        "token_count": 106
+      },
+      {
+        "chunk_id": "chunk-00000067",
+        "source": "wikitext-103-raw:train:92",
+        "token_count": 96
+      },
+      {
+        "chunk_id": "chunk-00000068",
+        "source": "wikitext-103-raw:train:93",
+        "token_count": 64
+      },
+      {
+        "chunk_id": "chunk-00000069",
+        "source": "wikitext-103-raw:train:94",
+        "token_count": 26
+      },
+      {
+        "chunk_id": "chunk-00000070",
+        "source": "wikitext-103-raw:train:95",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000071",
+        "source": "wikitext-103-raw:train:96",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000072",
+        "source": "wikitext-103-raw:train:97",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000073",
+        "source": "wikitext-103-raw:train:98",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000074",
+        "source": "wikitext-103-raw:train:99",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000075",
+        "source": "wikitext-103-raw:train:100",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000076",
+        "source": "wikitext-103-raw:train:101",
+        "token_count": 4
+      },
+      {
+        "chunk_id": "chunk-00000077",
+        "source": "wikitext-103-raw:train:102",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000078",
+        "source": "wikitext-103-raw:train:103",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000079",
+        "source": "wikitext-103-raw:train:104",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000080",
+        "source": "wikitext-103-raw:train:105",
+        "token_count": 24
+      },
+      {
+        "chunk_id": "chunk-00000081",
+        "source": "wikitext-103-raw:train:106",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000082",
+        "source": "wikitext-103-raw:train:107",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000083",
+        "source": "wikitext-103-raw:train:108",
+        "token_count": 4
+      },
+      {
+        "chunk_id": "chunk-00000084",
+        "source": "wikitext-103-raw:train:109",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000085",
+        "source": "wikitext-103-raw:train:110",
+        "token_count": 101
+      },
+      {
+        "chunk_id": "chunk-00000086",
+        "source": "wikitext-103-raw:train:111",
+        "token_count": 147
+      },
+      {
+        "chunk_id": "chunk-00000087",
+        "source": "wikitext-103-raw:train:112",
+        "token_count": 46
+      },
+      {
+        "chunk_id": "chunk-00000088",
+        "source": "wikitext-103-raw:train:113",
+        "token_count": 28
+      },
+      {
+        "chunk_id": "chunk-00000089",
+        "source": "wikitext-103-raw:train:115",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000090",
+        "source": "wikitext-103-raw:train:117",
+        "token_count": 140
+      },
+      {
+        "chunk_id": "chunk-00000091",
+        "source": "wikitext-103-raw:train:118",
+        "token_count": 193
+      },
+      {
+        "chunk_id": "chunk-00000092",
+        "source": "wikitext-103-raw:train:120",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000093",
+        "source": "wikitext-103-raw:train:122",
+        "token_count": 126
+      },
+      {
+        "chunk_id": "chunk-00000094",
+        "source": "wikitext-103-raw:train:123",
+        "token_count": 68
+      },
+      {
+        "chunk_id": "chunk-00000095",
+        "source": "wikitext-103-raw:train:125",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000096",
+        "source": "wikitext-103-raw:train:127",
+        "token_count": 221
+      },
+      {
+        "chunk_id": "chunk-00000097",
+        "source": "wikitext-103-raw:train:128",
+        "token_count": 56
+      },
+      {
+        "chunk_id": "chunk-00000098",
+        "source": "wikitext-103-raw:train:129",
+        "token_count": 143
+      },
+      {
+        "chunk_id": "chunk-00000099",
+        "source": "wikitext-103-raw:train:130",
+        "token_count": 128
+      },
+      {
+        "chunk_id": "chunk-00000100",
+        "source": "wikitext-103-raw:train:133",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000101",
+        "source": "wikitext-103-raw:train:135",
+        "token_count": 109
+      },
+      {
+        "chunk_id": "chunk-00000102",
+        "source": "wikitext-103-raw:train:136",
+        "token_count": 94
+      },
+      {
+        "chunk_id": "chunk-00000103",
+        "source": "wikitext-103-raw:train:137",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000104",
+        "source": "wikitext-103-raw:train:139",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000105",
+        "source": "wikitext-103-raw:train:142",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000106",
+        "source": "wikitext-103-raw:train:144",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000107",
+        "source": "wikitext-103-raw:train:145",
+        "token_count": 84
+      },
+      {
+        "chunk_id": "chunk-00000108",
+        "source": "wikitext-103-raw:train:147",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000109",
+        "source": "wikitext-103-raw:train:149",
+        "token_count": 65
+      },
+      {
+        "chunk_id": "chunk-00000110",
+        "source": "wikitext-103-raw:train:150",
+        "token_count": 99
+      },
+      {
+        "chunk_id": "chunk-00000111",
+        "source": "wikitext-103-raw:train:151",
+        "token_count": 92
+      },
+      {
+        "chunk_id": "chunk-00000112",
+        "source": "wikitext-103-raw:train:153",
+        "token_count": 19
+      },
+      {
+        "chunk_id": "chunk-00000113",
+        "source": "wikitext-103-raw:train:155",
+        "token_count": 109
+      },
+      {
+        "chunk_id": "chunk-00000114",
+        "source": "wikitext-103-raw:train:156",
+        "token_count": 110
+      },
+      {
+        "chunk_id": "chunk-00000115",
+        "source": "wikitext-103-raw:train:158",
+        "token_count": 10
+      },
+      {
+        "chunk_id": "chunk-00000116",
+        "source": "wikitext-103-raw:train:160",
+        "token_count": 128
+      },
+      {
+        "chunk_id": "chunk-00000117",
+        "source": "wikitext-103-raw:train:161",
+        "token_count": 214
+      },
+      {
+        "chunk_id": "chunk-00000118",
+        "source": "wikitext-103-raw:train:163",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000119",
+        "source": "wikitext-103-raw:train:165",
+        "token_count": 45
+      },
+      {
+        "chunk_id": "chunk-00000120",
+        "source": "wikitext-103-raw:train:166",
+        "token_count": 95
+      },
+      {
+        "chunk_id": "chunk-00000121",
+        "source": "wikitext-103-raw:train:167",
+        "token_count": 159
+      },
+      {
+        "chunk_id": "chunk-00000122",
+        "source": "wikitext-103-raw:train:169",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000123",
+        "source": "wikitext-103-raw:train:171",
+        "token_count": 108
+      },
+      {
+        "chunk_id": "chunk-00000124",
+        "source": "wikitext-103-raw:train:172",
+        "token_count": 86
+      },
+      {
+        "chunk_id": "chunk-00000125",
+        "source": "wikitext-103-raw:train:174",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000126",
+        "source": "wikitext-103-raw:train:176",
+        "token_count": 87
+      },
+      {
+        "chunk_id": "chunk-00000127",
+        "source": "wikitext-103-raw:train:177",
+        "token_count": 91
+      },
+      {
+        "chunk_id": "chunk-00000128",
+        "source": "wikitext-103-raw:train:178",
+        "token_count": 83
+      },
+      {
+        "chunk_id": "chunk-00000129",
+        "source": "wikitext-103-raw:train:180",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000130",
+        "source": "wikitext-103-raw:train:182",
+        "token_count": 287
+      },
+      {
+        "chunk_id": "chunk-00000131",
+        "source": "wikitext-103-raw:train:184",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000132",
+        "source": "wikitext-103-raw:train:186",
+        "token_count": 173
+      },
+      {
+        "chunk_id": "chunk-00000133",
+        "source": "wikitext-103-raw:train:187",
+        "token_count": 310
+      },
+      {
+        "chunk_id": "chunk-00000134",
+        "source": "wikitext-103-raw:train:189",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000135",
+        "source": "wikitext-103-raw:train:192",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000136",
+        "source": "wikitext-103-raw:train:194",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000137",
+        "source": "wikitext-103-raw:train:195",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000138",
+        "source": "wikitext-103-raw:train:196",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000139",
+        "source": "wikitext-103-raw:train:197",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000140",
+        "source": "wikitext-103-raw:train:198",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000141",
+        "source": "wikitext-103-raw:train:199",
+        "token_count": 15
+      },
+      {
+        "chunk_id": "chunk-00000142",
+        "source": "wikitext-103-raw:train:200",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000143",
+        "source": "wikitext-103-raw:train:201",
+        "token_count": 22
+      },
+      {
+        "chunk_id": "chunk-00000144",
+        "source": "wikitext-103-raw:train:202",
+        "token_count": 27
+      },
+      {
+        "chunk_id": "chunk-00000145",
+        "source": "wikitext-103-raw:train:203",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000146",
+        "source": "wikitext-103-raw:train:205",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000147",
+        "source": "wikitext-103-raw:train:207",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000148",
+        "source": "wikitext-103-raw:train:208",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000149",
+        "source": "wikitext-103-raw:train:209",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000150",
+        "source": "wikitext-103-raw:train:210",
+        "token_count": 25
+      },
+      {
+        "chunk_id": "chunk-00000151",
+        "source": "wikitext-103-raw:train:211",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000152",
+        "source": "wikitext-103-raw:train:212",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000153",
+        "source": "wikitext-103-raw:train:213",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000154",
+        "source": "wikitext-103-raw:train:214",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000155",
+        "source": "wikitext-103-raw:train:215",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000156",
+        "source": "wikitext-103-raw:train:216",
+        "token_count": 27
+      },
+      {
+        "chunk_id": "chunk-00000157",
+        "source": "wikitext-103-raw:train:217",
+        "token_count": 24
+      },
+      {
+        "chunk_id": "chunk-00000158",
+        "source": "wikitext-103-raw:train:218",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000159",
+        "source": "wikitext-103-raw:train:219",
+        "token_count": 15
+      },
+      {
+        "chunk_id": "chunk-00000160",
+        "source": "wikitext-103-raw:train:220",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000161",
+        "source": "wikitext-103-raw:train:221",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000162",
+        "source": "wikitext-103-raw:train:222",
+        "token_count": 22
+      },
+      {
+        "chunk_id": "chunk-00000163",
+        "source": "wikitext-103-raw:train:223",
+        "token_count": 19
+      },
+      {
+        "chunk_id": "chunk-00000164",
+        "source": "wikitext-103-raw:train:224",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000165",
+        "source": "wikitext-103-raw:train:225",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000166",
+        "source": "wikitext-103-raw:train:226",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000167",
+        "source": "wikitext-103-raw:train:227",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000168",
+        "source": "wikitext-103-raw:train:228",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000169",
+        "source": "wikitext-103-raw:train:229",
+        "token_count": 22
+      },
+      {
+        "chunk_id": "chunk-00000170",
+        "source": "wikitext-103-raw:train:230",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000171",
+        "source": "wikitext-103-raw:train:231",
+        "token_count": 18
+      },
+      {
+        "chunk_id": "chunk-00000172",
+        "source": "wikitext-103-raw:train:232",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000173",
+        "source": "wikitext-103-raw:train:233",
+        "token_count": 15
+      },
+      {
+        "chunk_id": "chunk-00000174",
+        "source": "wikitext-103-raw:train:234",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000175",
+        "source": "wikitext-103-raw:train:235",
+        "token_count": 15
+      },
+      {
+        "chunk_id": "chunk-00000176",
+        "source": "wikitext-103-raw:train:236",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000177",
+        "source": "wikitext-103-raw:train:238",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000178",
+        "source": "wikitext-103-raw:train:240",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000179",
+        "source": "wikitext-103-raw:train:241",
+        "token_count": 13
+      },
+      {
+        "chunk_id": "chunk-00000180",
+        "source": "wikitext-103-raw:train:242",
+        "token_count": 19
+      },
+      {
+        "chunk_id": "chunk-00000181",
+        "source": "wikitext-103-raw:train:243",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000182",
+        "source": "wikitext-103-raw:train:244",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000183",
+        "source": "wikitext-103-raw:train:245",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000184",
+        "source": "wikitext-103-raw:train:246",
+        "token_count": 27
+      },
+      {
+        "chunk_id": "chunk-00000185",
+        "source": "wikitext-103-raw:train:247",
+        "token_count": 17
+      },
+      {
+        "chunk_id": "chunk-00000186",
+        "source": "wikitext-103-raw:train:248",
+        "token_count": 16
+      },
+      {
+        "chunk_id": "chunk-00000187",
+        "source": "wikitext-103-raw:train:250",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000188",
+        "source": "wikitext-103-raw:train:252",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000189",
+        "source": "wikitext-103-raw:train:253",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000190",
+        "source": "wikitext-103-raw:train:255",
+        "token_count": 9
+      },
+      {
+        "chunk_id": "chunk-00000191",
+        "source": "wikitext-103-raw:train:257",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000192",
+        "source": "wikitext-103-raw:train:258",
+        "token_count": 20
+      },
+      {
+        "chunk_id": "chunk-00000193",
+        "source": "wikitext-103-raw:train:259",
+        "token_count": 19
+      },
+      {
+        "chunk_id": "chunk-00000194",
+        "source": "wikitext-103-raw:train:260",
+        "token_count": 28
+      },
+      {
+        "chunk_id": "chunk-00000195",
+        "source": "wikitext-103-raw:train:261",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000196",
+        "source": "wikitext-103-raw:train:262",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000197",
+        "source": "wikitext-103-raw:train:263",
+        "token_count": 21
+      },
+      {
+        "chunk_id": "chunk-00000198",
+        "source": "wikitext-103-raw:train:264",
+        "token_count": 35
+      },
+      {
+        "chunk_id": "chunk-00000199",
+        "source": "wikitext-103-raw:train:265",
+        "token_count": 25
+      },
+      {
+        "chunk_id": "chunk-00000200",
+        "source": "wikitext-103-raw:train:266",
+        "token_count": 14
+      },
+      {
+        "chunk_id": "chunk-00000201",
+        "source": "wikitext-103-raw:train:267",
+        "token_count": 23
+      },
+      {
+        "chunk_id": "chunk-00000202",
+        "source": "wikitext-103-raw:train:268",
+        "token_count": 30
+      },
+      {
+        "chunk_id": "chunk-00000203",
+        "source": "wikitext-103-raw:train:271",
+        "token_count": 11
+      },
+      {
+        "chunk_id": "chunk-00000204",
+        "source": "wikitext-103-raw:train:273",
+        "token_count": 155
+      },
+      {
+        "chunk_id": "chunk-00000205",
+        "source": "wikitext-103-raw:train:275",
+        "token_count": 7
+      },
+      {
+        "chunk_id": "chunk-00000206",
+        "source": "wikitext-103-raw:train:277",
+        "token_count": 141
+      },
+      {
+        "chunk_id": "chunk-00000207",
+        "source": "wikitext-103-raw:train:278",
+        "token_count": 277
+      },
+      {
+        "chunk_id": "chunk-00000208",
+        "source": "wikitext-103-raw:train:279",
+        "token_count": 59
+      },
+      {
+        "chunk_id": "chunk-00000209",
+        "source": "wikitext-103-raw:train:281",
+        "token_count": 8
+      },
+      {
+        "chunk_id": "chunk-00000210",
+        "source": "wikitext-103-raw:train:283",
+        "token_count": 82
+      },
+      {
+        "chunk_id": "chunk-00000211",
+        "source": "wikitext-103-raw:train:284",
+        "token_count": 134
+      },
+      {
+        "chunk_id": "chunk-00000212",
+        "source": "wikitext-103-raw:train:287",
+        "token_count": 6
+      },
+      {
+        "chunk_id": "chunk-00000213",
+        "source": "wikitext-103-raw:train:289",
+        "token_count": 164
+      }
+    ],
+    "maximum_output_tokens": 8192,
+    "model_context_limit": 29616,
+    "input_truncation_status": "final_chunk_trimmed",
+    "peak_vram_gb": null,
+    "uses_cpu_offload": false,
+    "uses_disk_offload": false,
+    "full_prompt_sha256": "a4741639f316b1035296f1eee17a79273437db471d9cf29fa9d7f404ad186f97",
+    "full_prompt_characters": 77746
+  },
+  "api_equivalent_cost_estimate": {
+    "enabled": false,
+    "pricing_label": null,
+    "input_price_per_million_tokens": null,
+    "output_price_per_million_tokens": null,
+    "currency": "USD",
+    "basis": "disabled",
+    "disclaimer": "Hypothetical hosted API-equivalent estimate; not measured local operating cost."
+  }
+}

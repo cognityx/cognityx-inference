@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
+import os
 import shlex
+import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -44,6 +47,7 @@ from llm_benchmark.contexts import (
 )
 from llm_benchmark.loading_decision import ModelLoadOptions, controlled_max_memory, estimate_capacity
 from llm_benchmark.model_size import estimate_parameter_count_from_config
+from llm_benchmark.vllm_engine import VLLMEngineError, VLLMLLM
 from transformers import AutoConfig
 
 DEFAULT_MODEL = "Qwen/Qwen3-8B"
@@ -71,9 +75,26 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
   uv run python src/llm_benchmark/main.py --config config.toml
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-32B --prepare-context wikitext --corpus wikitext-103-raw
   uv run python src/llm_benchmark/main.py --model Qwen/Qwen3-32B --profile int4 --context wikitext --context-tokens 32000
+  uv run python src/llm_benchmark/main.py --engine vllm --model Qwen/Qwen3-32B --profile int4 --context wikitext --context-tokens 10000 --vllm-max-model-len 29616
 """,
     )
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Hugging Face model name")
+    parser.add_argument(
+        "--engine", choices=("transformers", "vllm"), default="transformers",
+        help="Inference engine (default: transformers)",
+    )
+    parser.add_argument(
+        "--kv-cache-dtype", choices=("auto", "fp8"), default="auto",
+        help="vLLM KV-cache dtype; auto uses the model dtype",
+    )
+    parser.add_argument(
+        "--vllm-max-model-len", type=int,
+        help="vLLM engine context capacity; must cover prompt plus max_new_tokens",
+    )
+    parser.add_argument(
+        "--vllm-gpu-memory-utilization", type=float, default=0.90,
+        help="Fraction of GPU memory vLLM may reserve (default: 0.90)",
+    )
     parser.add_argument(
         "--profile",
         choices=LOAD_PROFILES,
@@ -108,7 +129,47 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
         parser.error("--context-tokens must be greater than zero")
     if args.prepare_context and not args.corpus:
         parser.error("--prepare-context requires --corpus")
+    if args.vllm_max_model_len is not None and args.vllm_max_model_len <= 0:
+        parser.error("--vllm-max-model-len must be greater than zero")
+    if not 0 < args.vllm_gpu_memory_utilization <= 1:
+        parser.error("--vllm-gpu-memory-utilization must be greater than 0 and at most 1")
     return args
+
+
+def ensure_engine_runtime(engine: str) -> None:
+    """Re-execute vLLM runs in the isolated environment without touching .venv."""
+    if engine != "vllm" or importlib.util.find_spec("vllm") is not None:
+        return
+    project_root = Path(__file__).resolve().parents[2]
+    python = project_root / ".venv-vllm" / "bin" / "python"
+    if not python.is_file():
+        raise VLLMEngineError(
+            "Missing isolated .venv-vllm. Create it with `uv venv .venv-vllm "
+            "--python 3.12 --seed`, then install with `uv pip install --python "
+            ".venv-vllm/bin/python vllm bitsandbytes --torch-backend=auto`."
+        )
+    environment = os.environ.copy()
+    environment.setdefault("VLLM_USE_V2_MODEL_RUNNER", "0")
+    environment.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    cuda_home = next(
+        (project_root / ".venv-vllm" / "lib").glob(
+            "python*/site-packages/nvidia/cu13"
+        ),
+        None,
+    )
+    if cuda_home is not None:
+        environment.setdefault("CUDA_HOME", str(cuda_home))
+    path_entries = [str(python.parent)]
+    if cuda_home is not None:
+        path_entries.append(str(cuda_home / "bin"))
+    environment["PATH"] = ":".join(
+        [*path_entries, environment.get("PATH", "")]
+    )
+    os.execve(
+        str(python),
+        [str(python), str(Path(sys.argv[0]).resolve()), *sys.argv[1:]],
+        environment,
+    )
 
 
 def parse_model_command(user_input: str) -> tuple[str, str]:
@@ -441,6 +502,7 @@ def build_status(
     model_size = runtime.get("model_size", {})
     model_family = runtime.get("model_family", {})
     runtime_status = {
+        "engine": runtime.get("engine", "transformers"),
         "model_dtype": runtime.get("model_dtype", "unknown"),
         "devices_used": runtime.get("devices_used", []),
         "uses_cpu_offload": runtime.get("uses_cpu_offload", False),
@@ -598,6 +660,10 @@ def run(
     allow_cpu_offload: bool = False,
     context_name: str | None = None,
     context_tokens: int | None = None,
+    engine: str = "transformers",
+    kv_cache_dtype: str = "auto",
+    vllm_max_model_len: int | None = None,
+    vllm_gpu_memory_utilization: float = 0.90,
 ) -> None:
     settings = load_generation_settings(config_path)
     print(f"Generation settings loaded from: {config_path}")
@@ -605,7 +671,18 @@ def run(
     while True:
         model_name, load_profile, load_options = prepare_load(model_name, load_profile, allow_download=allow_download, no_download=no_download, non_interactive=non_interactive, allow_cpu_offload=allow_cpu_offload)
         try:
-            llm = LocalLLM(model_name, settings, load_profile, load_options)
+            if engine == "vllm":
+                configured_model_len = vllm_max_model_len or (
+                    (context_tokens or 1024) + settings.max_new_tokens + 1024
+                )
+                llm = VLLMLLM(
+                    model_name, settings, load_profile, load_options,
+                    kv_cache_dtype=kv_cache_dtype,
+                    max_model_len=configured_model_len,
+                    gpu_memory_utilization=vllm_gpu_memory_utilization,
+                )
+            else:
+                llm = LocalLLM(model_name, settings, load_profile, load_options)
             placement = llm.loading_diagnostics
             if placement["capacity_classification"] == "gpu_cpu_offloaded_inference":
                 print("\nGPU + CPU offloaded inference success")
@@ -649,6 +726,7 @@ def run(
                     json.dumps(
                         {
                             "model": llm.model_name,
+                            "engine": engine,
                             "requested_load_profile": llm.requested_load_profile,
                             "effective_load_profile": llm.effective_load_profile,
                             "load_profile": llm.load_profile_metadata,
@@ -832,6 +910,8 @@ def run(
                     if llm.model is None:
                         print("No working model remains; exiting.")
                         return
+                except VLLMEngineError as exc:
+                    print(f"Model switch unavailable: {exc}")
 
                 continue
 
@@ -862,6 +942,7 @@ def run(
 def main(arguments: list[str] | None = None) -> None:
     args = parse_args(arguments)
     try:
+        ensure_engine_runtime(args.engine)
         if args.prepare_context:
             local_only = args.no_download
             try:
@@ -880,7 +961,7 @@ def main(arguments: list[str] | None = None) -> None:
             )
             print(json.dumps(asdict(prepared), indent=2))
             return
-        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload, context_name=args.context, context_tokens=args.context_tokens)
+        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload, context_name=args.context, context_tokens=args.context_tokens, engine=args.engine, kv_cache_dtype=args.kv_cache_dtype, vllm_max_model_len=args.vllm_max_model_len, vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization)
     except ConfigurationError as exc:
         print(f"Configuration error: {exc}")
     except ModelPlacementError as exc:
@@ -889,3 +970,5 @@ def main(arguments: list[str] | None = None) -> None:
         print(f"Model loading stopped: {exc}")
     except ContextError as exc:
         print(f"Context error: {exc}")
+    except VLLMEngineError as exc:
+        print(f"vLLM error: {exc}")

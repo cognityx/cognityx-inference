@@ -44,5 +44,47 @@ uv run python src/llm_benchmark/main.py \
   --profile int4
 
 
+# VLLM 
+How created 
+uv venv .venv-vllm --python 3.12 --seed
 
+#######uv pip install \
+  --python .venv-vllm/bin/python \
+  vllm bitsandbytes \
+  --torch-backend=auto
 
+######uv pip install \
+  --python .venv-vllm/bin/python \
+  nvidia-cuda-nvcc==13.0.88
+
+## Normal KV benchmark
+
+uv run python src/llm_benchmark/main.py \
+  --engine vllm \
+  --model Qwen/Qwen3-32B \
+  --profile int4 \
+  --context wikitext \
+  --context-tokens 10000 \
+  --vllm-max-model-len 29616 \
+  --kv-cache-dtype auto
+
+### FP8 KV benchmark
+
+uv run python src/llm_benchmark/main.py \
+  --engine vllm \
+  --model Qwen/Qwen3-32B \
+  --profile int4 \
+  --context wikitext \
+  --context-tokens 10000 \
+  --vllm-max-model-len 50000 \
+  --kv-cache-dtype fp8
+
+### Increase context gradually without reloading:
+/context wikitext 12000
+/benchmark
+
+/context wikitext 14000
+/benchmark
+
+/context wikitext 16000
+/benchmark

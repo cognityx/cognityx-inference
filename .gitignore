@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.venv-vllm
 configs/secrets
 
 # Generated long-context artifacts (the registry documentation is tracked)

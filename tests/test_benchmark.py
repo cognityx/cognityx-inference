@@ -273,6 +273,18 @@ class ModelDiagnosticTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
+    def test_engine_defaults_to_transformers(self) -> None:
+        self.assertEqual(parse_args([]).engine, "transformers")
+
+    def test_vllm_engine_and_fp8_cache_arguments(self) -> None:
+        args = parse_args([
+            "--engine", "vllm", "--kv-cache-dtype", "fp8",
+            "--vllm-max-model-len", "30000",
+        ])
+        self.assertEqual(args.engine, "vllm")
+        self.assertEqual(args.kv_cache_dtype, "fp8")
+        self.assertEqual(args.vllm_max_model_len, 30000)
+
     def test_startup_argument_defaults(self) -> None:
         args = parse_args([])
 

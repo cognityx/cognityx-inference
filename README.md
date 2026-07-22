@@ -145,3 +145,56 @@ duplicating the full corpus prompt. The original character count, exact prompt-t
 count, and SHA-256 hash remain available for traceability. `chunks_used` contains
 only chunk IDs, sources, and token counts; full chunk text remains in the prepared
 context JSONL.
+
+## Optional vLLM engine
+
+The default remains `--engine transformers`. vLLM is isolated from the working
+Transformers environment:
+
+```bash
+uv venv .venv-vllm --python 3.12 --seed
+uv pip install --python .venv-vllm/bin/python vllm bitsandbytes --torch-backend=auto
+# Keep nvcc aligned with the CUDA 13.0 headers selected by this environment.
+uv pip install --python .venv-vllm/bin/python nvidia-cuda-nvcc==13.0.88
+```
+
+The application automatically re-executes `--engine vllm` under `.venv-vllm`. On
+this WSL RTX 5090 host it selects vLLM's legacy model runner and disables the
+FlashInfer sampler because UVA is unavailable. The attention backend remains under
+vLLM's control; FP8 KV-cache startup may JIT-compile FlashInfer attention kernels.
+
+Start with the proven 10K corpus budget and normal KV cache:
+
+```bash
+uv run python src/llm_benchmark/main.py \
+  --engine vllm \
+  --model Qwen/Qwen3-32B \
+  --profile int4 \
+  --context wikitext \
+  --context-tokens 10000 \
+  --vllm-max-model-len 29616 \
+  --kv-cache-dtype auto
+```
+
+Then repeat with FP8 KV cache:
+
+```bash
+uv run python src/llm_benchmark/main.py \
+  --engine vllm \
+  --model Qwen/Qwen3-32B \
+  --profile int4 \
+  --context wikitext \
+  --context-tokens 10000 \
+  --vllm-max-model-len 50000 \
+  --kv-cache-dtype fp8
+```
+
+`config.toml` supplies the same 8,192-token output limit, and `/context wikitext N`
+can increase the corpus budget without reloading as long as the exact templated
+prompt plus output reservation stays within `--vllm-max-model-len`.
+
+The vLLM adapter drives its persistent offline engine in delta-output mode, printing
+decoded text progressively and retaining the complete output for reporting. Pressing
+Ctrl+C aborts only the active vLLM request and keeps the engine loaded. Interactive
+`/model` switching remains Transformers-only. FP8 KV cache without calibrated scales
+is marked in diagnostics; it can increase cache capacity but may reduce accuracy.
