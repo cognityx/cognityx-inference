@@ -1,3 +1,6 @@
+uv run mkdocs serve
+uv run mkdocs build --strict
+
 
 uv run python src/llm_benchmark/main.py \
   --model Qwen/Qwen3-8B \
