@@ -1,3 +1,5 @@
+"""Normalize, filter, render, and export saved benchmark comparisons."""
+
 from __future__ import annotations
 
 import argparse
@@ -41,6 +43,7 @@ ARCHITECTURE_COLUMNS = (
 
 @dataclass
 class CompareOptions:
+    """Validated filters and output options for benchmark comparison."""
     include_all: bool = False
     model: str | None = None
     benchmark: str | None = None
@@ -55,6 +58,7 @@ class _Parser(argparse.ArgumentParser):
 
 
 def parse_compare_command(command: str) -> CompareOptions:
+    """Parse interactive ``/compare`` arguments into comparison options."""
     parser = _Parser(add_help=False)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--model")
@@ -81,6 +85,7 @@ def _nested(data: dict[str, Any], section: str, field: str) -> Any:
 
 
 def normalize_benchmark(data: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Flatten one backward-compatible benchmark document into a row."""
     performance = data.get("performance") if isinstance(data.get("performance"), dict) else {}
     metrics = data.get("metrics") if isinstance(data.get("metrics"), dict) else {}
     runtime = data.get("model_runtime") if isinstance(data.get("model_runtime"), dict) else {}
@@ -125,6 +130,7 @@ def load_comparison_rows(
     directory: Path = DEFAULT_BENCHMARK_DIRECTORY,
     options: CompareOptions | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
+    """Load, filter, and sort saved benchmark rows and warnings."""
     options = options or CompareOptions()
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -183,6 +189,7 @@ def render_table(
     rows: list[dict[str, Any]],
     include_architecture: bool = False,
 ) -> str:
+    """Render comparison rows as a width-aware terminal table."""
     if not rows:
         return "No matching benchmark runs found."
     widths: dict[str, int] = {}
@@ -209,6 +216,7 @@ def render_markdown(
     rows: list[dict[str, Any]],
     include_architecture: bool = False,
 ) -> str:
+    """Render comparison rows as a Markdown table."""
     columns = _columns(include_architecture)
     headings = [heading for _, heading in columns]
     lines = [
@@ -223,6 +231,7 @@ def render_markdown(
 
 
 def render_csv(rows: list[dict[str, Any]], include_architecture: bool = False) -> str:
+    """Render comparison rows as CSV text."""
     output = io.StringIO()
     columns = _columns(include_architecture)
     writer = csv.DictWriter(output, fieldnames=[key for key, _ in columns])
@@ -238,6 +247,7 @@ def save_comparison(
     directory: Path = DEFAULT_COMPARISON_DIRECTORY,
     include_architecture: bool = False,
 ) -> Path:
+    """Save a Markdown or CSV comparison and return its path."""
     directory.mkdir(parents=True, exist_ok=True)
     extension = "md" if output_format == "markdown" else "csv"
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%fZ")

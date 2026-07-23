@@ -1,3 +1,5 @@
+"""Collect runtime metadata and persist benchmark and GPU-memory reports."""
+
 from __future__ import annotations
 
 import json
@@ -15,10 +17,12 @@ DEFAULT_OUTPUT_DIRECTORY = Path("outputs/benchmarks")
 
 
 def bytes_to_gb(value: int) -> float:
+    """Convert bytes to rounded gibibytes for reports."""
     return round(value / BYTES_PER_GB, 3)
 
 
 def get_gpu_status() -> dict[str, Any]:
+    """Return CUDA allocator and capacity metrics, tolerating missing CUDA."""
     if not torch.cuda.is_available():
         return {
             "name": None,
@@ -61,6 +65,7 @@ def cuda_model_tensor_bytes(model: Any) -> int | None:
 
 
 def tensor_collection_bytes(values: Any) -> int:
+    """Sum tensor storage bytes in a flat collection or mapping."""
     total = 0
     if hasattr(values, "values"):
         iterable = values.values()
@@ -90,6 +95,7 @@ def estimate_kv_cache_bytes(
     sequence_tokens: int,
     dtype_name: str | None,
 ) -> tuple[int | None, dict[str, Any]]:
+    """Estimate decoder KV-cache bytes from architecture and sequence length."""
     layers = architecture.get("num_hidden_layers")
     hidden = architecture.get("hidden_size")
     attention_heads = architecture.get("num_attention_heads")
@@ -123,6 +129,7 @@ def build_gpu_memory_breakdown(
     kv_cache_bytes: int | None,
     kv_estimate_details: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build an explicitly approximate post-generation VRAM breakdown."""
     model_gb = bytes_to_gb(cuda_model_bytes) if cuda_model_bytes is not None else None
     prompt_gb = bytes_to_gb(prompt_tensor_bytes)
     other_after = (
@@ -160,6 +167,7 @@ def build_gpu_memory_breakdown(
 
 
 def get_system_metadata() -> dict[str, Any]:
+    """Collect software versions and basic GPU metadata."""
     gpu = get_gpu_status()
     return {
         "gpu_name": gpu["name"],
@@ -172,12 +180,14 @@ def get_system_metadata() -> dict[str, Any]:
 
 
 def benchmark_filename(timestamp: datetime | None = None) -> str:
+    """Create a timestamped benchmark JSON filename."""
     timestamp = timestamp or datetime.now(timezone.utc)
     utc_timestamp = timestamp.astimezone(timezone.utc)
     return f"benchmark_{utc_timestamp:%Y%m%dT%H%M%S_%fZ}.json"
 
 
 def sanitize_model_name(model_name: str) -> str:
+    """Convert a model identifier into a safe directory name."""
     sanitized = model_name.strip().replace("/", "--").replace("\\", "--")
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", sanitized)
     sanitized = sanitized.strip(".-")
@@ -188,6 +198,7 @@ def save_benchmark_result(
     result: dict[str, Any],
     output_directory: Path = DEFAULT_OUTPUT_DIRECTORY,
 ) -> Path:
+    """Persist one result beneath its model/profile directory and return its path."""
     model_directory = output_directory / sanitize_model_name(
         str(result.get("model", "unknown-model"))
     )

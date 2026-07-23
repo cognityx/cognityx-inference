@@ -1,3 +1,5 @@
+"""Compute optional, user-priced hosted-API comparison estimates."""
+
 from __future__ import annotations
 
 import math
@@ -10,6 +12,7 @@ COST_DISCLAIMER = (
 
 @dataclass
 class CostConfig:
+    """User-supplied pricing assumptions for API-equivalent comparisons."""
     enabled: bool = False
     pricing_label: str | None = None
     input_price_per_million_tokens: float | None = None
@@ -17,6 +20,7 @@ class CostConfig:
     currency: str = "USD"
 
     def to_dict(self) -> dict[str, object]:
+        """Return a JSON-serializable representation of the configuration."""
         return asdict(self)
 
 
@@ -26,6 +30,20 @@ def configure_cost_model(
     output_price: float,
     currency: str = "USD",
 ) -> CostConfig:
+    """Create an enabled cost configuration.
+
+    Args:
+        label: Human-readable pricing source or model label.
+        input_price: Price per million input tokens.
+        output_price: Price per million output tokens.
+        currency: Currency code used only for display.
+
+    Returns:
+        Enabled and validated pricing configuration.
+
+    Raises:
+        ValueError: If either price is negative or non-finite.
+    """
     for name, value in (("input price", input_price), ("output price", output_price)):
         if not math.isfinite(value) or value < 0:
             raise ValueError(f"{name} must be a finite non-negative number")
@@ -37,6 +55,16 @@ def estimate_api_equivalent_cost(
     prompt_tokens: int,
     output_tokens: int,
 ) -> dict[str, object]:
+    """Estimate hosted token charges for one completed request.
+
+    Args:
+        config: Pricing configuration; disabled configurations produce no cost.
+        prompt_tokens: Number of input tokens.
+        output_tokens: Number of generated tokens.
+
+    Returns:
+        JSON-ready assumptions, component costs, total, and disclaimer.
+    """
     if not config.enabled:
         return {
             **config.to_dict(),

@@ -1,3 +1,5 @@
+"""Inspect Hugging Face checkpoint downloads before loading a model."""
+
 from __future__ import annotations
 
 import os
@@ -20,6 +22,7 @@ IGNORE_PATTERNS = (
 
 @dataclass(frozen=True)
 class DownloadPreflight:
+    """Cached and missing checkpoint artifacts plus local capacity information."""
     model: str
     cached_checkpoint: bool
     cached_bytes: int
@@ -30,6 +33,7 @@ class DownloadPreflight:
     available_disk_bytes: int
 
     def to_dict(self) -> dict[str, Any]:
+        """Return the immutable preflight result as a serializable mapping."""
         return asdict(self)
 
 
@@ -46,6 +50,24 @@ def inspect_download(
     cache_dir: str | Path | None = None,
     dry_runner: Callable[..., list[Any]] = snapshot_download,
 ) -> DownloadPreflight:
+    """Inspect a local path or perform a Hugging Face Hub dry run.
+
+    Args:
+        model: Local checkpoint path or Hugging Face model identifier.
+        cache_dir: Optional Hub cache directory.
+        dry_runner: Injectable Hub dry-run collaborator used by tests.
+
+    Returns:
+        File, byte, cache-location, and disk-capacity details.
+
+    Raises:
+        OSError: If local files or disk information cannot be inspected.
+        huggingface_hub.errors.HfHubHTTPError: If Hub metadata is unavailable.
+
+    Side Effects:
+        Reads local metadata and may make a Hub metadata request, but does not
+        download checkpoint content.
+    """
     local = Path(model).expanduser()
     if local.exists():
         files = tuple(str(path.relative_to(local)) for path in local.rglob("*") if path.is_file())
@@ -78,4 +100,5 @@ def inspect_download(
 
 
 def format_bytes(value: int) -> str:
+    """Format a byte count as a two-decimal GiB string."""
     return f"{value / 1024**3:.2f} GiB"

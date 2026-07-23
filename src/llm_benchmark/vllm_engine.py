@@ -1,3 +1,5 @@
+"""Optional persistent vLLM adapter with delta streaming and compatible reports."""
+
 from __future__ import annotations
 
 import gc
@@ -174,6 +176,7 @@ class VLLMLLM:
         }
 
     def unload_model(self) -> None:
+        """Release the vLLM engine and local references."""
         self.model = None
         if getattr(self, "engine", None) is not None:
             del self.engine
@@ -181,6 +184,7 @@ class VLLMLLM:
         gc.collect()
 
     def switch_model(self, *_args: Any, **_kwargs: Any) -> None:
+        """Reject unsupported in-process vLLM model switching."""
         raise VLLMEngineError(
             "Interactive /model switching is not yet supported by the vLLM adapter; "
             "restart the isolated vLLM process for a different model."
@@ -188,6 +192,7 @@ class VLLMLLM:
 
     @staticmethod
     def split_thinking_and_answer(text: str) -> tuple[str, str]:
+        """Parse Qwen reasoning and final-answer sections."""
         from llm_benchmark.llm import LocalLLM
 
         return LocalLLM.split_thinking_and_answer(text)
@@ -210,6 +215,7 @@ class VLLMLLM:
         return token_ids
 
     def count_prompt_tokens(self, prompt: str) -> int:
+        """Count tokens after applying the active chat template."""
         return len(self._prompt_token_ids(prompt))
 
     def generate(
@@ -219,6 +225,7 @@ class VLLMLLM:
         run_type: str = "interactive",
         benchmark_name: str | None = None,
     ) -> dict[str, Any]:
+        """Generate with vLLM and normalize output to the shared result schema."""
         from vllm import SamplingParams
 
         prompt_started = time.perf_counter()

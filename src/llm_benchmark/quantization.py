@@ -1,3 +1,5 @@
+"""Resolve requested, checkpoint-native, and runtime quantization profiles."""
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -27,6 +29,7 @@ class BitsAndBytesUnavailableError(QuantizationResolutionError):
 
 @dataclass(frozen=True)
 class HardwareInfo:
+    """CUDA capability facts used to resolve safe compute dtypes."""
     accelerator_type: str
     gpu_name: str | None
     compute_capability: str | None
@@ -44,6 +47,7 @@ class HardwareInfo:
 
 @dataclass(frozen=True)
 class QuantizationResolution:
+    """Resolved checkpoint and runtime quantization loading strategy."""
     requested_profile: str
     effective_profile: str
     checkpoint_quantized: bool
@@ -60,6 +64,7 @@ class QuantizationResolution:
     hardware: HardwareInfo
 
     def load_kwargs(self) -> dict[str, Any]:
+        """Return keyword arguments for ``from_pretrained``."""
         kwargs: dict[str, Any] = {"device_map": "auto"}
         if self.compute_dtype is not None:
             kwargs["torch_dtype"] = self.compute_dtype
@@ -68,6 +73,7 @@ class QuantizationResolution:
         return kwargs
 
     def diagnostic(self) -> dict[str, Any]:
+        """Return a JSON-serializable explanation of the resolution."""
         result = {
             "requested_profile": self.requested_profile,
             "effective_profile": self.effective_profile,
@@ -91,6 +97,7 @@ class QuantizationResolution:
 
 
 def bitsandbytes_available() -> bool:
+    """Report whether the optional bitsandbytes package can be imported."""
     return importlib.util.find_spec("bitsandbytes") is not None
 
 
@@ -102,6 +109,7 @@ def _package_version(name: str) -> str | None:
 
 
 def collect_hardware_info() -> HardwareInfo:
+    """Inspect accelerator, CUDA, and optional runtime compatibility."""
     gpu_name: str | None = None
     compute_capability: str | None = None
     accelerator = torch.accelerator.current_accelerator() or torch.device("cpu")
@@ -232,6 +240,7 @@ def detect_loaded_native_quantization_runtime(
 
 
 def extract_checkpoint_quantization_method(config: Any) -> str | None:
+    """Read the native quantization method declared by a checkpoint config."""
     quantization_config = getattr(config, "quantization_config", None)
     if quantization_config is None:
         return None
@@ -248,6 +257,7 @@ def extract_checkpoint_quantization_method(config: Any) -> str | None:
 
 
 def checkpoint_has_quantization_config(config: Any) -> bool:
+    """Return whether a checkpoint declares native quantization."""
     return getattr(config, "quantization_config", None) is not None
 
 
@@ -258,6 +268,12 @@ def resolve_load_profile(
     *,
     has_bitsandbytes: bool | None = None,
 ) -> QuantizationResolution:
+    """Resolve a requested profile against checkpoint metadata and hardware.
+
+    Raises:
+        BitsAndBytesUnavailableError: If INT4/INT8 lacks its runtime.
+        NativeQuantizationRequiredError: If native quantization is unavailable.
+    """
     hardware = hardware or collect_hardware_info()
     native_method = extract_checkpoint_quantization_method(config)
     checkpoint_quantized = checkpoint_has_quantization_config(config)

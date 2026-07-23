@@ -1,3 +1,8 @@
+"""Legacy single-file prototype retained for historical reference.
+
+The supported executable delegates to :mod:`llm_benchmark.app` through
+:mod:`llm_benchmark.main`; this module is not part of the public API.
+"""
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -50,6 +55,7 @@ print(response)
 
 
 def main():
+    """Print the legacy prototype greeting."""
     print("Hello from llm-benchmark!")
 
 

@@ -1,3 +1,5 @@
+"""Classify, format, and persist model-loading failures and placement errors."""
+
 from __future__ import annotations
 
 import json
@@ -308,6 +310,7 @@ def attempted_load_configuration(
     load_kwargs: dict[str, Any] | None = None,
     resolution: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Describe the requested loading configuration for failure reports."""
     load_kwargs = load_kwargs or {}
     quantization_config = load_kwargs.get("quantization_config")
     quantization_bits = 4 if profile == "int4" else 8 if profile == "int8" else None
@@ -345,6 +348,7 @@ def wrap_expected_model_load_failure(
     loader_diagnostic: dict[str, Any] | None = None,
     loading_stage: str | None = None,
 ) -> ModelPlacementError | None:
+    """Wrap a recognized load exception with structured diagnostics."""
     category = classify_model_load_failure(exception)
     if category is None and loading_stage == "model_initialization":
         category = "model_load_runtime_error"
@@ -432,6 +436,7 @@ def _suggestions(error: ModelPlacementError) -> list[str]:
 
 
 def format_model_load_failure(error: ModelPlacementError) -> str:
+    """Render a categorized model-loading failure for the terminal."""
     gpu = get_gpu_status()
     attempted = error.attempted_configuration
     quantization = "disabled"
@@ -527,6 +532,7 @@ def save_failed_load(
     error: ModelPlacementError,
     directory: Path = FAILED_LOAD_DIRECTORY,
 ) -> Path:
+    """Write structured failed-load diagnostics and return the new path."""
     directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc)
     stem = (
@@ -576,6 +582,7 @@ def save_failed_load(
 
 
 def report_model_load_failure(error: ModelPlacementError) -> Path | None:
+    """Print and best-effort persist a model-loading failure."""
     print(format_model_load_failure(error))
     try:
         path = save_failed_load(error)

@@ -1,3 +1,5 @@
+"""Represent loading choices and estimate GPU/CPU placement capacity."""
+
 from __future__ import annotations
 
 import os
@@ -12,6 +14,7 @@ from llm_benchmark.model_size import nominal_bits_for_profile
 
 @dataclass(frozen=True)
 class ModelLoadOptions:
+    """Immutable decisions passed from the terminal workflow to model loaders."""
     loading_choice: str = "gpu_only"
     allow_download: bool = True
     cpu_offload_allowed: bool = False
@@ -25,6 +28,7 @@ class ModelLoadOptions:
 
 
 def process_ram_gib() -> float:
+    """Return current process resident memory in GiB, using a portable fallback."""
     try:
         with open("/proc/self/statm", encoding="utf-8") as status:
             pages = int(status.read().split()[1])
@@ -34,10 +38,12 @@ def process_ram_gib() -> float:
 
 
 def system_ram_gib() -> float:
+    """Return installed system RAM in GiB."""
     return os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE") / 1024**3
 
 
 def gpu_memory() -> tuple[float | None, float | None]:
+    """Return total and currently free CUDA memory in GiB, if CUDA is available."""
     if not torch.cuda.is_available():
         return None, None
     free, total = torch.cuda.mem_get_info()
@@ -45,6 +51,15 @@ def gpu_memory() -> tuple[float | None, float | None]:
 
 
 def controlled_max_memory(gpu_headroom_fraction: float = 0.15) -> dict[Any, str]:
+    """Build an Accelerate-compatible GPU-first memory budget.
+
+    Args:
+        gpu_headroom_fraction: Fraction of free GPU memory reserved for runtime
+            overhead.
+
+    Returns:
+        Device-to-capacity mapping suitable for ``from_pretrained``.
+    """
     total, free = gpu_memory()
     if free is None:
         return {"cpu": f"{max(1, int(system_ram_gib() * 0.8))}GiB"}
@@ -53,6 +68,7 @@ def controlled_max_memory(gpu_headroom_fraction: float = 0.15) -> dict[Any, str]
 
 
 def estimate_capacity(parameter_count: int | None, profile: str) -> dict[str, Any]:
+    """Compare nominal raw model weights with current free GPU memory."""
     bits = nominal_bits_for_profile(profile)
     raw = round(parameter_count * bits / 8) if parameter_count and bits else None
     total, free = gpu_memory()
@@ -74,6 +90,7 @@ def estimate_capacity(parameter_count: int | None, profile: str) -> dict[str, An
 
 
 def load_diagnostics(options: ModelLoadOptions, before_ram: float, after_ram: float, device_map: dict[str, Any]) -> dict[str, Any]:
+    """Summarize effective GPU, CPU, and disk placement after model loading."""
     cpu = [name for name, device in device_map.items() if str(device).lower() == "cpu"]
     disk = [name for name, device in device_map.items() if str(device).lower() == "disk"]
     gpu = [name for name, device in device_map.items() if str(device).lower() not in {"cpu", "disk"}]

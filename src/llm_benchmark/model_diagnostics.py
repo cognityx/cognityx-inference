@@ -1,3 +1,5 @@
+"""Extract placement, dtype, attention, cache, and architecture diagnostics."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
@@ -30,6 +32,7 @@ def _config_value(config: Any, *names: str) -> Any:
 
 
 def normalize_device(device: Any) -> str:
+    """Return a stable lowercase label for a device-map value."""
     if isinstance(device, int):
         return f"cuda:{device}"
     if isinstance(device, torch.device):
@@ -41,6 +44,7 @@ def analyze_device_map(
     device_map: Mapping[str, Any] | None,
     parameter_devices: Iterable[Any] = (),
 ) -> dict[str, Any]:
+    """Summarize device placement and detect CPU or disk offload."""
     normalized_map = (
         {str(module): normalize_device(device) for module, device in device_map.items()}
         if device_map
@@ -69,6 +73,7 @@ def analyze_device_map(
 
 
 def detect_attention_implementation(model: Any) -> str:
+    """Return the configured attention backend, or ``unknown``."""
     config = _attribute(model, "config")
     for source, name in (
         (config, "_attn_implementation"),
@@ -83,6 +88,7 @@ def detect_attention_implementation(model: Any) -> str:
 
 
 def extract_cache_configuration(model: Any) -> dict[str, Any]:
+    """Describe generation KV-cache enablement and implementation."""
     generation_config = _attribute(model, "generation_config")
     model_config = _attribute(model, "config")
 
@@ -122,6 +128,7 @@ def extract_architecture_metadata(
     config: Any,
     total_parameters: int | None,
 ) -> dict[str, Any]:
+    """Extract portable architecture fields from a model configuration."""
     architectures = _config_value(config, "architectures")
     if isinstance(architectures, str):
         architecture = architectures
@@ -161,6 +168,7 @@ def extract_quantization_metadata(
     requested_profile: str,
     requested_compute_dtype: Any = None,
 ) -> dict[str, Any]:
+    """Derive effective precision and quantization metadata from a loaded model."""
     config = _attribute(model, "config")
     quantization_config = _attribute(config, "quantization_config")
     if quantization_config is None:
@@ -216,6 +224,7 @@ def collect_model_runtime(
     model: Any,
     load_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Collect placement, dtype, attention, cache, and architecture diagnostics."""
     dtype_values: set[str] = set()
     parameter_devices: set[Any] = set()
     for parameter in model.parameters():

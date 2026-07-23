@@ -1,0 +1,48 @@
+site_name: LLM Benchmark
+site_description: Architecture, usage, and API documentation for llm-benchmark
+repo_name: llm-benchmark
+docs_dir: docs
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - content.code.copy
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - Architecture: architecture.md
+  - Modules: modules/index.md
+  - Design patterns: design-patterns.md
+  - API reference: api/index.md
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: true
+            members_order: source
+            separate_signature: true
+            signature_crossrefs: true
+            filters:
+              - "!^_"
+strict: true

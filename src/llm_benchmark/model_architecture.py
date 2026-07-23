@@ -1,3 +1,5 @@
+"""Classify dense and mixture-of-experts model architectures."""
+
 from __future__ import annotations
 
 import re
@@ -99,6 +101,7 @@ def _family_name(config: Any) -> str | None:
 
 
 def classify_architecture(config: Any) -> str:
+    """Classify a configuration as dense, MoE, multimodal, or unknown."""
     moe = extract_moe_config(config)
     identifiers = " ".join(_architecture_identifiers(config)).casefold()
     if (
@@ -217,6 +220,7 @@ def classify_model_family(
     logical_count_reliable: bool,
     model: Any = None,
 ) -> dict[str, Any]:
+    """Build a model-family summary including parameter and MoE estimates."""
     architecture_type = classify_architecture(config)
     moe_config = extract_moe_config(config)
     explicit_active = _explicit_active_parameters(model)

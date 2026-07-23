@@ -1,3 +1,5 @@
+"""Transformers model lifecycle, streamed generation, parsing, and metrics."""
+
 from __future__ import annotations
 
 import gc
@@ -45,6 +47,7 @@ from llm_benchmark.loading_decision import ModelLoadOptions, load_diagnostics, p
 
 @dataclass
 class GenerationSettings:
+    """Mutable generation parameters shared by the interactive application."""
     enable_thinking: bool = True
     max_new_tokens: int = 1024
     temperature: float = 0.6
@@ -58,7 +61,7 @@ LOAD_PROFILES = ("bf16", "fp16", "int8", "int4", "int4-double", "gptq3", "gptq2"
 
 
 class LoadProfileError(ValueError):
-    pass
+    """Raised when a requested model load profile is unsupported."""
 
 
 class GenerationCancelled(RuntimeError):
@@ -93,6 +96,7 @@ class TimingTextIteratorStreamer(TextIteratorStreamer):
         self.first_generated_token_at: float | None = None
 
     def put(self, value: Any) -> None:
+        """Record the first generated-token time, then enqueue streamer data."""
         is_prompt = self.skip_prompt and self.next_tokens_are_prompt
         if not is_prompt and self.first_generated_token_at is None:
             self.first_generated_token_at = time.perf_counter()
@@ -100,6 +104,17 @@ class TimingTextIteratorStreamer(TextIteratorStreamer):
 
 
 def validate_load_profile(profile: str) -> str:
+    """Normalize and validate a model-loading profile.
+
+    Args:
+        profile: User-provided profile name.
+
+    Returns:
+        The lowercase validated profile.
+
+    Raises:
+        LoadProfileError: If the profile is not supported.
+    """
     normalized = profile.lower()
     if normalized not in LOAD_PROFILES:
         raise LoadProfileError(
@@ -135,6 +150,7 @@ def build_model_load_kwargs(
 
 
 def count_text_tokens(tokenizer: Any, text: str) -> int:
+    """Count tokens in text without tokenizer-added special tokens."""
     if not text:
         return 0
     return len(tokenizer.encode(text, add_special_tokens=False))
@@ -148,6 +164,7 @@ def build_quality_indicators(
     finish_reason: str,
     generation_truncated: bool,
 ) -> dict[str, Any]:
+    """Build deterministic completeness indicators for one generated response."""
     return {
         "answer_complete": not generation_truncated,
         "reasoning_detected": bool(thinking.strip()),
@@ -222,6 +239,7 @@ def detect_finish_reason(
     eos_token_ids: set[int],
     max_new_tokens: int,
 ) -> tuple[str, bool]:
+    """Classify generation termination as EOS, length-limited, or unknown."""
     if any(token_id in eos_token_ids for token_id in generated_token_ids):
         return "eos", False
 
@@ -232,6 +250,12 @@ def detect_finish_reason(
 
 
 class LocalLLM:
+    """Own a persistent Transformers model and execute streamed generations.
+
+    The instance keeps model weights resident between prompts and collaborates
+    with loading, quantization, diagnostics, and reporting helpers. Model loads
+    and generations may allocate substantial CPU and GPU memory.
+    """
     def __init__(
         self,
         model_name: str,
@@ -253,6 +277,7 @@ class LocalLLM:
         self.load_model(model_name, self.requested_load_profile)
 
     def unload_model(self) -> None:
+        """Release model resources and clear available CUDA allocator caches."""
         if self.model is not None:
             del self.model
             self.model = None
@@ -272,6 +297,20 @@ class LocalLLM:
             torch.cuda.ipc_collect()
 
     def load_model(self, model_name: str, load_profile: str = "bf16") -> None:
+        """Load tokenizer, model weights, placement, and runtime diagnostics.
+
+        Args:
+            model_name: Hugging Face repository ID or local model path.
+            load_profile: Precision or quantization profile.
+
+        Raises:
+            ModelPlacementError: If requested placement cannot be honored.
+            LoadProfileError: If the profile cannot be resolved.
+
+        Side Effects:
+            Downloads artifacts when permitted, replaces the resident model,
+            allocates device memory, and prints a load summary.
+        """
         load_profile = validate_load_profile(load_profile)
         attempted = attempted_load_configuration(load_profile)
         if self.model is not None:
@@ -568,6 +607,7 @@ class LocalLLM:
         load_profile: str = "bf16",
         load_options: ModelLoadOptions | None = None,
     ) -> None:
+        """Replace the resident model and restore the previous one on placement failure."""
         load_profile = validate_load_profile(load_profile)
         previous_model = self.model_name
         previous_profile = self.requested_load_profile
@@ -647,6 +687,26 @@ class LocalLLM:
         run_type: str = "interactive",
         benchmark_name: str | None = None,
     ) -> dict[str, Any]:
+        """Generate, stream, parse, and measure one model response.
+
+        Args:
+            prompt: Fully assembled user prompt.
+            on_text: Optional callback invoked for each streamed text fragment.
+            run_type: Run classification stored in the result.
+            benchmark_name: Stable benchmark identifier, when applicable.
+
+        Returns:
+            A JSON-serializable result containing output sections, metrics,
+            diagnostics, and run metadata.
+
+        Raises:
+            GenerationCancelled: If the user interrupts generation.
+            BaseException: Propagates failures raised by ``model.generate``.
+
+        Side Effects:
+            Runs a background generation thread, calls ``on_text``, and updates
+            CUDA peak-memory counters.
+        """
         request_started = time.perf_counter()
         prompt_preparation_started = request_started
         inputs = self._prepare_text_inputs(prompt)

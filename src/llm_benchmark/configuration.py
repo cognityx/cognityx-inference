@@ -1,3 +1,5 @@
+"""Load and validate generation defaults from TOML configuration files."""
+
 from __future__ import annotations
 
 import tomllib
@@ -29,7 +31,21 @@ def _validate_setting(name: str, value: Any, default: Any) -> Any:
 
 
 def load_generation_settings(path: Path) -> GenerationSettings:
-    """Load generation defaults from the ``[generation]`` TOML table."""
+    """Load generation defaults from the ``[generation]`` TOML table.
+
+    Args:
+        path: TOML file to read.
+
+    Returns:
+        Validated settings, with omitted values supplied by ``GenerationSettings``.
+
+    Raises:
+        ConfigurationError: If the file is missing, malformed, or contains an
+            unknown or invalid generation setting.
+
+    Side Effects:
+        Reads ``path`` from the local filesystem.
+    """
     try:
         with path.open("rb") as config_file:
             document = tomllib.load(config_file)

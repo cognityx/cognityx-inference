@@ -1,3 +1,5 @@
+"""Command-line parsing and the interactive benchmark application loop."""
+
 from __future__ import annotations
 
 import argparse
@@ -59,6 +61,7 @@ CONTEXT_PROMPT_PREVIEW_WORDS = 24
 
 
 def prompt_preview(prompt: str, word_limit: int = CONTEXT_PROMPT_PREVIEW_WORDS) -> str:
+    """Return a word-bounded prompt preview for compact saved reports."""
     words = prompt.split()
     if len(words) <= word_limit:
         return prompt
@@ -66,6 +69,17 @@ def prompt_preview(prompt: str, word_limit: int = CONTEXT_PROMPT_PREVIEW_WORDS) 
 
 
 def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
+    """Parse and validate startup, engine, context, and preparation arguments.
+
+    Args:
+        arguments: Explicit arguments for tests, or ``None`` for ``sys.argv``.
+
+    Returns:
+        Validated argparse namespace.
+
+    Raises:
+        SystemExit: If argparse encounters help or invalid arguments.
+    """
     parser = argparse.ArgumentParser(
         description="Run a persistent local LLM benchmark chat.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -209,6 +223,7 @@ def ensure_engine_runtime(engine: str) -> None:
 
 
 def parse_model_command(user_input: str) -> tuple[str, str]:
+    """Parse ``/model MODEL [PROFILE]`` and apply the default profile."""
     parts = user_input.split()
     if len(parts) not in {2, 3}:
         raise ValueError("Usage: /model REPOSITORY_NAME [PROFILE]")
@@ -217,10 +232,16 @@ def parse_model_command(user_input: str) -> tuple[str, str]:
 
 
 def benchmark_request() -> tuple[str, str, str]:
+    """Return the fixed benchmark prompt, run type, and benchmark name."""
     return BENCHMARK_PROMPT, "benchmark", BENCHMARK_NAME
 
 
 def approve_download(preflight: Any, *, allow: bool, deny: bool, non_interactive: bool, input_fn: Any = input) -> tuple[bool, dict[str, Any]]:
+    """Resolve download approval from flags or an interactive confirmation.
+
+    Side Effects:
+        May print a download summary and read one terminal response.
+    """
     print()
     if preflight.cached_checkpoint:
         print("Model checkpoint already cached")
@@ -244,6 +265,7 @@ def approve_download(preflight: Any, *, allow: bool, deny: bool, non_interactive
 
 
 def print_capacity(estimate: dict[str, Any]) -> None:
+    """Print a human-readable pre-load capacity estimate."""
     print("\nPre-load memory estimate")
     print("------------------------")
     print(f"Logical parameters: {estimate['logical_parameters'] or 'unknown'}")
@@ -257,6 +279,7 @@ def print_capacity(estimate: dict[str, Any]) -> None:
 
 
 def choose_loading_mode(profile: str, *, cpu_flag: bool, non_interactive: bool, input_fn: Any = input) -> tuple[str, str, str | None]:
+    """Choose GPU, low-bit, CPU-offload, or checkpoint loading mode."""
     if non_interactive:
         return ("gpu_cpu_offload" if cpu_flag else "gpu_only"), profile, None
     print("\nSelect loading mode:\n")
@@ -280,6 +303,14 @@ def choose_loading_mode(profile: str, *, cpu_flag: bool, non_interactive: bool, 
 
 
 def prepare_load(model: str, profile: str, *, allow_download: bool, no_download: bool, non_interactive: bool, allow_cpu_offload: bool, input_fn: Any = input) -> tuple[str, str, ModelLoadOptions]:
+    """Run preflight, capacity estimation, and loading-choice collection.
+
+    Returns:
+        Effective model ID, profile, and immutable loader options.
+
+    Side Effects:
+        Reads Hub metadata and may prompt the user; it does not load weights.
+    """
     original = model
     confirmations: dict[str, Any] = {}
     while True:
@@ -310,6 +341,7 @@ def prepare_load(model: str, profile: str, *, allow_download: bool, no_download:
 
 
 def parse_cost_model_command(user_input: str) -> CostConfig:
+    """Parse and validate an interactive ``/cost-model`` command."""
     parts = shlex.split(user_input)
     if len(parts) != 4:
         raise ValueError("Usage: /cost-model LABEL INPUT_PRICE_PER_MILLION OUTPUT_PRICE_PER_MILLION")
@@ -322,6 +354,7 @@ def parse_cost_model_command(user_input: str) -> CostConfig:
 
 
 def parse_cost_command(user_input: str) -> tuple[str, CostConfig | None]:
+    """Parse cost configuration, status, or disable commands."""
     if user_input == "/cost-off":
         return "off", None
     if user_input == "/cost-status":
@@ -332,6 +365,7 @@ def parse_cost_command(user_input: str) -> tuple[str, CostConfig | None]:
 
 
 def parse_context_command(user_input: str) -> tuple[str | None, int | None]:
+    """Parse context status, disable, or ``NAME TOKENS`` commands."""
     parts = user_input.split()
     if parts == ["/context"]:
         raise ValueError("status")
@@ -349,6 +383,7 @@ def parse_context_command(user_input: str) -> tuple[str | None, int | None]:
 
 
 def parse_value(current_value: Any, new_value: str) -> Any:
+    """Convert an interactive setting value to the current field's type."""
     if isinstance(current_value, bool):
         normalized = new_value.lower()
 
@@ -369,6 +404,7 @@ def parse_value(current_value: Any, new_value: str) -> Any:
 
 
 def print_help() -> None:
+    """Print interactive command help to standard output."""
     print(
         """
 Commands
@@ -440,6 +476,7 @@ Commands
 
 
 def print_metrics(result: dict[str, Any]) -> None:
+    """Print timing, token, cache, and GPU metrics in stable terminal order."""
     metrics = result["metrics"]
     time_to_first_token = metrics["time_to_first_token_seconds"]
     peak_vram = metrics["peak_vram_gb"]
@@ -542,6 +579,11 @@ def build_status(
     detailed: bool = False,
     active_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Build a concise status snapshot for ``/status``.
+
+    Returns:
+        JSON-serializable model, runtime, settings, GPU, and latest-run state.
+    """
     runtime = llm.model_runtime or {}
     cache = runtime.get("kv_cache", {})
     model_size = runtime.get("model_size", {})
@@ -612,6 +654,11 @@ def process_prompt(
     cost_config: CostConfig | None = None,
     context_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Generate, enrich, display, and persist one prompt result.
+
+    Side Effects:
+        Streams terminal output and writes a timestamped benchmark JSON file.
+    """
     print("\nResponse")
     print("--------")
     print("Press Ctrl+C to stop this generation and keep the model loaded.\n")
@@ -711,6 +758,12 @@ def run(
     vllm_gpu_memory_utilization: float = 0.90,
     vllm_prefix_caching: bool = True,
 ) -> None:
+    """Load one persistent engine and run the interactive command loop.
+
+    Side Effects:
+        Loads model weights, reads terminal input, writes reports, and releases
+        the model when the loop exits.
+    """
     settings = load_generation_settings(config_path)
     print(f"Generation settings loaded from: {config_path}")
     original_model = model_name
@@ -987,6 +1040,11 @@ def run(
 
 
 def main(arguments: list[str] | None = None) -> None:
+    """Execute context preparation or start the benchmark application.
+
+    This boundary converts expected configuration and loading failures into concise
+    terminal diagnostics rather than tracebacks.
+    """
     args = parse_args(arguments)
     try:
         ensure_engine_runtime(args.engine)

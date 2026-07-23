@@ -1,3 +1,5 @@
+"""Estimate logical parameter counts and physical model storage."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -9,14 +11,17 @@ BYTES_PER_GIB = 1024**3
 
 
 def bytes_to_gib(value: int | float) -> float:
+    """Convert a byte count to gibibytes."""
     return round(value / BYTES_PER_GIB, 3)
 
 
 def nominal_bits_for_profile(profile: str) -> int | None:
+    """Return nominal storage bits for a recognized load profile."""
     return {"bf16": 16, "fp16": 16, "int8": 8, "int4": 4, "int4-double": 4, "gptq3": 3, "gptq2": 2}.get(profile)
 
 
 def estimate_parameter_count_from_config(config: Any) -> int | None:
+    """Read a declared parameter count from common configuration fields."""
     holder = type("ConfigHolder", (), {"config": config})()
     return _config_derived_parameter_count(holder)
 

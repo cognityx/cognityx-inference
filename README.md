@@ -3,6 +3,20 @@
 Run a persistent local Transformers model with streaming output and saved benchmark
 diagnostics.
 
+## Documentation
+
+Serve the MkDocs Material site locally:
+
+```bash
+uv run mkdocs serve
+```
+
+Build the documentation with warnings treated as errors:
+
+```bash
+uv run mkdocs build --strict
+```
+
 Before loading, a Hugging Face Hub dry run reports cached and missing checkpoint
 bytes without downloading weights. Missing downloads require confirmation (No by
 default). Scripts should combine `--non-interactive` with either `--allow-download`

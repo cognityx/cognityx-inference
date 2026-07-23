@@ -1,3 +1,5 @@
+"""Choose the Transformers AutoModel loader supported by a model config."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,12 +21,14 @@ class UnsupportedModelArchitectureError(ValueError):
 
 @dataclass(frozen=True)
 class ModelLoaderSelection:
+    """Selected Transformers task, loader class, and tokenizer/processor mode."""
     task: str
     auto_model_class: Any
     selection_source: str
     uses_processor: bool
 
     def diagnostic(self, config: Any) -> dict[str, Any]:
+        """Describe the selection in a JSON-ready form."""
         return {
             "config_class": type(config).__name__,
             "task": self.task,
@@ -45,7 +49,17 @@ def _mapping_supports(auto_model_class: Any, config: Any) -> bool:
 
 
 def select_model_loader(config: Any) -> ModelLoaderSelection:
-    """Select a generation loader from Transformers' configuration mappings."""
+    """Select a generation loader from Transformers' configuration mappings.
+
+    Args:
+        config: Loaded Transformers configuration object.
+
+    Returns:
+        A causal-LM or image-text-to-text loader selection.
+
+    Raises:
+        UnsupportedModelArchitectureError: If no supported mapping exists.
+    """
     if _mapping_supports(AutoModelForCausalLM, config):
         return ModelLoaderSelection(
             task="causal-lm",

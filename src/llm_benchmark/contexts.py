@@ -1,3 +1,5 @@
+"""Prepare tokenized corpora and assemble bounded long-context prompts."""
+
 from __future__ import annotations
 
 import json
@@ -18,6 +20,7 @@ class ContextError(ValueError):
 
 @dataclass(frozen=True)
 class ContextChunk:
+    """One token-counted corpus fragment stored by a context provider."""
     chunk_id: str
     source: str
     text: str
@@ -26,6 +29,7 @@ class ContextChunk:
 
 @dataclass(frozen=True)
 class PreparedContext:
+    """Summary returned after writing a prepared context and manifest."""
     name: str
     provider: str
     chunks_path: str
@@ -37,35 +41,48 @@ class PreparedContext:
 
 @dataclass(frozen=True)
 class ContextPrompt:
+    """Completed prompt text paired with compact context provenance metadata."""
     prompt: str
     metadata: dict[str, Any]
 
 
 class ContextProvider(Protocol):
+    """Strategy interface for retrieving prepared chunks by context name."""
     name: str
 
-    def load(self, context_name: str) -> list[ContextChunk]: ...
+    def load(self, context_name: str) -> list[ContextChunk]:
+        """Load prepared chunks in deterministic order."""
+        ...
 
 
 def validate_context_name(name: str) -> str:
+    """Validate a context name for safe use below the registry root.
+
+    Raises:
+        ContextError: If path traversal or separators are present.
+    """
     if not name or name in {".", ".."} or any(part in name for part in ("/", "\\")):
         raise ContextError("Context names may contain no path separators")
     return name
 
 
 class FolderContextProvider:
+    """Read prepared context chunks from the filesystem registry."""
     name = "folder"
 
     def __init__(self, root: Path = CONTEXTS_ROOT) -> None:
         self.root = root
 
     def directory(self, context_name: str) -> Path:
+        """Return the validated directory for ``context_name``."""
         return self.root / validate_context_name(context_name)
 
     def chunks_path(self, context_name: str) -> Path:
+        """Return the JSONL chunk path for ``context_name``."""
         return self.directory(context_name) / "chunks.jsonl"
 
     def load(self, context_name: str) -> list[ContextChunk]:
+        """Read context chunks, raising ``ContextError`` for invalid data."""
         path = self.chunks_path(context_name)
         if not path.is_file():
             raise ContextError(
@@ -88,6 +105,7 @@ CONTEXT_PROVIDERS: dict[str, Callable[[], ContextProvider]] = {
 
 
 def get_context_provider(name: str = "folder") -> ContextProvider:
+    """Construct a registered provider or raise ``ContextError``."""
     try:
         return CONTEXT_PROVIDERS[name]()
     except KeyError as exc:
@@ -102,6 +120,11 @@ def _file_documents(path: Path) -> Iterator[tuple[str, str]]:
 
 
 def corpus_documents(corpus: str) -> Iterable[tuple[str, str]]:
+    """Return source/text pairs from a path or WikiText-103 Raw.
+
+    Side Effects:
+        Reads files or downloads/reads the dataset through ``datasets``.
+    """
     if corpus == "wikitext-103-raw":
         try:
             from datasets import load_dataset
@@ -122,6 +145,11 @@ def chunk_documents(
     chunk_tokens: int,
     overlap: int,
 ) -> Iterator[ContextChunk]:
+    """Yield tokenizer-bounded chunks with configurable token overlap.
+
+    Raises:
+        ContextError: If chunk size or overlap is invalid.
+    """
     if chunk_tokens <= 0:
         raise ContextError("chunk_tokens must be greater than zero")
     if overlap < 0 or overlap >= chunk_tokens:
@@ -158,6 +186,11 @@ def prepare_folder_context(
     overlap: int = 128,
     root: Path = CONTEXTS_ROOT,
 ) -> PreparedContext:
+    """Tokenize a corpus and write folder-provider JSONL plus a manifest.
+
+    Side Effects:
+        Creates or replaces files under the named context directory.
+    """
     provider = FolderContextProvider(root)
     directory = provider.directory(name)
     directory.mkdir(parents=True, exist_ok=True)
@@ -205,6 +238,14 @@ def build_context_prompt(
     max_new_tokens: int,
     provider_name: str = "folder",
 ) -> ContextPrompt:
+    """Build a context prompt while reserving output tokens exactly.
+
+    Returns:
+        Bounded prompt and compact context metadata.
+
+    Raises:
+        ContextError: If no usable context or valid prompt can fit.
+    """
     if requested_tokens <= 0:
         raise ContextError("context_tokens must be greater than zero")
     available_input = model_context_limit - max_new_tokens

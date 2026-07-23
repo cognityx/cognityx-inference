@@ -1,3 +1,5 @@
+"""Minimal executable entry point for the benchmark application."""
+
 from __future__ import annotations
 
 import sys
