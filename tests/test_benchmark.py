@@ -284,6 +284,11 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(args.engine, "vllm")
         self.assertEqual(args.kv_cache_dtype, "fp8")
         self.assertEqual(args.vllm_max_model_len, 30000)
+        self.assertTrue(args.vllm_prefix_caching)
+
+    def test_vllm_prefix_caching_can_be_disabled(self) -> None:
+        args = parse_args(["--engine", "vllm", "--no-vllm-prefix-caching"])
+        self.assertFalse(args.vllm_prefix_caching)
 
     def test_startup_argument_defaults(self) -> None:
         args = parse_args([])

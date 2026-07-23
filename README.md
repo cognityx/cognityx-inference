@@ -190,12 +190,19 @@ uv run python src/llm_benchmark/main.py \
   --context wikitext \
   --context-tokens 10000 \
   --vllm-max-model-len 40960 \
-  --kv-cache-dtype fp8
+  --kv-cache-dtype fp8 \
+  --vllm-prefix-caching
 ```
 
 `config.toml` supplies the same 8,192-token output limit, and `/context wikitext N`
 can increase the corpus budget without reloading as long as the exact templated
 prompt plus output reservation stays within `--vllm-max-model-len`.
+
+vLLM prefix caching is enabled by default. Use `--no-vllm-prefix-caching` for a
+cold-prefix comparison. Each vLLM result records queried prompt tokens as
+`vllm:prefix_cache_queries` and reused cached tokens as `vllm:prefix_cache_hits`.
+Like vLLM's counters, these values are cumulative for the lifetime of the loaded
+engine and reset when the engine is restarted.
 
 The vLLM adapter drives its persistent offline engine in delta-output mode, printing
 decoded text progressively and retaining the complete output for reporting. Pressing

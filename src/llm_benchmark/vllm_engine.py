@@ -35,6 +35,7 @@ class VLLMLLM:
         kv_cache_dtype: str = "auto",
         max_model_len: int,
         gpu_memory_utilization: float = 0.90,
+        enable_prefix_caching: bool = True,
     ) -> None:
         if load_profile not in {"bf16", "fp16", "int4"}:
             raise VLLMEngineError(
@@ -59,6 +60,9 @@ class VLLMLLM:
         self.effective_load_profile = load_profile
         self.load_options = load_options
         self.kv_cache_dtype = kv_cache_dtype
+        self.enable_prefix_caching = enable_prefix_caching
+        self.prefix_cache_queries = 0
+        self.prefix_cache_hits = 0
         self.context_length_tokens = max_model_len
         self.vllm_version = vllm.__version__
 
@@ -85,6 +89,7 @@ class VLLMLLM:
             "kv_cache_dtype": kv_cache_dtype,
             "gpu_memory_utilization": gpu_memory_utilization,
             "enforce_eager": True,
+            "enable_prefix_caching": enable_prefix_caching,
         }
         if load_profile == "int4":
             kwargs.update(
@@ -157,6 +162,8 @@ class VLLMLLM:
                 "max_model_len": max_model_len,
                 "gpu_memory_utilization": gpu_memory_utilization,
                 "kv_cache_dtype": kv_cache_dtype,
+                "prefix_caching_enabled": enable_prefix_caching,
+                "prefix_cache_metrics_scope": "engine_lifetime_cumulative_tokens",
                 "wsl_legacy_runner": True,
                 "flashinfer_sampler_disabled": True,
                 "streaming_mode": "offline_delta",
@@ -273,6 +280,16 @@ class VLLMLLM:
         completion = request.outputs[0]
         raw_output = "".join(output_parts).strip()
         generated_tokens = len(generated_ids)
+        request_prefix_cache_queries = (
+            len(prompt_ids) if self.enable_prefix_caching else 0
+        )
+        request_prefix_cache_hits = (
+            int(getattr(request, "num_cached_tokens", 0) or 0)
+            if self.enable_prefix_caching
+            else 0
+        )
+        self.prefix_cache_queries += request_prefix_cache_queries
+        self.prefix_cache_hits += request_prefix_cache_hits
         metrics = request.metrics
         first_token_seconds = getattr(metrics, "first_token_latency", None)
         first_token_ts = getattr(metrics, "first_token_ts", None)
@@ -328,6 +345,8 @@ class VLLMLLM:
                 "generation_seconds": round(elapsed, 3),
                 "engine_reported_decode_seconds": round(measured_generation, 3),
                 "tokens_per_second": round(generated_tokens / elapsed, 2) if elapsed else None,
+                "vllm:prefix_cache_queries": self.prefix_cache_queries,
+                "vllm:prefix_cache_hits": self.prefix_cache_hits,
                 "peak_vram_gb": None,
                 "gpu_allocated_before_gb": gpu_before["allocated_gb"],
                 "gpu_reserved_before_gb": gpu_before["reserved_gb"],

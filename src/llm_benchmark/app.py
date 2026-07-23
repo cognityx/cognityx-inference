@@ -96,6 +96,12 @@ def parse_args(arguments: list[str] | None = None) -> argparse.Namespace:
         help="Fraction of GPU memory vLLM may reserve (default: 0.90)",
     )
     parser.add_argument(
+        "--vllm-prefix-caching",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable vLLM automatic prefix caching (default: enabled)",
+    )
+    parser.add_argument(
         "--profile",
         choices=LOAD_PROFILES,
         default=DEFAULT_LOAD_PROFILE,
@@ -460,6 +466,15 @@ def print_metrics(result: dict[str, Any]) -> None:
         else "Total context length supported: unknown"
     )
     print(f"Output tokens per second: {metrics['tokens_per_second']}")
+    if "vllm:prefix_cache_queries" in metrics:
+        print(
+            "vLLM prefix-cache queried tokens (engine cumulative): "
+            f"{metrics['vllm:prefix_cache_queries']}"
+        )
+        print(
+            "vLLM prefix-cache hit tokens (engine cumulative): "
+            f"{metrics['vllm:prefix_cache_hits']}"
+        )
     print(f"Finish reason: {result['finish_reason']}")
     print(f"Generation truncated: {result['generation_truncated']}")
     print(f"Peak VRAM: {format_gb(peak_vram)}")
@@ -694,6 +709,7 @@ def run(
     kv_cache_dtype: str = "auto",
     vllm_max_model_len: int | None = None,
     vllm_gpu_memory_utilization: float = 0.90,
+    vllm_prefix_caching: bool = True,
 ) -> None:
     settings = load_generation_settings(config_path)
     print(f"Generation settings loaded from: {config_path}")
@@ -710,6 +726,7 @@ def run(
                     kv_cache_dtype=kv_cache_dtype,
                     max_model_len=configured_model_len,
                     gpu_memory_utilization=vllm_gpu_memory_utilization,
+                    enable_prefix_caching=vllm_prefix_caching,
                 )
             else:
                 llm = LocalLLM(model_name, settings, load_profile, load_options)
@@ -991,7 +1008,7 @@ def main(arguments: list[str] | None = None) -> None:
             )
             print(json.dumps(asdict(prepared), indent=2))
             return
-        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload, context_name=args.context, context_tokens=args.context_tokens, engine=args.engine, kv_cache_dtype=args.kv_cache_dtype, vllm_max_model_len=args.vllm_max_model_len, vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization)
+        run(args.model, args.profile, args.config, allow_download=args.allow_download, no_download=args.no_download, non_interactive=args.non_interactive, allow_cpu_offload=args.allow_cpu_offload, context_name=args.context, context_tokens=args.context_tokens, engine=args.engine, kv_cache_dtype=args.kv_cache_dtype, vllm_max_model_len=args.vllm_max_model_len, vllm_gpu_memory_utilization=args.vllm_gpu_memory_utilization, vllm_prefix_caching=args.vllm_prefix_caching)
     except ConfigurationError as exc:
         print(f"Configuration error: {exc}")
     except ModelPlacementError as exc:

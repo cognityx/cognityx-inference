@@ -54,6 +54,7 @@ class FakeCoreEngine:
             ),
             SimpleNamespace(
                 request_id="0", finished=True, metrics=metrics,
+                num_cached_tokens=1,
                 outputs=[SimpleNamespace(text="world", token_ids=[2], finish_reason="stop")],
             ),
         ]
@@ -86,6 +87,7 @@ class VLLMConfigurationTests(unittest.TestCase):
                 ModelLoadOptions(strict_gpu_only=True),
                 kv_cache_dtype=kv_cache_dtype,
                 max_model_len=20000,
+                enable_prefix_caching=True,
             )
 
     def test_normal_kv_cache_uses_inflight_bitsandbytes(self) -> None:
@@ -94,6 +96,7 @@ class VLLMConfigurationTests(unittest.TestCase):
         self.assertEqual(kwargs["quantization"], "bitsandbytes")
         self.assertEqual(kwargs["load_format"], "bitsandbytes")
         self.assertEqual(kwargs["kv_cache_dtype"], "auto")
+        self.assertIs(kwargs["enable_prefix_caching"], True)
         self.assertEqual(engine.model_runtime["engine"], "vllm")
 
     def test_fp8_kv_cache_is_forwarded(self) -> None:
@@ -167,3 +170,21 @@ class VLLMConfigurationTests(unittest.TestCase):
         self.assertEqual(chunks, ["Hello ", "world"])
         self.assertEqual(result["result"]["raw_output"], "Hello world")
         self.assertEqual(result["metrics"]["generated_tokens"], 2)
+        self.assertEqual(result["metrics"]["vllm:prefix_cache_queries"], 2)
+        self.assertEqual(result["metrics"]["vllm:prefix_cache_hits"], 1)
+
+        engine.engine.request_counter = count()
+        engine.engine.llm_engine = FakeCoreEngine()
+        with (
+            patch.dict(
+                sys.modules,
+                {"vllm": fake_vllm, "vllm.sampling_params": fake_sampling},
+            ),
+            patch(
+                "llm_benchmark.vllm_engine.get_gpu_status",
+                return_value={"allocated_gb": 0.0, "reserved_gb": 0.0},
+            ),
+        ):
+            second = engine.generate("hello")
+        self.assertEqual(second["metrics"]["vllm:prefix_cache_queries"], 4)
+        self.assertEqual(second["metrics"]["vllm:prefix_cache_hits"], 2)
