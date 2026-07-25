@@ -71,6 +71,7 @@ class VLLMLLM:
         config = AutoConfig.from_pretrained(
             model_name, local_files_only=not load_options.allow_download
         )
+        self.model_revision = getattr(config, "_commit_hash", None)
         architecture = extract_architecture_metadata(config, None)
         declared_context_limit = architecture.get("max_position_embeddings")
         if (
@@ -147,6 +148,7 @@ class VLLMLLM:
         self.model_runtime = {
             "engine": "vllm",
             "engine_version": self.vllm_version,
+            "gpu_memory_utilization": gpu_memory_utilization,
             "model_dtype": kwargs["dtype"],
             "devices_used": ["cuda:0"],
             "uses_cpu_offload": False,
@@ -326,6 +328,11 @@ class VLLMLLM:
         return {
             "model": self.model_name,
             "engine": "vllm",
+            "model_revision": self.model_revision,
+            "kv_cache_precision": self.kv_cache_dtype,
+            "gpu_memory_utilization": self.model_runtime.get(
+                "gpu_memory_utilization"
+            ),
             "requested_load_profile": self.requested_load_profile,
             "effective_load_profile": self.effective_load_profile,
             **{key: self.load_profile_metadata[key] for key in (

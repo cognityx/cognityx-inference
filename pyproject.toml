@@ -1,7 +1,7 @@
 [project]
-name = "llm-benchmark"
+name = "cognityx-inference"
 version = "0.1.0"
-description = "Add your description here"
+description = "Provider-neutral inference and hardware-boundary evaluation for Cognityx"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -19,10 +19,38 @@ dependencies = [
     "torchaudio>=2.11.0",
     "torchvision>=0.28.0",
     "transformers>=5.14.1",
+    "cognityx-storage",
+    "cognityx-jobs",
 ]
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+]
+telemetry = [
+    "psutil>=6.1",
+]
+
+[project.scripts]
+cognityx-inference = "cognityx_inference.cli:main"
+cognityx-boundary = "cognityx_inference.evaluation.cli:main"
+llm-benchmark = "llm_benchmark.app:main"
 
 [dependency-groups]
 dev = [
     "mkdocs-material>=9.7.7",
     "mkdocstrings-python>=2.0.5",
+    "pytest>=8",
 ]
+
+[tool.uv.sources]
+cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git" }
+cognityx-jobs = { path = "../cognityx-jobs" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cognityx_inference", "src/llm_benchmark"]

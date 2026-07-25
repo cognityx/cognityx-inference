@@ -41,6 +41,8 @@ from llm_benchmark.reporting import (
     get_system_metadata,
     save_benchmark_result,
 )
+from cognityx_inference.capabilities import certified_profile_from_benchmark_result
+from cognityx_inference.storage import CertifiedProfileRepository
 from llm_benchmark.download_preflight import format_bytes, inspect_download
 from llm_benchmark.contexts import (
     ContextError,
@@ -653,6 +655,7 @@ def process_prompt(
     benchmark_name: str | None = None,
     cost_config: CostConfig | None = None,
     context_metadata: dict[str, Any] | None = None,
+    certified_profiles: CertifiedProfileRepository | None = None,
 ) -> dict[str, Any]:
     """Generate, enrich, display, and persist one prompt result.
 
@@ -672,6 +675,9 @@ def process_prompt(
 
     result["timestamp_utc"] = datetime.now(timezone.utc).isoformat()
     result["metadata"] = get_system_metadata()
+    vllm_version = getattr(llm, "vllm_version", None)
+    if isinstance(vllm_version, str):
+        result["metadata"]["vllm_version"] = vllm_version
     result["schema_version"] = 2
     if context_metadata is not None:
         measured_prompt_tokens = result["metrics"]["prompt_tokens"]
@@ -738,6 +744,12 @@ def process_prompt(
 
     saved_path = save_benchmark_result(result)
     print(f"\nSaved benchmark: {saved_path}")
+    certified = certified_profile_from_benchmark_result(result)
+    if certified is not None and certified_profiles is not None:
+        stored = certified_profiles.save(certified)
+        result["certified_profile"] = certified.to_dict()
+        result["certified_profile_key"] = stored.key
+        print(f"Certified inference profile: {stored.key}")
     return result
 
 
@@ -804,6 +816,11 @@ def run(
             model_name = original_model
     last_result: dict[str, Any] | None = None
     cost_config = CostConfig()
+    from cognityx_storage import StorageClient
+
+    certified_profiles = CertifiedProfileRepository(
+        StorageClient().for_shared_data()
+    )
 
     print_help()
 
@@ -959,6 +976,7 @@ def run(
                         benchmark_name,
                         cost_config,
                         context_metadata,
+                        certified_profiles,
                     )
                 except torch.cuda.OutOfMemoryError:
                     print("\nCUDA out of memory.")
@@ -1020,6 +1038,7 @@ def run(
                     llm,
                     user_input,
                     cost_config=cost_config,
+                    certified_profiles=certified_profiles,
                 )
 
             except torch.cuda.OutOfMemoryError:

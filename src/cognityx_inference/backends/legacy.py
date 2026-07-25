@@ -1,0 +1,221 @@
+"""Adapters around the proven llm-benchmark local engines."""
+
+from __future__ import annotations
+
+from dataclasses import asdict, replace
+import time
+from typing import Any, Callable
+import uuid
+
+from cognityx_inference.contracts import (
+    FinishReason,
+    InferenceRequest,
+    InferenceResponse,
+    InferenceTimings,
+    ModelCapabilities,
+    TokenUsage,
+)
+from cognityx_inference.errors import ModelMetadataUnavailableError
+from llm_benchmark.llm import GenerationSettings, LocalLLM
+from llm_benchmark.loading_decision import ModelLoadOptions
+from llm_benchmark.vllm_engine import VLLMLLM
+from transformers import AutoConfig
+
+
+def _prompt(request: InferenceRequest) -> str:
+    if request.prompt is not None:
+        return request.prompt
+    return "\n".join(
+        f"{message.get('role', 'user')}: {message.get('content', '')}"
+        for message in request.messages
+    )
+
+
+def _settings(request: InferenceRequest) -> GenerationSettings:
+    defaults = GenerationSettings()
+    values: dict[str, Any] = {}
+    mapping = {
+        "temperature": request.temperature,
+        "top_p": request.top_p,
+        "top_k": request.top_k,
+        "max_new_tokens": request.max_tokens,
+    }
+    for name, value in mapping.items():
+        if value is not None:
+            values[name] = value
+    return replace(defaults, **values)
+
+
+def _finish_reason(value: str | None) -> FinishReason:
+    aliases = {"eos": FinishReason.STOP, "stop": FinishReason.STOP}
+    try:
+        return aliases.get(value or "", FinishReason(value or "unknown"))
+    except ValueError:
+        return FinishReason.UNKNOWN
+
+
+class TransformersBackend:
+    """Expose ``LocalLLM`` through the normalized backend contract."""
+
+    capabilities = ModelCapabilities(
+        streaming=True,
+        lifecycle=True,
+        top_k=True,
+        seed=True,
+        local_telemetry=True,
+    )
+
+    def __init__(
+        self,
+        model: str,
+        runtime: dict[str, Any] | None = None,
+    ) -> None:
+        self.model_name = model
+        self.runtime = dict(runtime or {})
+        self.engine: LocalLLM | None = None
+        self.load_seconds: float | None = None
+
+    def load(self) -> None:
+        if self.engine is not None:
+            return
+        started = time.monotonic()
+        profile = str(self.runtime.get("quantization", "bf16"))
+        options = ModelLoadOptions(
+            strict_gpu_only=bool(self.runtime.get("strict_gpu_only", False))
+        )
+        self.engine = LocalLLM(
+            self.model_name,
+            GenerationSettings(),
+            profile,
+            options,
+        )
+        self.load_seconds = time.monotonic() - started
+
+    def infer(
+        self,
+        request: InferenceRequest,
+        on_text: Callable[[str], None] | None = None,
+    ) -> InferenceResponse:
+        self.load()
+        assert self.engine is not None
+        self.engine.settings = _settings(request)
+        started = time.monotonic()
+        result = self.engine.generate(_prompt(request), on_text=on_text)
+        elapsed = time.monotonic() - started
+        metrics = result.get("metrics", {})
+        output = result.get("result", {})
+        completion = metrics.get("generated_tokens")
+        prompt_tokens = metrics.get("input_tokens")
+        return InferenceResponse(
+            request_id=str(uuid.uuid4()),
+            content=str(output.get("answer") or output.get("raw_output", "")),
+            reasoning_content=output.get("thinking") or None,
+            model=self.model_name,
+            provider="local",
+            backend="transformers",
+            finish_reason=_finish_reason(result.get("finish_reason")),
+            usage=TokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion,
+                total_tokens=(
+                    prompt_tokens + completion
+                    if isinstance(prompt_tokens, int) and isinstance(completion, int)
+                    else None
+                ),
+            ),
+            timings=InferenceTimings(
+                latency_seconds=elapsed,
+                model_loading_seconds=self.load_seconds,
+                prompt_processing_seconds=metrics.get("prompt_processing_seconds"),
+                time_to_first_token_seconds=metrics.get(
+                    "time_to_first_token_seconds"
+                ),
+                token_generation_seconds=metrics.get("generation_seconds"),
+                tokens_per_second=metrics.get("tokens_per_second"),
+            ),
+            requested_parameters=request.to_dict(),
+            effective_parameters=asdict(self.engine.settings),
+            telemetry=result.get("metadata", {}),
+            extensions={"legacy_result": result},
+        )
+
+    def unload(self) -> None:
+        if self.engine is not None:
+            self.engine.unload_model()
+            self.engine = None
+
+    def status(self) -> dict[str, Any]:
+        return {"ready": self.engine is not None, "model": self.model_name}
+
+    def model_context_limit(self) -> int | None:
+        return discover_model_context_limit(
+            self.model_name,
+            allow_download=bool(self.runtime.get("allow_download", False)),
+        )[0]
+
+
+class VLLMBackend(TransformersBackend):
+    """Expose the existing persistent vLLM engine."""
+
+    def load(self) -> None:
+        if self.engine is not None:
+            return
+        max_model_len = self.runtime.get("context_length")
+        if not isinstance(max_model_len, int) or max_model_len <= 0:
+            raise ValueError(
+                "vLLM runtime.context_length must be a positive integer"
+            )
+        started = time.monotonic()
+        self.engine = VLLMLLM(
+            self.model_name,
+            GenerationSettings(),
+            str(self.runtime.get("quantization", "bf16")),
+            ModelLoadOptions(
+                strict_gpu_only=bool(self.runtime.get("strict_gpu_only", True))
+            ),
+            kv_cache_dtype=str(self.runtime.get("kv_cache_precision", "auto")),
+            max_model_len=max_model_len,
+            gpu_memory_utilization=float(
+                self.runtime.get("gpu_memory_utilization", 0.9)
+            ),
+            enable_prefix_caching=bool(
+                self.runtime.get("enable_prefix_caching", True)
+            ),
+        )
+        self.load_seconds = time.monotonic() - started
+
+    def infer(
+        self,
+        request: InferenceRequest,
+        on_text: Callable[[str], None] | None = None,
+    ) -> InferenceResponse:
+        response = super().infer(request, on_text)
+        return replace(response, backend="vllm")
+
+
+def discover_model_context_limit(
+    model: str,
+    *,
+    allow_download: bool = False,
+) -> tuple[int | None, str | None]:
+    """Read model-declared context and revision without loading weights."""
+    try:
+        config = AutoConfig.from_pretrained(
+            model,
+            local_files_only=not allow_download,
+        )
+    except OSError as exc:
+        raise ModelMetadataUnavailableError(str(exc)) from exc
+    sources = (config, getattr(config, "text_config", None))
+    for source in sources:
+        if source is None:
+            continue
+        for name in (
+            "max_position_embeddings",
+            "n_positions",
+            "max_sequence_length",
+        ):
+            value = getattr(source, name, None)
+            if isinstance(value, int) and value > 0:
+                return value, getattr(config, "_commit_hash", None)
+    return None, getattr(config, "_commit_hash", None)

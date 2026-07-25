@@ -1,4 +1,71 @@
-# LLM Benchmark
+# Cognityx Inference
+
+`cognityx-inference` is the Cognityx model-inference platform and
+hardware/configuration boundary evaluator. It evolves the original
+`llm-benchmark` repository without discarding its persistent Transformers and
+vLLM engines, diagnostics, interactive commands, or saved-result structure.
+
+The platform adds normalized inference contracts, an OpenAI-compatible API and
+client, explicit local-model lifecycle leases, local/OpenAI/xAI routing,
+logical-key persistence through `cognityx-storage`, finite Cartesian boundary
+plans with contextual monotonic pruning, and local machine telemetry.
+
+The legacy `llm-benchmark` command and `llm_benchmark` imports remain available
+as compatibility interfaces.
+
+## Platform quick start
+
+```bash
+uv sync --extra api --extra telemetry
+uv run cognityx-inference serve --host 127.0.0.1 --port 8000
+```
+
+Commercial adapters are enabled only when `OPENAI_API_KEY` or `XAI_API_KEY` is
+present.
+
+Inspect a finite boundary plan without loading a model:
+
+```bash
+uv run cognityx-boundary --config examples/boundary/config.toml --plan
+```
+
+Every candidate is supplied explicitly. For monotonic axes, an unacceptable
+time or generation-speed boundary prunes equal-or-higher values only for the
+same values on all other axes. Compatible load-time identities are grouped so
+request-time combinations reuse a resident model.
+
+Load a model using its latest compatible certified hardware profile:
+
+```bash
+uv run cognityx-inference model load \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --discovery-policy ask
+```
+
+No context allocation is required. The platform reads the model-declared limit
+and the latest matching hardware certification. If no certification exists,
+`ask` offers to run an increasing context-boundary discovery, persist every
+trial through `cognityx-storage`, keep the final successful configuration
+loaded, and then continue.
+
+```bash
+uv run cognityx-inference infer \
+  --model Qwen/Qwen3-8B \
+  --profile int4 \
+  --prompt "Explain KV caching."
+
+uv run cognityx-inference model status
+uv run cognityx-inference model unload --model Qwen/Qwen3-8B
+```
+
+The Python client supports the same `ask`, `auto`, and `require_existing`
+discovery policies. Pure OpenAI-compatible requests do not auto-load models;
+they return HTTP 409 until the requested model has been loaded through the
+Cognityx lifecycle API.
+
+## Legacy benchmark
 
 Run a persistent local Transformers model with streaming output and saved benchmark
 diagnostics.

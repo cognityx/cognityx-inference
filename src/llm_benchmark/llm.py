@@ -875,6 +875,8 @@ class LocalLLM:
         return {
             "model": self.model_name,
             "engine": "transformers",
+            "model_revision": getattr(self.model.config, "_commit_hash", None),
+            "kv_cache_precision": "auto",
             "requested_load_profile": self.requested_load_profile,
             "effective_load_profile": self.effective_load_profile,
             "quantization_enabled": self.load_profile_metadata[
