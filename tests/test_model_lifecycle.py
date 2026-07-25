@@ -89,6 +89,9 @@ def test_concurrent_loads_share_one_initialization() -> None:
     )
     first.start()
     started.wait(timeout=1)
+    loading = manager.statuses()
+    assert len(loading) == 1
+    assert loading[0].state is ModelState.LOADING
     second.start()
     time.sleep(0.02)
     release.set()

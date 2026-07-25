@@ -1,24 +1,34 @@
 # API reference
 
-Signatures and documentation below are generated from source by mkdocstrings.
+Signatures and docstrings below are generated from source by mkdocstrings.
 
-## Application
+## Inference platform
+
+::: cognityx_inference.client
+
+::: cognityx_inference.contracts
+
+::: cognityx_inference.service
+
+::: cognityx_inference.api
+
+::: cognityx_inference.discovery
+
+::: cognityx_inference.evaluation.boundary
+
+::: cognityx_inference.evaluation.workload
+
+## Legacy benchmark
 
 ::: llm_benchmark.app
-
-## Engines
 
 ::: llm_benchmark.llm
 
 ::: llm_benchmark.vllm_engine
 
-## Contexts and configuration
-
 ::: llm_benchmark.contexts
 
 ::: llm_benchmark.configuration
-
-## Loading and quantization
 
 ::: llm_benchmark.download_preflight
 
@@ -30,8 +40,6 @@ Signatures and documentation below are generated from source by mkdocstrings.
 
 ::: llm_benchmark.model_loading
 
-## Diagnostics and reporting
-
 ::: llm_benchmark.model_diagnostics
 
 ::: llm_benchmark.model_architecture
@@ -39,8 +47,6 @@ Signatures and documentation below are generated from source by mkdocstrings.
 ::: llm_benchmark.model_size
 
 ::: llm_benchmark.reporting
-
-## Comparison and cost estimation
 
 ::: llm_benchmark.comparison
 

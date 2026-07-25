@@ -76,6 +76,8 @@ class InferenceService:
         self,
         request: InferenceRequest,
         on_text: Callable[[str], None] | None = None,
+        *,
+        owner_id: str = "local",
     ) -> InferenceResponse:
         if request.provider != "local":
             try:
@@ -102,6 +104,7 @@ class InferenceService:
                     dict(request.extensions.get("runtime", {})),
                     request.required_context_length,
                     request.discovery_policy,
+                    owner_id,
                 )
                 lease = self.models.acquire(request.model, request.backend, runtime)
             with lease as backend:
@@ -127,6 +130,8 @@ class InferenceService:
         runtime: Mapping[str, Any] | None = None,
         required_context_length: int | None = None,
         discovery_policy: DiscoveryPolicy = DiscoveryPolicy.REQUIRE_EXISTING,
+        *,
+        owner_id: str = "local",
     ) -> Any:
         """Resolve certified capacity, load the model, and keep it resident."""
         model = resolve_local_model_reference(model).resolved
@@ -137,6 +142,7 @@ class InferenceService:
             dict(runtime or {}),
             required_context_length,
             discovery_policy,
+            owner_id,
         )
         status = self.models.load(model, backend, resolved)
         return status, context
@@ -149,6 +155,7 @@ class InferenceService:
         runtime: dict[str, Any],
         required_context_length: int | None,
         discovery_policy: DiscoveryPolicy,
+        owner_id: str = "local",
     ) -> tuple[dict[str, Any], Any | None]:
         """Resolve context from model metadata and compatible certification."""
         runtime["quantization"] = profile
@@ -176,6 +183,7 @@ class InferenceService:
                     model=model,
                     backend=backend,
                     profile=profile,
+                    owner_id=owner_id,
                     model_context_limit=model_limit,
                     runtime=runtime,
                 )

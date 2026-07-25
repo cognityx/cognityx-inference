@@ -11,6 +11,11 @@ theme:
 nav:
   - Home: index.md
   - Platform: platform.md
+  - CLI and Python client: cli.md
+  - HTTP API: http-api.md
+  - Discovery jobs: jobs.md
+  - Boundary evaluation: boundary-evaluation.md
+  - Configuration: configuration.md
   - Usage: usage.md
   - Architecture: architecture.md
   - Modules: modules/index.md

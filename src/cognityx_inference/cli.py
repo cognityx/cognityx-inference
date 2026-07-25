@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 from typing import Any
 
@@ -13,6 +14,7 @@ from cognityx_inference.backends import TransformersBackend, VLLMBackend
 from cognityx_inference.lifecycle import ModelManager
 from cognityx_inference.client import CognityxInferenceClient, InferenceAPIError
 from cognityx_inference.discovery import BoundaryDiscoveryCoordinator
+from cognityx_inference.discovery import DiscoveryConfig
 from cognityx_inference.environment import configure_huggingface_cache
 from cognityx_inference.providers import OpenAIProvider, XAIProvider
 from cognityx_inference.service import InferenceService
@@ -50,6 +52,9 @@ def build_service() -> InferenceService:
         profiles,
         BoundaryArtifactRepository(storage),
         inventory,
+        config=DiscoveryConfig.from_toml(
+            Path(__file__).resolve().parents[2] / "examples" / "boundary" / "config.toml"
+        ),
         jobs=JobRepository(os.environ.get("COGNITYX_JOBS_DATABASE", "cognityx_jobs.sqlite3")),
     )
     return InferenceService(
@@ -99,10 +104,37 @@ def main(argv: list[str] | None = None) -> None:
     infer.add_argument("--max-tokens", type=int, default=256)
     infer.add_argument("--required-context-length", type=int)
     infer.add_argument(
+        "--no-stream",
+        action="store_false",
+        dest="stream",
+        help="Wait for completion and print the full JSON response.",
+    )
+    infer.set_defaults(stream=True)
+    infer.add_argument(
         "--discovery-policy",
         choices=("ask", "auto", "require_existing"),
         default="ask",
     )
+    discovery = subparsers.add_parser("discovery")
+    discovery_commands = discovery.add_subparsers(dest="discovery_command", required=True)
+    start = discovery_commands.add_parser("start")
+    start.add_argument("--base-url", default="http://127.0.0.1:8000")
+    start.add_argument("--model", required=True)
+    start.add_argument("--backend", default="vllm")
+    start.add_argument("--profile", default="bf16")
+    discovery_status = discovery_commands.add_parser("status")
+    discovery_status.add_argument("--base-url", default="http://127.0.0.1:8000")
+    discovery_status.add_argument(
+        "--all",
+        action="store_true",
+        help="Include completed, failed, and cancelled jobs.",
+    )
+    watch = discovery_commands.add_parser("watch")
+    watch.add_argument("--base-url", default="http://127.0.0.1:8000")
+    watch.add_argument("job_id")
+    cancel = discovery_commands.add_parser("cancel")
+    cancel.add_argument("--base-url", default="http://127.0.0.1:8000")
+    cancel.add_argument("job_id")
     args = parser.parse_args(original_argv)
     if args.command not in {None, "serve"}:
         client = CognityxInferenceClient(
@@ -110,6 +142,23 @@ def main(argv: list[str] | None = None) -> None:
             discovery_policy=getattr(
                 args, "discovery_policy", "require_existing"
             ),
+            on_discovery_started=lambda event: print(
+                json.dumps(
+                    {
+                        **event,
+                        "watch": (
+                            f"cognityx-inference discovery watch --base-url "
+                            f"{args.base_url} {event['job_id']}"
+                        ),
+                        "cancel": (
+                            f"cognityx-inference discovery cancel --base-url "
+                            f"{args.base_url} {event['job_id']}"
+                        ),
+                    }
+                ),
+                flush=True,
+            ),
+            on_discovery_event=lambda event: print(json.dumps(event), flush=True),
         )
         try:
             if args.command == "model":
@@ -127,17 +176,45 @@ def main(argv: list[str] | None = None) -> None:
                 else:
                     value = client.unload_all()
             else:
-                value = client.chat(
-                    model=args.model,
-                    prompt=args.prompt,
-                    backend=args.backend,
-                    profile=args.profile,
-                    max_tokens=args.max_tokens,
-                    required_context_length=args.required_context_length,
-                    discovery_policy=args.discovery_policy,
-                )
+                if args.command == "discovery":
+                    if args.discovery_command == "start":
+                        value = client.start_discovery(args.model, args.backend, args.profile)
+                    elif args.discovery_command == "cancel":
+                        value = client.cancel_discovery(args.job_id)
+                    elif args.discovery_command == "status":
+                        value = client.list_discoveries(include_history=args.all)
+                    else:
+                        for event in client.stream_discovery(args.job_id):
+                            print(json.dumps(event), flush=True)
+                        return
+                else:
+                    parameters = {
+                        "model": args.model,
+                        "prompt": args.prompt,
+                        "backend": args.backend,
+                        "profile": args.profile,
+                        "max_tokens": args.max_tokens,
+                        "required_context_length": args.required_context_length,
+                        "discovery_policy": args.discovery_policy,
+                    }
+                    if args.stream:
+                        for chunk in client.stream_chat(**parameters):
+                            choices = chunk.get("choices") or ()
+                            if not choices:
+                                continue
+                            content = (
+                                choices[0].get("delta") or {}
+                            ).get("content")
+                            if content:
+                                print(content, end="", flush=True)
+                        print(flush=True)
+                        return
+                    value = client.chat(**parameters)
         except InferenceAPIError as exc:
             print(json.dumps(exc.payload, indent=2), file=sys.stderr)
+            raise SystemExit(2) from None
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
             raise SystemExit(2) from None
         print(json.dumps(value, indent=2))
         return

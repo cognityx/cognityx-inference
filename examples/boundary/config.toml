@@ -4,18 +4,31 @@ ordered_axes = [
   "backend",
   "quantization",
   "context_length",
+  "kv_cache_precision",
   "batch_size",
   "generation_length",
 ]
-monotonic_axes = ["context_length", "batch_size", "generation_length"]
+monotonic_axes = ["context_length", "generation_length"]
 
 [search.axes]
+# Any locally cached or provider-supported model identifier may be used.
 model = ["Qwen/Qwen3-8B"]
-backend = ["transformers", "vllm"]
-quantization = ["bf16", "int4"]
-context_length = [512, 1024, 2048, 4096]
-batch_size = [1, 2, 4]
-generation_length = [128, 256, 512]
+# Accepted local backends currently include "vllm" and "transformers".
+backend = ["vllm"]
+# Profiles supported by the selected backend can include "bf16", "fp16",
+# "int8", and "int4". Keep only the profiles intended for this run here.
+quantization = ["int4"]
+# Supply finite, ascending candidates up to the model's declared limit and
+# hardware boundary. Larger values are pruned after a slow/failed candidate.
+context_length = [2048, 4096, 8192, 16384, 32768, 40960]
+# KV-cache values commonly include "auto" and "fp8"; backend-specific values
+# may be added when the selected backend supports them.
+kv_cache_precision = ["auto", "fp8"]
+# Batch size is useful for throughput/batched inference. Keep [1] for single
+# request latency/capacity checks; add [2, 4, 8, ...] for batch evaluation.
+batch_size = [1]
+# Explicit generation-token candidates; increase this list for workload needs.
+generation_length = [1024, 2048, 4096]
 
 [limits]
 request_timeout_seconds = 300

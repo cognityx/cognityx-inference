@@ -515,6 +515,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "bitsandbytes" },
+    { name = "cognityx-jobs" },
     { name = "cognityx-storage" },
     { name = "datasets" },
     { name = "evaluate" },
@@ -550,6 +551,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=1.14.0" },
     { name = "bitsandbytes", specifier = ">=0.49.2" },
+    { name = "cognityx-jobs", directory = "../cognityx-jobs" },
     { name = "cognityx-storage", git = "https://github.com/cognityx/cognityx-storage.git" },
     { name = "datasets", specifier = ">=5.0.0" },
     { name = "evaluate", specifier = ">=0.4.6" },
@@ -575,6 +577,11 @@ dev = [
     { name = "mkdocstrings-python", specifier = ">=2.0.5" },
     { name = "pytest", specifier = ">=8" },
 ]
+
+[[package]]
+name = "cognityx-jobs"
+version = "0.1.0"
+source = { directory = "../cognityx-jobs" }
 
 [[package]]
 name = "cognityx-storage"

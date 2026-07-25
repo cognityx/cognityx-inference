@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from itertools import product
+from pathlib import Path
 import threading
 import time
+import tomllib
 from typing import Any, Callable, Mapping
 import uuid
 
@@ -45,6 +48,22 @@ class DiscoveryConfig:
     max_tokens: int = 64
     trial_timeout_seconds: float = 300
     minimum_tokens_per_second: float = 1
+    kv_cache_precisions: tuple[str, ...] = ("auto",)
+    generation_lengths: tuple[int, ...] = (64,)
+
+    @classmethod
+    def from_toml(cls, path: Path) -> "DiscoveryConfig":
+        with path.open("rb") as source:
+            document = tomllib.load(source)
+        axes = document["search"]["axes"]
+        limits = document.get("limits") or {}
+        return cls(
+            context_candidates=tuple(axes.get("context_length", cls.context_candidates)),
+            kv_cache_precisions=tuple(axes.get("kv_cache_precision", ("auto",))),
+            generation_lengths=tuple(axes.get("generation_length", (64,))),
+            trial_timeout_seconds=float(limits.get("request_timeout_seconds", 300)),
+            minimum_tokens_per_second=float(limits.get("minimum_tokens_per_second", 1)),
+        )
 
 
 @dataclass(slots=True)
@@ -55,6 +74,7 @@ class DiscoveryJob:
     model: str
     backend: str
     profile: str
+    owner_id: str = "local"
     state: str = "queued"
     started_at: str | None = None
     finished_at: str | None = None
@@ -89,6 +109,7 @@ class BoundaryDiscoveryCoordinator:
         self.inventory = inventory
         self.config = config or DiscoveryConfig()
         self.jobs = jobs or JobRepository()
+        self.jobs.mark_interrupted("hardware_boundary_discovery")
         self._jobs: dict[str, DiscoveryJob] = {}
         self._lock = threading.RLock()
 
@@ -98,13 +119,21 @@ class BoundaryDiscoveryCoordinator:
         model: str,
         backend: str,
         profile: str,
+        owner_id: str = "local",
         model_context_limit: int | None,
         runtime: Mapping[str, Any],
     ) -> str:
-        job = DiscoveryJob(str(uuid.uuid4()), model, backend, profile)
+        job = DiscoveryJob(
+            str(uuid.uuid4()), model, backend, profile, owner_id=owner_id
+        )
         with self._lock:
             self._jobs[job.job_id] = job
-        self.jobs.create(job.job_id, "hardware_boundary_discovery", job.to_dict())
+        self.jobs.create(
+            job.job_id,
+            "hardware_boundary_discovery",
+            job.to_dict(),
+            owner_id=owner_id,
+        )
         thread = threading.Thread(
             target=self._run,
             args=(job, model_context_limit, dict(runtime)),
@@ -113,30 +142,60 @@ class BoundaryDiscoveryCoordinator:
         thread.start()
         return job.job_id
 
-    def status(self, job_id: str) -> dict[str, Any] | None:
+    def status(self, job_id: str, *, owner_id: str = "local") -> dict[str, Any] | None:
         with self._lock:
             job = self._jobs.get(job_id)
-            return job.to_dict() if job is not None else None
+            if job is not None:
+                return job.to_dict() if job.owner_id == owner_id else None
+        try:
+            record = self.jobs.get_for_owner(job_id, owner_id)
+        except KeyError:
+            return None
+        return self._stored_status(record)
 
-    def cancel(self, job_id: str) -> bool:
+    def list(self, owner_id: str, *, include_history: bool = False) -> list[dict[str, Any]]:
+        states = None if include_history else (
+            "queued",
+            "running",
+            "cancellation_requested",
+        )
+        records = self.jobs.list_for_owner(owner_id, states=states)
+        return [self.status(record.job_id, owner_id=owner_id) for record in records]
+
+    def cancel(self, job_id: str, *, owner_id: str = "local") -> bool:
         with self._lock:
             job = self._jobs.get(job_id)
-            if job is None or job.state in {"completed", "failed", "cancelled"}:
+            if (
+                job is None
+                or job.owner_id != owner_id
+                or job.state in {"completed", "failed", "cancelled"}
+            ):
                 return False
             job.cancel_requested = True
             job.emit("cancel_requested")
             self.jobs.request_cancel(job_id)
             return True
 
-    def events(self, job_id: str, after: int = 0) -> list[dict[str, Any]]:
+    def events(
+        self, job_id: str, after: int = 0, *, owner_id: str = "local"
+    ) -> list[dict[str, Any]]:
+        if self.status(job_id, owner_id=owner_id) is None:
+            return []
         persisted = self.jobs.events(job_id, after)
-        if persisted:
-            return persisted
-        with self._lock:
-            job = self._jobs.get(job_id)
-            if job is None:
-                return []
-            return [item for item in job.events if item["sequence"] > after]
+        return persisted
+
+    def _emit(self, job: DiscoveryJob, event: str, **data: Any) -> None:
+        """Publish one event to both the live view and durable replay log."""
+        sequence = self.jobs.append_event(job.job_id, event, data)
+        job.events.append({"sequence": sequence, "event": event, **data})
+
+    @staticmethod
+    def _stored_status(record: Any) -> dict[str, Any]:
+        status = dict(record.payload)
+        status["job_id"] = record.job_id
+        status["state"] = record.state
+        status["owner_id"] = record.owner_id
+        return status
 
     def _run(
         self,
@@ -146,7 +205,13 @@ class BoundaryDiscoveryCoordinator:
     ) -> None:
         job.state = "running"
         job.started_at = datetime.now(timezone.utc).isoformat()
-        job.emit("discovery_started", model=job.model, backend=job.backend, profile=job.profile)
+        self._emit(
+            job,
+            "discovery_started",
+            model=job.model,
+            backend=job.backend,
+            profile=job.profile,
+        )
         self.jobs.set_state(job.job_id, "running")
         try:
             discovered_limit, revision = discover_model_context_limit(
@@ -156,13 +221,15 @@ class BoundaryDiscoveryCoordinator:
             model_limit = supplied_model_limit or discovered_limit
             if model_limit is None:
                 raise RuntimeError("Model context limit is unavailable.")
+            contexts = tuple(value for value in self.config.context_candidates if value <= model_limit)
+            if model_limit not in contexts:
+                contexts = (*contexts, model_limit)
             candidates = tuple(
-                value
-                for value in self.config.context_candidates
-                if value <= model_limit
+                {"context_length": context_length, "kv_cache_precision": kv_cache_precision, "generation_length": generation_length}
+                for kv_cache_precision, generation_length, context_length in product(
+                    self.config.kv_cache_precisions, self.config.generation_lengths, contexts
+                )
             )
-            if model_limit not in candidates:
-                candidates = (*candidates, model_limit)
             inventory = dict(self.inventory())
             compatibility = RuntimeCompatibility(
                 hardware_fingerprint=hardware_fingerprint(inventory),
@@ -185,21 +252,37 @@ class BoundaryDiscoveryCoordinator:
                     "type": "automatic_context_discovery",
                     "compatibility": asdict(compatibility),
                     "model_context_limit": model_limit,
-                    "context_candidates": list(candidates),
+                    "candidates": list(candidates),
                 },
             )
             successful: list[dict[str, Any]] = []
-            for number, context_length in enumerate(candidates, 1):
+            context_boundaries: set[tuple[str, int]] = set()
+            for number, candidate in enumerate(candidates, 1):
+                context_length = candidate["context_length"]
+                boundary_key = (
+                    candidate["kv_cache_precision"],
+                    candidate["generation_length"],
+                )
+                if boundary_key in context_boundaries:
+                    continue
                 if job.cancel_requested:
                     job.state = "cancelled"
-                    job.emit("discovery_cancelled")
+                    self._emit(job, "discovery_cancelled")
                     self.jobs.set_state(job.job_id, "cancelled")
                     return
-                job.emit("trial_started", trial_id=f"trial-{number:03d}", trial_index=number, total_trials=len(candidates), context_length=context_length)
+                self._emit(
+                    job,
+                    "trial_started",
+                    trial_id=f"trial-{number:03d}",
+                    trial_index=number,
+                    total_trials=len(candidates),
+                    configuration=candidate,
+                )
                 runtime = {
                     **base_runtime,
                     "quantization": job.profile,
                     "context_length": context_length,
+                    "kv_cache_precision": candidate["kv_cache_precision"],
                 }
                 identity = ModelIdentity.create(job.model, job.backend, runtime)
                 started = time.monotonic()
@@ -218,7 +301,7 @@ class BoundaryDiscoveryCoordinator:
                                 backend=job.backend,
                                 profile=job.profile,
                                 load_policy=LoadPolicy.REQUIRE_LOADED,
-                                max_tokens=self.config.max_tokens,
+                                max_tokens=candidate["generation_length"],
                             )
                         )
                     generation_seconds = time.monotonic() - (
@@ -242,6 +325,7 @@ class BoundaryDiscoveryCoordinator:
                             "backend": job.backend,
                             "profile": job.profile,
                             "context_length": context_length,
+                            **candidate,
                             **base_runtime,
                         },
                         "runtime_seconds": elapsed,
@@ -267,6 +351,7 @@ class BoundaryDiscoveryCoordinator:
                             "backend": job.backend,
                             "profile": job.profile,
                             "context_length": context_length,
+                            **candidate,
                             **base_runtime,
                         },
                         "runtime_seconds": time.monotonic() - started,
@@ -276,13 +361,19 @@ class BoundaryDiscoveryCoordinator:
                 finally:
                     self.models.unload(identity, wait=True)
                 job.trials.append(trial)
-                job.emit("trial_completed", trial=trial, completed_trials=len(job.trials), total_trials=len(candidates))
-                self.jobs.append_event(job.job_id, "trial_completed", {"trial": trial, "completed_trials": len(job.trials), "total_trials": len(candidates)})
+                self._emit(
+                    job,
+                    "trial_completed",
+                    trial=trial,
+                    completed_trials=len(job.trials),
+                    total_trials=len(candidates),
+                )
                 self.artifacts.save_trial(
                     job.job_id, trial["trial_id"], trial
                 )
                 if trial["status"] != "completed":
-                    break
+                    context_boundaries.add(boundary_key)
+                    continue
                 successful.append(trial)
             if not successful:
                 raise RuntimeError("No discovery candidate completed successfully.")
@@ -329,12 +420,16 @@ class BoundaryDiscoveryCoordinator:
             self.models.load(job.model, job.backend, ready_runtime)
             job.certified_profile_id = certified.profile_id
             job.state = "completed"
-            job.emit("discovery_completed", certified_profile_id=certified.profile_id)
+            self._emit(
+                job,
+                "discovery_completed",
+                certified_profile_id=certified.profile_id,
+            )
             self.jobs.set_state(job.job_id, "completed")
         except Exception as exc:
             job.state = "failed"
             job.error = f"{type(exc).__name__}: {exc}"
-            job.emit("discovery_failed", error=job.error)
+            self._emit(job, "discovery_failed", error=job.error)
             self.jobs.set_state(job.job_id, "failed")
         finally:
             job.finished_at = datetime.now(timezone.utc).isoformat()

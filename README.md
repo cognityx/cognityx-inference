@@ -17,7 +17,7 @@ as compatibility interfaces.
 
 ```bash
 uv sync --extra api --extra telemetry
-uv run cognityx-inference serve --host 127.0.0.1 --port 8000
+uv run cognityx-inference serve --host 127.0.0.1 --port 8013
 ```
 
 Commercial adapters are enabled only when `OPENAI_API_KEY` or `XAI_API_KEY` is
@@ -38,6 +38,7 @@ Load a model using its latest compatible certified hardware profile:
 
 ```bash
 uv run cognityx-inference model load \
+  --base-url http://127.0.0.1:8013 \
   --model Qwen/Qwen3-8B \
   --backend vllm \
   --profile int4 \
@@ -52,18 +53,57 @@ loaded, and then continue.
 
 ```bash
 uv run cognityx-inference infer \
+  --base-url http://127.0.0.1:8013 \
   --model Qwen/Qwen3-8B \
   --profile int4 \
   --prompt "Explain KV caching."
 
-uv run cognityx-inference model status
-uv run cognityx-inference model unload --model Qwen/Qwen3-8B
+uv run cognityx-inference model status \
+  --base-url http://127.0.0.1:8013
+
+uv run cognityx-inference model unload \
+  --base-url http://127.0.0.1:8013 \
+  --model Qwen/Qwen3-8B
 ```
+
+`infer` streams generated text by default. Add `--no-stream` to wait and print
+the complete JSON response.
 
 The Python client supports the same `ask`, `auto`, and `require_existing`
 discovery policies. Pure OpenAI-compatible requests do not auto-load models;
 they return HTTP 409 until the requested model has been loaded through the
 Cognityx lifecycle API.
+
+```python
+from cognityx_inference import CognityxInferenceClient
+
+client = CognityxInferenceClient(
+    "http://127.0.0.1:8013",
+    discovery_policy="ask",
+)
+client.load_model(
+    "Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+)
+
+for chunk in client.stream_chat(
+    model="Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+    prompt="Explain KV caching.",
+):
+    choices = chunk.get("choices") or []
+    if choices:
+        print(
+            (choices[0].get("delta") or {}).get("content", ""),
+            end="",
+            flush=True,
+        )
+```
+
+See [CLI and Python Client](docs/cli.md) for explicit loading, one-call
+auto-discovery, status, cancellation, streaming, JSON responses, and unload.
 
 ## Legacy benchmark
 
@@ -75,14 +115,26 @@ diagnostics.
 Serve the MkDocs Material site locally:
 
 ```bash
-uv run mkdocs serve
+uv run mkdocs serve --dev-addr 127.0.0.1:8000
 ```
+
+The API and documentation servers must use different ports. All inference
+examples use `8013`; MkDocs uses `8000`.
 
 Build the documentation with warnings treated as errors:
 
 ```bash
 uv run mkdocs build --strict
 ```
+
+Documentation focus:
+
+- `docs/cli.md` covers `cognityx-inference` CLI commands and the Python client.
+- `docs/http-api.md` covers OpenAI-compatible inference plus Cognityx control endpoints.
+- `docs/jobs.md` covers discovery status streaming and cancellation.
+- `docs/boundary-evaluation.md` and `docs/configuration.md` cover the finite
+  search configuration, pruning behavior, and certification flow.
+- `docs/usage.md` remains the legacy `llm-benchmark` interactive guide.
 
 Before loading, a Hugging Face Hub dry run reports cached and missing checkpoint
 bytes without downloading weights. Missing downloads require confirmation (No by

@@ -17,6 +17,7 @@ from cognityx_inference.storage import (
     BoundaryArtifactRepository,
     CertifiedProfileRepository,
 )
+from cognityx_jobs import JobRepository
 from cognityx_storage import LocalStorageBackend, StorageClient
 
 
@@ -93,6 +94,11 @@ def test_discovery_saves_profile_and_keeps_winner_ready(tmp_path, monkeypatch) -
         and trial["metrics"]["generation_seconds"] >= 0
         for trial in status["trials"]
     )
+    events = coordinator.events(job_id)
+    assert events[-1]["event"] == "discovery_completed"
+    assert [event["sequence"] for event in events] == list(
+        range(1, len(events) + 1)
+    )
 
 
 def test_discovery_events_and_cancellation(tmp_path, monkeypatch) -> None:
@@ -117,3 +123,43 @@ def test_discovery_events_and_cancellation(tmp_path, monkeypatch) -> None:
         time.sleep(0.01)
     assert coordinator.status(job_id)["state"] == "cancelled"
     assert any(event["event"] == "cancel_requested" for event in coordinator.events(job_id))
+
+
+def test_discovery_jobs_are_scoped_to_their_owner(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "cognityx_inference.discovery.discover_model_context_limit",
+        lambda *args, **kwargs: (128, "revision-1"),
+    )
+    monkeypatch.setattr("cognityx_inference.discovery._backend_version", lambda _: "1")
+    storage = StorageClient(LocalStorageBackend(tmp_path)).for_shared_data()
+    coordinator = BoundaryDiscoveryCoordinator(
+        ModelManager({"fake": FakeBackend}),
+        CertifiedProfileRepository(storage),
+        BoundaryArtifactRepository(storage),
+        lambda: {"gpu_name": "GPU"},
+        DiscoveryConfig(context_candidates=(128,)),
+        jobs=JobRepository(str(tmp_path / "jobs.sqlite3")),
+    )
+    job_id = coordinator.start(
+        model="model-a",
+        backend="fake",
+        profile="bf16",
+        owner_id="alice",
+        model_context_limit=128,
+        runtime={},
+    )
+
+    assert coordinator.status(job_id, owner_id="bob") is None
+    assert coordinator.list("bob") == []
+    assert coordinator.cancel(job_id, owner_id="bob") is False
+    assert coordinator.status(job_id, owner_id="alice") is not None
+    assert [job["job_id"] for job in coordinator.list("alice")] == [job_id]
+
+
+def test_job_repository_marks_orphaned_workers_interrupted(tmp_path) -> None:
+    jobs = JobRepository(str(tmp_path / "jobs.sqlite3"))
+    jobs.create("job-1", "hardware_boundary_discovery", {}, owner_id="alice")
+    jobs.set_state("job-1", "running")
+
+    assert jobs.mark_interrupted("hardware_boundary_discovery") == 1
+    assert jobs.get("job-1").state == "interrupted"

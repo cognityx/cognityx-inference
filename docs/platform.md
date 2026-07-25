@@ -1,57 +1,137 @@
 # Cognityx inference platform
 
-## Boundaries
+## Normalized contracts
 
-`cognityx_inference.contracts` defines common request, response, usage, timing,
-token-detail, capability, and extension fields. Unsupported provider fields are
-serialized as `null`; adapters do not estimate them.
+`cognityx_inference.contracts` defines the common request and response shape
+used across:
 
-`InferenceService` routes commercial calls to provider adapters. Local calls
-acquire a `ModelLease` from `ModelManager`, ensuring an unload request drains
-active work before releasing GPU resources.
+- local self-hosted inference;
+- commercial provider adapters;
+- the Python client;
+- the OpenAI-compatible HTTP layer.
 
-Storage repositories publish logical keys below `inference/` and
-`evaluations/hardware-boundary/`. Only `StorageClient.materialize()` may turn a
-model key into a runtime-local path.
+The normalized contract covers common industry parameters and outputs such as:
 
-## Local lifecycle
+- `temperature`, `top_p`, `top_k`, `min_p`;
+- `max_tokens`, `stop`, `seed`;
+- log probabilities and token details where supported;
+- prompt, completion, and total token usage;
+- finish reason;
+- latency, time to first token, and tokens per second where available;
+- reasoning mode when supported;
+- backend-specific extension fields without breaking the common interface.
 
-Resident identity includes model, backend, and load-time runtime settings.
-Sampling and generation parameters do not change that identity. A model moves
-through loading, ready, busy, draining, unloading, or failed states. New leases
-are refused while draining.
+Unsupported fields remain explicitly unavailable rather than being estimated.
 
-The default local backend is vLLM and the default profile is BF16. Loading does
-not require a context length. The backend reads the model-declared maximum and
-combines it with the latest compatible certified hardware result. A requested
-context above either hard limit is rejected with a distinct error.
+## Service routing
 
-Pure OpenAI-compatible requests use `require_loaded`: they never start an
-unexpected local model load. The Cognityx client additionally supports
-`load_policy=auto` and discovery policies `ask`, `auto`, and
-`require_existing`. HTTP clients receive status 428 with a structured discovery
-challenge when certification is missing.
+`InferenceService` is the central application service.
 
-## Boundary evaluation
+- provider requests are routed to commercial adapters such as OpenAI or xAI;
+- local requests are routed through `ModelManager` and the selected local
+  backend;
+- artifacts are persisted through storage repositories instead of direct path
+  construction.
 
-The planner enumerates only caller-supplied candidates. Trials are ordered by
-load identity. A timeout or configured slow-generation result creates a
-boundary on the active monotonic axis. Higher candidates are skipped only where
-all other configuration values match, following the contextual pruning
-convention used by `cognityx-training`.
+For local inference, the service resolves canonical model identity, compatible
+hardware certification, and effective context length before model acquisition.
 
-Each executed trial is persisted independently before the immutable summary.
-This avoids requiring mutable overwrite behavior from `cognityx-storage`.
+## Storage conventions
 
-Successful legacy `/benchmark` runs also publish a conservative certified
-profile. They certify the prompt-plus-completion token span actually exercised,
-not merely the larger engine allocation. Automatic discovery increases the
-configured context through finite candidates and stops at the first failed,
-slow, timed-out, or out-of-memory boundary.
+`cognityx-inference` uses `cognityx-storage` for persisted artifacts such as:
+
+- inference exchanges;
+- boundary manifests;
+- boundary trials;
+- boundary summaries;
+- certified inference profiles.
+
+Logical keys are published under storage-managed namespaces such as
+`inference/` and `evaluations/hardware-boundary/`. Only storage abstractions may
+materialize physical locations.
+
+## Local model lifecycle
+
+Resident identity is based on:
+
+- model;
+- backend;
+- load-time runtime settings.
+
+Sampling parameters do not define residency. A model can move through states
+such as loading, ready, busy, draining, unloading, or failed.
+
+Important lifecycle rules:
+
+- local models are loaded explicitly through the Cognityx lifecycle API or
+  client;
+- OpenAI-compatible local requests do not auto-load a model;
+- unload must not interrupt active work unexpectedly;
+- repeated requests can reuse a resident model without paying load time again.
+
+The default local backend is `vllm`, and the default profile is `bf16`.
+
+## Context and certification
+
+Loading does not require a caller-supplied context length. Instead, the service
+combines:
+
+- the model-declared maximum context length; and
+- the latest compatible certified hardware result for the active machine and
+  runtime compatibility.
+
+If the caller later requests a context length above either hard limit, the
+request is rejected clearly.
+
+If no certification exists, the system raises a structured discovery challenge.
+Depending on the client path and discovery policy, that may:
+
+- fail immediately;
+- prompt the CLI user;
+- or start discovery automatically and wait for completion.
+
+## Boundary evaluation and discovery
+
+Boundary discovery is the operational bridge between evaluation and inference.
+
+- evaluation uses explicit finite candidate values from configuration;
+- discovery tests those values for one requested model/backend/profile scope;
+- successful evidence is converted into a certified profile;
+- later model loads reuse that certification automatically.
+
+Trials are append-only. Each executed trial is persisted before the immutable
+summary so the system does not rely on overwrite semantics in storage.
+
+Legacy `/benchmark` results can also publish conservative certified profiles
+based on the actual exercised prompt-plus-completion span.
+
+## Background jobs
+
+Discovery is exposed as a background job with:
+
+- start;
+- status;
+- live server-sent event streaming;
+- cancellation.
+
+This is the start of a broader Cognityx durable job backbone intended for
+additional future workloads beyond inference discovery.
 
 ## Telemetry
 
-Local monitoring records process CPU/RAM, visible host CPU/RAM, NVIDIA
-dedicated memory, utilization, temperature, and power. An optional Windows JSON
-bridge can supply Windows-host and shared-GPU-memory fields. Every record
-identifies its source and host scope; unavailable data remains `null`.
+For local execution, the platform captures as much machine telemetry as practical,
+including:
+
+- dedicated GPU memory;
+- shared GPU memory where available;
+- GPU utilization;
+- GPU temperature;
+- GPU power;
+- CPU and RAM usage;
+- process-level resource information;
+- model loading time;
+- prompt and generation timing;
+- tokens per second and time to first token.
+
+Commercial providers normally contribute provider-reported usage and latency,
+but not their internal machine telemetry.

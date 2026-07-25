@@ -1,13 +1,17 @@
 # Usage
 
+This page documents the preserved legacy `llm-benchmark` workflow. For the
+newer inference service, client, and API usage, see [CLI and Python
+Client](cli.md) and [HTTP API](http-api.md).
+
 ## Install
 
 ```bash
 uv sync --dev
 ```
 
-Generation defaults are read from `config.toml`. Use `--config PATH` to select a
-different file.
+Generation defaults are read from `config.toml`. Use `--config PATH` to select
+a different file.
 
 ## Transformers engine
 
@@ -20,8 +24,8 @@ uv run python src/llm_benchmark/main.py \
 
 ## vLLM engine
 
-vLLM is intentionally installed in `.venv-vllm`; see the repository README for the
-CUDA-aligned environment setup.
+vLLM is intentionally installed in `.venv-vllm`; see the repository README for
+the CUDA-aligned environment setup.
 
 ```bash
 uv run python src/llm_benchmark/main.py \
@@ -48,10 +52,9 @@ uv run python src/llm_benchmark/main.py \
   --chunk-overlap 128
 ```
 
-Prepared data is stored under `data/contexts/<name>/`. Prompt assembly includes full
-chunks until the requested budget is approached and trims only the final chunk when
-required. The completed chat-templated input plus output reservation must fit within
-the model context limit.
+Prepared data is stored under `data/contexts/<name>/`. Prompt assembly includes
+full chunks until the requested budget is approached and trims only the final
+chunk when required.
 
 ## Interactive commands
 
@@ -68,12 +71,16 @@ the model context limit.
 | `/help` | Display command help. |
 | `/quit` | Exit and release the loaded model. |
 
-Press `Ctrl+C` during generation to cancel the request while preserving the loaded
-model. Pressing it outside generation follows normal terminal interruption behavior.
+Press `Ctrl+C` during generation to cancel the request while preserving the
+loaded model. Pressing it outside generation follows normal terminal
+interruption behavior.
 
 ## Documentation
 
 ```bash
-uv run mkdocs serve
+uv run mkdocs serve --dev-addr 127.0.0.1:8000
 uv run mkdocs build --strict
 ```
+
+The inference API examples use port `8013`, so MkDocs on `8000` does not
+intercept API requests.

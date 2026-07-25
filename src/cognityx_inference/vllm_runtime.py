@@ -45,9 +45,15 @@ def ensure_vllm_runtime(argv: list[str]) -> None:
     environment.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
     source_root = str(project_root / "src")
     storage_source_root = str(project_root.parent / "cognityx-storage" / "src")
+    jobs_source_root = str(project_root.parent / "cognityx-jobs" / "src")
     environment["PYTHONPATH"] = ":".join(
         item
-        for item in (source_root, storage_source_root, environment.get("PYTHONPATH"))
+        for item in (
+            source_root,
+            storage_source_root,
+            jobs_source_root,
+            environment.get("PYTHONPATH"),
+        )
         if item
     )
     cuda_home = next(

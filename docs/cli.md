@@ -1,0 +1,461 @@
+# CLI and Python Client
+
+## Service Startup
+
+Use port `8013` for the inference API. Port `8000` is reserved for the local
+MkDocs documentation server in these instructions.
+
+```bash
+uv sync --extra api --extra telemetry
+uv run cognityx-inference serve --host 127.0.0.1 --port 8013
+```
+
+Keep this terminal open. In other terminals, define a shell variable for
+copy-paste-safe commands:
+
+```bash
+export COGNITYX_INFERENCE_URL=http://127.0.0.1:8013
+```
+
+The CLI does not read this variable automatically; the commands below pass it
+through `--base-url`.
+
+If commercial providers are needed, set `OPENAI_API_KEY` or `XAI_API_KEY`
+before starting the service.
+
+The discovery job database is shared with the service process. For a local
+single-user workflow, keep it in the repository root so the CLI and server see
+the same state:
+
+```bash
+export COGNITYX_JOBS_DATABASE="$PWD/cognityx_jobs.sqlite3"
+```
+
+## Copy-Paste CLI Workflow
+
+Run these commands from the repository root.
+
+Terminal 1 — start the inference API:
+
+```bash
+export COGNITYX_JOBS_DATABASE="$PWD/cognityx_jobs.sqlite3"
+uv run cognityx-inference serve --host 127.0.0.1 --port 8013
+```
+
+Terminal 2 — select the API, load the model, and wait for readiness:
+
+```bash
+export COGNITYX_INFERENCE_URL=http://127.0.0.1:8013
+
+uv run cognityx-inference model load \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --discovery-policy ask
+
+uv run cognityx-inference model status \
+  --base-url "$COGNITYX_INFERENCE_URL"
+```
+
+`loading` means initialization is still in progress. `ready` means the model
+can accept inference. The load command itself waits until loading or any
+required discovery has finished.
+
+Then run streaming inference:
+
+```bash
+uv run cognityx-inference infer \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --prompt "Explain KV cache precision." \
+  --max-tokens 256 \
+  --discovery-policy ask
+```
+
+## CLI Overview
+
+The main operational CLI is `cognityx-inference`.
+
+### Load a Local Model
+
+```bash
+uv run cognityx-inference model load \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --discovery-policy ask
+```
+
+Notes:
+
+- default backend is `vllm`;
+- default profile is `bf16`;
+- no context length is supplied at load time;
+- the service resolves the effective limit from model metadata plus the latest
+  compatible certified hardware result;
+- if no certification exists, discovery policy controls what happens next.
+
+Discovery policies:
+
+- `require_existing`
+  Fail immediately if no compatible certified profile exists.
+- `ask`
+  Prompt in the CLI client before starting discovery.
+- `auto`
+  Start discovery automatically and wait for completion.
+
+For unattended execution, replace `ask` with `auto`. To prohibit discovery,
+use `require_existing`.
+
+One-call load/discover/infer is also supported. The streaming `infer` command
+performs a lifecycle preflight, reuses a compatible resident model when one is
+already ready, and otherwise follows the selected discovery policy:
+
+```bash
+uv run cognityx-inference infer \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --prompt "Reply with READY." \
+  --discovery-policy auto
+```
+
+### Recommended Discovery Modes
+
+There are two common ways to use hardware-boundary discovery:
+
+1. Manual discovery first, then load or infer with `require_existing`.
+2. Auto discovery from `model load` or `infer` when you want the client to
+   discover a certified boundary on demand.
+
+Both paths use the same discovery engine and the same job status and cancel
+commands.
+
+## Live Job Workflow
+
+Discovery runs as a background job. While a job is active, you can keep one
+terminal focused on the service and use another terminal to watch status,
+stream events, or cancel the job.
+
+Example layout:
+
+```text
+Terminal 1: uv run cognityx-inference serve --host 127.0.0.1 --port 8013
+Terminal 2: discovery start / model load / infer
+Terminal 3: discovery status / discovery watch / discovery cancel
+```
+
+If auto discovery is triggered from `model load` or `infer`, the CLI prints the
+job ID immediately and keeps streaming progress. You can copy that ID into a
+second shell and use the same `status`, `watch`, or `cancel` commands.
+
+### Inspect Loaded Models
+
+```bash
+uv run cognityx-inference model status \
+  --base-url "$COGNITYX_INFERENCE_URL"
+```
+
+### Unload One Model
+
+```bash
+uv run cognityx-inference model unload \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B
+```
+
+### Unload Everything
+
+```bash
+uv run cognityx-inference model unload-all \
+  --base-url "$COGNITYX_INFERENCE_URL"
+```
+
+## Inference
+
+### Simple Local Inference
+
+```bash
+uv run cognityx-inference infer \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4 \
+  --prompt "Explain KV cache precision." \
+  --max-tokens 256 \
+  --discovery-policy ask
+```
+
+Inference streams generated text to the terminal by default. The Cognityx
+client first ensures that the certified local model is loaded, then opens an
+OpenAI-compatible SSE request using `require_loaded`.
+
+To wait for completion and print the original full JSON response instead:
+
+```bash
+uv run cognityx-inference infer \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --prompt "Explain KV cache precision." \
+  --no-stream
+```
+
+Optional CLI parameters currently exposed on the command line:
+
+- `--required-context-length`
+- `--max-tokens`
+- `--backend`
+- `--profile`
+- `--discovery-policy`
+
+The normalized request contract supports more parameters than the current CLI
+flags expose. For full control, use the Python client or direct HTTP payloads.
+
+## Discovery Jobs
+
+### Start Discovery Explicitly
+
+This is the most direct way to run the boundary evaluator when you already know
+the model, backend, and profile you want to test.
+
+```bash
+uv run cognityx-inference discovery start \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4
+```
+
+### Watch Live Discovery Events
+
+Use this in a second terminal while discovery is running.
+
+```bash
+uv run cognityx-inference discovery watch \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  <job-id>
+```
+
+This streams server-sent events from the service. Each event is printed as one
+JSON object and may include:
+
+- `discovery_started`
+- `trial_started`
+- `trial_completed`
+- `cancel_requested`
+- `discovery_completed`
+- `discovery_failed`
+- `discovery_cancelled`
+
+### List Your Discovery Jobs
+
+```bash
+uv run cognityx-inference discovery status \
+  --base-url "$COGNITYX_INFERENCE_URL"
+```
+
+This lists the current caller's active jobs and their IDs. Use `--all` to
+include history.
+
+Typical use:
+
+1. Run `discovery status` in a second terminal.
+2. Copy the job ID from the active row.
+3. Use `discovery watch <job-id>` for live SSE progress.
+4. Use `discovery cancel <job-id>` if the trial is no longer useful.
+
+The command is owner-scoped, so one user only sees their own jobs unless they
+explicitly ask for history in the same principal scope.
+
+### Cancel a Discovery Job
+
+```bash
+uv run cognityx-inference discovery cancel \
+  --base-url "$COGNITYX_INFERENCE_URL" \
+  <job-id>
+```
+
+## Python Client
+
+### Explicit Load Followed by Repeated Inference
+
+Use explicit loading when an application wants to prepare the model before
+accepting requests:
+
+```python
+from cognityx_inference import CognityxInferenceClient
+
+client = CognityxInferenceClient(
+    "http://127.0.0.1:8013",
+    discovery_policy="ask",
+)
+
+loaded = client.load_model(
+    "Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+    discovery_policy="ask",
+)
+
+print(loaded["state"])
+print(client.model_status())
+
+final_chunk = None
+for chunk in client.stream_chat(
+    model="Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+    prompt="Explain KV caching.",
+    max_tokens=128,
+    discovery_policy="require_existing",
+):
+    choices = chunk.get("choices") or []
+    if choices:
+        text = (choices[0].get("delta") or {}).get("content")
+        if text:
+            print(text, end="", flush=True)
+    if "usage" in chunk:
+        final_chunk = chunk
+
+print()
+if final_chunk is not None:
+    print("usage:", final_chunk["usage"])
+    print("finish reason:", final_chunk["choices"][0]["finish_reason"])
+    print("timings:", final_chunk["cognityx"]["timings"])
+```
+
+`stream_chat()` performs a lightweight load preflight. If the same compatible
+model is already resident, the lifecycle manager reuses it; weights are not
+loaded again.
+
+### One-Call Automatic Load or Discovery
+
+An application may omit a separate `load_model()` call:
+
+```python
+from cognityx_inference import CognityxInferenceClient
+
+client = CognityxInferenceClient(
+    "http://127.0.0.1:8013",
+    discovery_policy="auto",
+)
+
+for chunk in client.stream_chat(
+    model="Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+    prompt="Explain KV caching.",
+    max_tokens=128,
+    discovery_policy="auto",
+):
+    choices = chunk.get("choices") or []
+    if choices:
+        print(
+            (choices[0].get("delta") or {}).get("content", ""),
+            end="",
+            flush=True,
+        )
+print()
+```
+
+This sequence checks certification, starts durable discovery when necessary,
+loads the certified configuration, keeps it resident, and then opens the SSE
+inference stream.
+
+### Non-Streaming JSON and Unload
+
+```python
+reply = client.chat(
+    model="Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+    prompt="Reply with READY.",
+    max_tokens=32,
+    discovery_policy="require_existing",
+)
+print(reply["choices"][0]["message"]["content"])
+
+print(client.model_status())
+print(client.unload_model("Qwen/Qwen3-8B", "vllm"))
+# Or release every local model:
+# print(client.unload_all())
+```
+
+Useful client methods:
+
+- `load_model(...)`
+- `model_status()`
+- `unload_model(...)`
+- `unload_all()`
+- `chat(...)`
+- `stream_chat(...)`
+- `infer(InferenceRequest(...))`
+- `stream_infer(InferenceRequest(...))`
+- `start_discovery(...)`
+- `discovery_status(job_id)`
+- `stream_discovery(job_id)`
+- `cancel_discovery(job_id)`
+
+The client can also subscribe to live discovery events while it waits for an
+auto-discovery path to complete. That is the same mechanism the CLI uses for
+the two-terminal live progress view.
+
+## OpenAI-Compatible Clients
+
+Pure OpenAI-compatible clients can call `/v1/chat/completions`, but they do not
+automatically load local models. Those requests succeed only when the requested
+local model is already loaded, or when the request targets an external provider.
+
+Use the Cognityx client when you want one interface that can both:
+
+- manage local model lifecycle; and
+- submit inference requests across local and provider-backed backends.
+
+## Troubleshooting
+
+### Model status returns an HTML or non-JSON 404
+
+Confirm that `--base-url` points to the inference API. In this guide:
+
+- `http://127.0.0.1:8013` is the inference API;
+- `http://127.0.0.1:8000` is MkDocs.
+
+Check the listening processes:
+
+```bash
+ss -ltnp 'sport = :8013'
+ss -ltnp 'sport = :8000'
+```
+
+Then retry:
+
+```bash
+uv run cognityx-inference model status \
+  --base-url http://127.0.0.1:8013
+```
+
+### Status remains `loading`
+
+Model loading is synchronous inside the load request but visible through the
+status endpoint from another terminal. Large checkpoints may take several
+minutes. Do not start a second server for the same GPU; monitor the existing
+server and wait for `ready` or `failed`.
+
+### No compatible hardware certification exists
+
+- use `--discovery-policy ask` for an interactive confirmation;
+- use `--discovery-policy auto` for unattended execution;
+- use `discovery status`, `discovery watch <job-id>`, and
+  `discovery cancel <job-id>` from another terminal.
+
+### Model metadata cannot be found
+
+Use the exact cached Hugging Face model identifier. For example, the existing
+cache directory `models--Qwen--Qwen3-8B` corresponds to
+`Qwen/Qwen3-8B`, not `Qwen/Qwen-8B`. Confirm that `HF_HOME` points at the
+intended shared cache before starting the server.

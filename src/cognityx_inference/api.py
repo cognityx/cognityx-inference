@@ -10,6 +10,8 @@ import time
 from typing import Any
 
 from cognityx_inference.capabilities import HardwareDiscoveryRequired
+from cognityx_inference.auth import EnvironmentPrincipalResolver, PrincipalResolver
+from cognityx_inference.backends.legacy import discover_model_context_limit
 from cognityx_inference.capabilities import (
     CertifiedContextLimitExceeded,
     ModelContextLimitExceeded,
@@ -45,17 +47,30 @@ def _model_metadata_http_exception(exc: ModelMetadataUnavailableError) -> Any:
     )
 
 
-def create_app(service: InferenceService) -> Any:
+def create_app(
+    service: InferenceService,
+    principal_resolver: PrincipalResolver | None = None,
+) -> Any:
     """Build the optional HTTP application without requiring FastAPI at import."""
     try:
-        from fastapi import FastAPI, HTTPException
+        from fastapi import FastAPI, HTTPException, Request
         from fastapi.responses import StreamingResponse
     except ImportError as exc:
         raise RuntimeError(
             "API support is optional; install cognityx-inference[api]."
         ) from exc
+    # FastAPI resolves postponed endpoint annotations from module globals.
+    # Keep this import optional while making Request available to that resolver.
+    globals()["Request"] = Request
 
     app = FastAPI(title="Cognityx Inference", version="0.1.0")
+    resolver = principal_resolver or EnvironmentPrincipalResolver.from_environment()
+
+    def owner_id(request: Request) -> str:
+        try:
+            return resolver.resolve(request.headers.get("Authorization"))
+        except PermissionError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     @app.get("/v1/models")
     def models() -> dict[str, Any]:
@@ -72,7 +87,7 @@ def create_app(service: InferenceService) -> Any:
         return {"object": "list", "data": data}
 
     @app.post("/v1/chat/completions")
-    def chat_completions(payload: dict[str, Any]) -> Any:
+    def chat_completions(payload: dict[str, Any], request: Request) -> Any:
         extension = payload.get("cognityx") or {}
         timeouts = extension.get("timeouts") or {}
         try:
@@ -115,10 +130,10 @@ def create_app(service: InferenceService) -> Any:
             )
             if normalized.stream:
                 return StreamingResponse(
-                    _stream_chat(service, normalized),
+                    _stream_chat(service, normalized, owner_id(request)),
                     media_type="text/event-stream",
                 )
-            response = service.infer(normalized)
+            response = service.infer(normalized, owner_id=owner_id(request))
         except HardwareDiscoveryRequired as exc:
             raise HTTPException(status_code=428, detail=exc.to_dict()) from exc
         except ModelNotLoadedError as exc:
@@ -161,7 +176,7 @@ def create_app(service: InferenceService) -> Any:
         }
 
     @app.post("/v1/cognityx/models/load")
-    def load(payload: dict[str, Any]) -> dict[str, Any]:
+    def load(payload: dict[str, Any], request: Request) -> dict[str, Any]:
         requested_model = str(payload["model"])
         try:
             result, context = service.load_model(
@@ -173,6 +188,7 @@ def create_app(service: InferenceService) -> Any:
                 DiscoveryPolicy(
                     payload.get("discovery_policy", "require_existing")
                 ),
+                owner_id=owner_id(request),
             )
         except HardwareDiscoveryRequired as exc:
             raise HTTPException(status_code=428, detail=exc.to_dict()) from exc
@@ -223,10 +239,10 @@ def create_app(service: InferenceService) -> Any:
         }
 
     @app.get("/v1/cognityx/discoveries/{job_id}")
-    def discovery_status(job_id: str) -> dict[str, Any]:
+    def discovery_status(job_id: str, request: Request) -> dict[str, Any]:
         coordinator = service.discovery
         status = (
-            coordinator.status(job_id)
+            coordinator.status(job_id, owner_id=owner_id(request))
             if coordinator is not None and hasattr(coordinator, "status")
             else None
         )
@@ -234,27 +250,54 @@ def create_app(service: InferenceService) -> Any:
             raise HTTPException(status_code=404, detail="Discovery job not found.")
         return status
 
-    @app.post("/v1/cognityx/discoveries/{job_id}/cancel")
-    def cancel_discovery(job_id: str) -> dict[str, Any]:
+    @app.get("/v1/cognityx/discoveries")
+    def list_discoveries(
+        request: Request, all: bool = False
+    ) -> list[dict[str, Any]]:
         coordinator = service.discovery
-        if coordinator is None or not coordinator.cancel(job_id):
+        if coordinator is None or not hasattr(coordinator, "list"):
+            raise HTTPException(status_code=503, detail="Discovery is unavailable.")
+        return coordinator.list(owner_id(request), include_history=all)
+
+    @app.post("/v1/cognityx/discoveries")
+    def start_discovery(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        coordinator = service.discovery
+        if coordinator is None:
+            raise HTTPException(status_code=503, detail="Discovery is unavailable.")
+        model = str(payload["model"])
+        backend = str(payload.get("backend", "vllm"))
+        profile = str(payload.get("profile", "bf16"))
+        model_limit, _ = discover_model_context_limit(model)
+        job_id = coordinator.start(
+            model=model, backend=backend, profile=profile, owner_id=owner_id(request),
+            model_context_limit=model_limit, runtime=payload.get("runtime") or {},
+        )
+        return {"job_id": job_id, "state": "queued"}
+
+    @app.post("/v1/cognityx/discoveries/{job_id}/cancel")
+    def cancel_discovery(job_id: str, request: Request) -> dict[str, Any]:
+        coordinator = service.discovery
+        if coordinator is None or not coordinator.cancel(
+            job_id, owner_id=owner_id(request)
+        ):
             raise HTTPException(status_code=404, detail="Discovery job not found or already finished.")
         return {"job_id": job_id, "cancel_requested": True}
 
     @app.get("/v1/cognityx/discoveries/{job_id}/events")
-    def discovery_events(job_id: str, after: int = 0) -> Any:
+    def discovery_events(job_id: str, request: Request, after: int = 0) -> Any:
         coordinator = service.discovery
-        if coordinator is None or coordinator.status(job_id) is None:
+        principal = owner_id(request)
+        if coordinator is None or coordinator.status(job_id, owner_id=principal) is None:
             raise HTTPException(status_code=404, detail="Discovery job not found.")
 
         def stream() -> Any:
             cursor = after
             while True:
-                events = coordinator.events(job_id, cursor)
+                events = coordinator.events(job_id, cursor, owner_id=principal)
                 for event in events:
                     cursor = event["sequence"]
                     yield f"id: {cursor}\nevent: {event['event']}\ndata: {json.dumps(event)}\n\n"
-                status = coordinator.status(job_id)
+                status = coordinator.status(job_id, owner_id=principal)
                 if status and status["state"] in {"completed", "failed", "cancelled"}:
                     break
                 yield ": heartbeat\n\n"
@@ -265,7 +308,7 @@ def create_app(service: InferenceService) -> Any:
 
 
 def _stream_chat(
-    service: InferenceService, request: InferenceRequest
+    service: InferenceService, request: InferenceRequest, owner_id: str
 ) -> Any:
     """Bridge synchronous backend callbacks to OpenAI-style SSE chunks."""
     chunks: queue.Queue[tuple[str, Any]] = queue.Queue()
@@ -275,7 +318,9 @@ def _stream_chat(
 
     def run() -> None:
         try:
-            response = service.infer(request, on_text=on_text)
+            response = service.infer(
+                request, on_text=on_text, owner_id=owner_id
+            )
             chunks.put(("response", response))
         except Exception as exc:
             chunks.put(("error", exc))
