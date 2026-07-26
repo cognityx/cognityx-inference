@@ -9,6 +9,7 @@ theme:
     - navigation.indexes
     - content.code.copy
 nav:
+  - Cognityx Home: https://cognityx.github.io/
   - Home: index.md
   - Platform: platform.md
   - CLI and Python client: cli.md
