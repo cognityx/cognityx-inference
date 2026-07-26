@@ -50,6 +50,30 @@ Logical keys are published under storage-managed namespaces such as
 `inference/` and `evaluations/hardware-boundary/`. Only storage abstractions may
 materialize physical locations.
 
+### Local operator inspection
+
+For a certified profile, inference publishes a logical key of this form:
+
+```text
+evaluations/hardware-boundary/certified-profiles/
+<hardware-fingerprint>/<backend>/<model>/<profile>/<profile-id>.json
+```
+
+The service uses `StorageClient().for_shared_data()`, so the shared scope is
+added by `cognityx-storage`. With the default local storage backend, the
+operator-visible mapping is:
+
+```text
+/mnt/d/AI/cognitive/cognityx-storage/shared/
+  evaluations/hardware-boundary/certified-profiles/
+  <hardware-fingerprint>/<backend>/<model>/<profile>/<profile-id>.json
+```
+
+This physical location is for inspection only. Applications must use
+`certified-profiles` CLI/API operations or `cognityx-storage` logical keys;
+they must not construct this path themselves. A different storage backend can
+map the same logical key to a different physical or cloud location.
+
 ## Local model lifecycle
 
 Resident identity is based on:

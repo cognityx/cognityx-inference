@@ -210,6 +210,36 @@ def create_app(
     def statuses() -> list[dict[str, Any]]:
         return [_status(item) for item in service.models.statuses()]
 
+    @app.get("/v1/cognityx/certified-profiles")
+    def certified_profiles(
+        model: str | None = None,
+        backend: str | None = None,
+        profile: str | None = None,
+        kv_cache_precision: str | None = None,
+    ) -> list[dict[str, Any]]:
+        repository = service.certified_profiles
+        if repository is None:
+            raise HTTPException(status_code=503, detail="Certified profiles are unavailable.")
+        return [
+            item.to_dict()
+            for item in repository.list_profiles(
+                model=model,
+                backend=backend,
+                profile=profile,
+                kv_cache_precision=kv_cache_precision,
+            )
+        ]
+
+    @app.get("/v1/cognityx/certified-profiles/{profile_id}")
+    def certified_profile(profile_id: str) -> dict[str, Any]:
+        repository = service.certified_profiles
+        if repository is None:
+            raise HTTPException(status_code=503, detail="Certified profiles are unavailable.")
+        result = repository.get_profile(profile_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="Certified profile not found.")
+        return result.to_dict()
+
     @app.post("/v1/cognityx/models/unload")
     def unload(payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get("runtime"):

@@ -158,6 +158,7 @@ class InferenceService:
         owner_id: str = "local",
     ) -> tuple[dict[str, Any], Any | None]:
         """Resolve context from model metadata and compatible certification."""
+        kv_cache_was_requested = "kv_cache_precision" in runtime
         runtime["quantization"] = profile
         if self.certified_profiles is None:
             return runtime, None
@@ -177,6 +178,14 @@ class InferenceService:
             tensor_parallelism=int(runtime.get("tensor_parallelism", 1)),
         )
         certified = self.certified_profiles.find_compatible(compatibility)
+        if (
+            certified is None
+            and not kv_cache_was_requested
+            and hasattr(self.certified_profiles, "find_compatible_any_kv_cache")
+        ):
+            certified = self.certified_profiles.find_compatible_any_kv_cache(
+                compatibility
+            )
         if certified is None:
             request_id = (
                 self.discovery.start(
@@ -202,6 +211,7 @@ class InferenceService:
             )
         context = resolve_context(model_limit, certified, required_context_length)
         runtime["context_length"] = context.effective_limit
+        runtime["kv_cache_precision"] = certified.compatibility.kv_cache_precision
         runtime.setdefault(
             "gpu_memory_utilization", certified.gpu_memory_utilization or 0.9
         )

@@ -41,6 +41,8 @@ def test_certified_profile_round_trip_uses_logical_storage(tmp_path) -> None:
         "shared/evaluations/hardware-boundary/certified-profiles/"
     )
     assert loaded == profile
+    assert repository.list_profiles(model="org/model-a") == [profile]
+    assert repository.get_profile("profile-1") == profile
 
 
 def test_missing_certification_prefix_means_discovery_required(

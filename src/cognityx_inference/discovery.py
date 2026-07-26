@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from itertools import product
 from pathlib import Path
+import copy
 import threading
 import time
 import tomllib
@@ -26,6 +27,7 @@ from cognityx_inference.storage import (
     BoundaryArtifactRepository,
     CertifiedProfileRepository,
 )
+from cognityx_inference.telemetry import ResourceMonitor, read_windows_bridge
 from cognityx_jobs import JobRepository
 
 
@@ -45,11 +47,21 @@ class DiscoveryConfig:
         131072,
     )
     prompt: str = "Briefly explain why model context capacity matters."
+    system_prompt: str | None = None
+    enable_thinking: bool = False
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    seed: int | None = None
     max_tokens: int = 64
     trial_timeout_seconds: float = 300
     minimum_tokens_per_second: float = 1
     kv_cache_precisions: tuple[str, ...] = ("auto",)
     generation_lengths: tuple[int, ...] = (64,)
+    telemetry_interval_seconds: float = 0.25
+    windows_bridge_path: str | None = None
+    windows_bridge_max_age_seconds: float = 5.0
 
     @classmethod
     def from_toml(cls, path: Path) -> "DiscoveryConfig":
@@ -57,12 +69,25 @@ class DiscoveryConfig:
             document = tomllib.load(source)
         axes = document["search"]["axes"]
         limits = document.get("limits") or {}
+        workload = document.get("workload") or {}
+        telemetry = document.get("telemetry") or {}
         return cls(
             context_candidates=tuple(axes.get("context_length", cls.context_candidates)),
             kv_cache_precisions=tuple(axes.get("kv_cache_precision", ("auto",))),
             generation_lengths=tuple(axes.get("generation_length", (64,))),
             trial_timeout_seconds=float(limits.get("request_timeout_seconds", 300)),
             minimum_tokens_per_second=float(limits.get("minimum_tokens_per_second", 1)),
+            prompt=str(workload.get("user_prompt", cls.prompt)),
+            system_prompt=workload.get("system_prompt"),
+            enable_thinking=bool(workload.get("enable_thinking", False)),
+            temperature=workload.get("temperature"),
+            top_p=workload.get("top_p"),
+            top_k=workload.get("top_k"),
+            min_p=workload.get("min_p"),
+            seed=workload.get("seed"),
+            telemetry_interval_seconds=float(telemetry.get("interval_seconds", 0.25)),
+            windows_bridge_path=telemetry.get("windows_bridge_path"),
+            windows_bridge_max_age_seconds=float(telemetry.get("windows_bridge_max_age_seconds", 5)),
         )
 
 
@@ -203,6 +228,8 @@ class BoundaryDiscoveryCoordinator:
         supplied_model_limit: int | None,
         base_runtime: dict[str, Any],
     ) -> None:
+        loaded_identity: ModelIdentity | None = None
+        keep_loaded = False
         job.state = "running"
         job.started_at = datetime.now(timezone.utc).isoformat()
         self._emit(
@@ -224,35 +251,29 @@ class BoundaryDiscoveryCoordinator:
             contexts = tuple(value for value in self.config.context_candidates if value <= model_limit)
             if model_limit not in contexts:
                 contexts = (*contexts, model_limit)
+            # Keep all request variants for an engine identity together.  This
+            # avoids reloading a 100+ second model merely to change max_tokens.
             candidates = tuple(
-                {"context_length": context_length, "kv_cache_precision": kv_cache_precision, "generation_length": generation_length}
-                for kv_cache_precision, generation_length, context_length in product(
-                    self.config.kv_cache_precisions, self.config.generation_lengths, contexts
+                {
+                    "context_length": context_length,
+                    "kv_cache_precision": kv_cache_precision,
+                    "generation_length": generation_length,
+                    "batch_size": int(base_runtime.get("batch_size", 1)),
+                }
+                for kv_cache_precision, context_length, generation_length in product(
+                    self.config.kv_cache_precisions, contexts, self.config.generation_lengths
                 )
             )
             inventory = dict(self.inventory())
-            compatibility = RuntimeCompatibility(
-                hardware_fingerprint=hardware_fingerprint(inventory),
-                model=job.model,
-                model_revision=revision,
-                backend=job.backend,
-                backend_version=_backend_version(job.backend),
-                profile=job.profile,
-                kv_cache_precision=str(
-                    base_runtime.get("kv_cache_precision", "auto")
-                ),
-                tensor_parallelism=int(
-                    base_runtime.get("tensor_parallelism", 1)
-                ),
-            )
             self.artifacts.save_manifest(
                 job.job_id,
                 {
                     "job_id": job.job_id,
                     "type": "automatic_context_discovery",
-                    "compatibility": asdict(compatibility),
+                    "base_runtime": base_runtime,
                     "model_context_limit": model_limit,
                     "candidates": list(candidates),
+                    "workload": self._workload_evidence(),
                 },
             )
             successful: list[dict[str, Any]] = []
@@ -285,30 +306,42 @@ class BoundaryDiscoveryCoordinator:
                     "kv_cache_precision": candidate["kv_cache_precision"],
                 }
                 identity = ModelIdentity.create(job.model, job.backend, runtime)
+                # An engine cannot satisfy this request; avoid a costly load.
+                # Prompt tokenization is backend-specific, so the backend still
+                # remains authoritative for the final validation.
+                if candidate["generation_length"] >= context_length:
+                    trial = self._invalid_trial(job, number, candidate, base_runtime)
+                    job.trials.append(trial)
+                    self._emit(job, "trial_completed", trial=trial,
+                               completed_trials=len(job.trials), total_trials=len(candidates))
+                    self.artifacts.save_trial(job.job_id, trial["trial_id"], trial)
+                    continue
+                if loaded_identity is not None and loaded_identity != identity:
+                    self.models.unload(loaded_identity, wait=True)
+                    loaded_identity = None
                 started = time.monotonic()
-                generation_started: float | None = None
+                monitor = self._new_monitor()
+                monitor.start()
                 load_seconds: float | None = None
                 try:
-                    with self.models.acquire(
-                        job.model, job.backend, runtime
-                    ) as backend:
-                        load_seconds = time.monotonic() - started
-                        generation_started = time.monotonic()
+                    monitor.mark_phase("model_loading")
+                    status = self.models.load(job.model, job.backend, runtime)
+                    load_seconds = status.load_seconds if loaded_identity is None else 0.0
+                    loaded_identity = identity
+                    monitor.mark_phase("inference")
+                    with self.models.acquire(job.model, job.backend, runtime) as backend:
                         response = backend.infer(
-                            InferenceRequest(
-                                model=job.model,
-                                prompt=self.config.prompt,
-                                backend=job.backend,
-                                profile=job.profile,
-                                load_policy=LoadPolicy.REQUIRE_LOADED,
-                                max_tokens=candidate["generation_length"],
-                            )
+                            self._request(job, candidate)
                         )
-                    generation_seconds = time.monotonic() - (
-                        generation_started or started
-                    )
+                    monitor.mark_phase("completed")
+                    resource_summary = monitor.stop()
                     elapsed = time.monotonic() - started
                     speed = response.timings.tokens_per_second
+                    generation_seconds = (
+                        response.timings.token_generation_seconds
+                        or response.timings.latency_seconds
+                        or elapsed - (load_seconds or 0.0)
+                    )
                     acceptable = (
                         generation_seconds <= self.config.trial_timeout_seconds
                         and (
@@ -324,21 +357,25 @@ class BoundaryDiscoveryCoordinator:
                             "model": job.model,
                             "backend": job.backend,
                             "profile": job.profile,
-                            "context_length": context_length,
-                            **candidate,
                             **base_runtime,
+                            **candidate,
                         },
                         "runtime_seconds": elapsed,
                         "metrics": {
                             "model_loading_seconds": load_seconds,
+                            "prompt_processing_seconds": response.timings.prompt_processing_seconds,
                             "generation_seconds": generation_seconds,
                             "tokens_per_second": speed,
                             "time_to_first_token_seconds": (
                                 response.timings.time_to_first_token_seconds
                             ),
+                            "usage": asdict(response.usage),
+                            "token_breakdown": self._token_breakdown(response),
+                            "resource_summary": resource_summary,
                         },
                     }
                 except Exception as exc:
+                    resource_summary = monitor.stop()
                     trial = {
                         "trial_id": f"trial-{number:03d}",
                         "status": (
@@ -350,16 +387,13 @@ class BoundaryDiscoveryCoordinator:
                             "model": job.model,
                             "backend": job.backend,
                             "profile": job.profile,
-                            "context_length": context_length,
-                            **candidate,
                             **base_runtime,
+                            **candidate,
                         },
                         "runtime_seconds": time.monotonic() - started,
-                        "metrics": {},
+                        "metrics": {"resource_summary": resource_summary},
                         "error": f"{type(exc).__name__}: {exc}",
                     }
-                finally:
-                    self.models.unload(identity, wait=True)
                 job.trials.append(trial)
                 self._emit(
                     job,
@@ -377,8 +411,26 @@ class BoundaryDiscoveryCoordinator:
                 successful.append(trial)
             if not successful:
                 raise RuntimeError("No discovery candidate completed successfully.")
-            best = successful[-1]
+            # Prefer capacity first, then the largest proven completion budget.
+            best = max(
+                successful,
+                key=lambda item: (
+                    item["configuration"]["context_length"],
+                    item["configuration"]["generation_length"],
+                ),
+            )
             metrics = best["metrics"]
+            configuration = best["configuration"]
+            compatibility = RuntimeCompatibility(
+                hardware_fingerprint=hardware_fingerprint(inventory),
+                model=job.model,
+                model_revision=revision,
+                backend=job.backend,
+                backend_version=_backend_version(job.backend),
+                profile=job.profile,
+                kv_cache_precision=str(configuration["kv_cache_precision"]),
+                tensor_parallelism=int(configuration.get("tensor_parallelism", 1)),
+            )
             certified = CertifiedInferenceProfile(
                 profile_id=new_profile_id(compatibility),
                 created_at=datetime.now(timezone.utc).isoformat(),
@@ -388,9 +440,7 @@ class BoundaryDiscoveryCoordinator:
                     "context_length"
                 ],
                 maximum_certified_batch_size=1,
-                gpu_memory_utilization=base_runtime.get(
-                    "gpu_memory_utilization", 0.9
-                ),
+                gpu_memory_utilization=configuration.get("gpu_memory_utilization", 0.9),
                 minimum_observed_tokens_per_second=metrics.get(
                     "tokens_per_second"
                 ),
@@ -398,6 +448,15 @@ class BoundaryDiscoveryCoordinator:
                     "time_to_first_token_seconds"
                 ),
                 evidence_job_id=job.job_id,
+                certified_configuration=configuration,
+                workload=self._workload_evidence(),
+                token_breakdown=metrics.get("token_breakdown", {}),
+                performance={
+                    key: metrics.get(key)
+                    for key in ("model_loading_seconds", "prompt_processing_seconds", "generation_seconds", "time_to_first_token_seconds", "tokens_per_second")
+                },
+                resource_summary=metrics.get("resource_summary", {}),
+                certified_trial=copy.deepcopy(best),
             )
             stored = self.profiles.save(certified)
             summary = {
@@ -411,13 +470,18 @@ class BoundaryDiscoveryCoordinator:
                 **base_runtime,
                 "quantization": job.profile,
                 "context_length": certified.maximum_certified_context_length,
+                "kv_cache_precision": certified.compatibility.kv_cache_precision,
                 "certified_profile_id": certified.profile_id,
             }
             ready_runtime.setdefault(
                 "gpu_memory_utilization",
                 certified.gpu_memory_utilization or 0.9,
             )
+            ready_identity = ModelIdentity.create(job.model, job.backend, ready_runtime)
+            if loaded_identity is not None and loaded_identity != ready_identity:
+                self.models.unload(loaded_identity, wait=True)
             self.models.load(job.model, job.backend, ready_runtime)
+            keep_loaded = True
             job.certified_profile_id = certified.profile_id
             job.state = "completed"
             self._emit(
@@ -432,4 +496,57 @@ class BoundaryDiscoveryCoordinator:
             self._emit(job, "discovery_failed", error=job.error)
             self.jobs.set_state(job.job_id, "failed")
         finally:
+            if loaded_identity is not None and not keep_loaded:
+                self.models.unload(loaded_identity, wait=True)
             job.finished_at = datetime.now(timezone.utc).isoformat()
+
+    def _request(self, job: DiscoveryJob, candidate: Mapping[str, Any]) -> InferenceRequest:
+        messages: tuple[dict[str, str], ...] = (
+            (({"role": "system", "content": self.config.system_prompt},) if self.config.system_prompt else ())
+            + ({"role": "user", "content": self.config.prompt},)
+        )
+        return InferenceRequest(
+            model=job.model, messages=messages, backend=job.backend, profile=job.profile,
+            load_policy=LoadPolicy.REQUIRE_LOADED, max_tokens=int(candidate["generation_length"]),
+            temperature=self.config.temperature, top_p=self.config.top_p,
+            top_k=self.config.top_k, min_p=self.config.min_p, seed=self.config.seed,
+            reasoning={"enabled": True} if self.config.enable_thinking else {},
+        )
+
+    def _workload_evidence(self) -> dict[str, Any]:
+        return {
+            "system_prompt": self.config.system_prompt,
+            "user_prompt": self.config.prompt,
+            "reasoning": {"enabled": self.config.enable_thinking},
+            "parameters": {"temperature": self.config.temperature, "top_p": self.config.top_p,
+                           "top_k": self.config.top_k, "min_p": self.config.min_p, "seed": self.config.seed},
+        }
+
+    def _new_monitor(self) -> ResourceMonitor:
+        bridge = self.config.windows_bridge_path
+        return ResourceMonitor(
+            interval_seconds=self.config.telemetry_interval_seconds,
+            windows_sampler=(lambda: read_windows_bridge(bridge, max_age_seconds=self.config.windows_bridge_max_age_seconds)) if bridge else None,
+        )
+
+    def _token_breakdown(self, response: Any) -> dict[str, Any]:
+        legacy = response.extensions.get("legacy_result", {}) if response.extensions else {}
+        quality = legacy.get("quality_indicators", {}) if isinstance(legacy, Mapping) else {}
+        return {
+            "system_prompt_tokens": None,
+            "user_prompt_tokens": None,
+            "chat_template_overhead_tokens": None,
+            "prompt_tokens": response.usage.prompt_tokens,
+            "reasoning_tokens": quality.get("thinking_tokens"),
+            "answer_tokens": quality.get("answer_tokens"),
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens,
+        }
+
+    def _invalid_trial(self, job: DiscoveryJob, number: int, candidate: Mapping[str, Any], base_runtime: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "trial_id": f"trial-{number:03d}", "status": "failed",
+            "configuration": {"model": job.model, "backend": job.backend, "profile": job.profile, **base_runtime, **candidate},
+            "runtime_seconds": 0.0, "metrics": {},
+            "error": "Invalid configuration: generation_length must be smaller than context_length.",
+        }

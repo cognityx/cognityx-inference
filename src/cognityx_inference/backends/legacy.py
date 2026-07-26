@@ -105,7 +105,9 @@ class TransformersBackend:
         metrics = result.get("metrics", {})
         output = result.get("result", {})
         completion = metrics.get("generated_tokens")
-        prompt_tokens = metrics.get("input_tokens")
+        # The legacy Transformers result uses input_tokens while the vLLM
+        # engine reports prompt_tokens. Preserve either without estimating.
+        prompt_tokens = metrics.get("input_tokens", metrics.get("prompt_tokens"))
         return InferenceResponse(
             request_id=str(uuid.uuid4()),
             content=str(output.get("answer") or output.get("raw_output", "")),

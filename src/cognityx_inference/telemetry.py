@@ -109,6 +109,7 @@ class ResourceMonitor:
     _stop: threading.Event = field(default_factory=threading.Event, init=False)
     _thread: threading.Thread | None = field(default=None, init=False)
     _process: Any = field(default=None, init=False)
+    _phase: str = field(default="overall", init=False)
 
     def start(self) -> None:
         try:
@@ -130,7 +131,20 @@ class ResourceMonitor:
         if self._thread is not None:
             self._thread.join()
         self._sample()
-        return self._aggregate()
+        report = self._aggregate()
+        phases = sorted({item["phase"] for item in self._samples if item["phase"] != "overall"})
+        report["phases"] = {
+            phase: self._aggregate([item for item in self._samples if item["phase"] == phase])
+            for phase in phases
+        }
+        return report
+
+    def mark_phase(self, phase: str) -> None:
+        """Label subsequent samples with a measured execution phase."""
+        if not phase.strip():
+            raise ValueError("telemetry phase cannot be empty")
+        self._phase = phase
+        self._sample()
 
     def _run(self) -> None:
         while not self._stop.wait(self.interval_seconds):
@@ -143,7 +157,7 @@ class ResourceMonitor:
         except Exception:
             gpu = None
         try:
-            host = windows or self.host_sampler()
+            host = _windows_host(windows) or self.host_sampler()
         except Exception:
             host = {
                 "source": "unavailable",
@@ -156,20 +170,22 @@ class ResourceMonitor:
         self._samples.append(
             {
                 "sampled_at": time.time(),
+                "phase": self._phase,
                 "process_cpu_percent": self._process.cpu_percent(interval=None),
                 "process_ram_bytes": self._process.memory_info().rss,
                 "host": host,
-                "gpu": gpu,
+                "gpu": _merge_gpu_samples(gpu, windows),
             }
         )
 
-    def _aggregate(self) -> dict[str, Any]:
-        process_cpu = [item["process_cpu_percent"] for item in self._samples]
-        process_ram = [item["process_ram_bytes"] for item in self._samples]
-        hosts = [item["host"] for item in self._samples]
-        gpus = [item["gpu"] for item in self._samples if item["gpu"]]
+    def _aggregate(self, samples: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        samples = self._samples if samples is None else samples
+        process_cpu = [item["process_cpu_percent"] for item in samples]
+        process_ram = [item["process_ram_bytes"] for item in samples]
+        hosts = [item["host"] for item in samples]
+        gpus = [item["gpu"] for item in samples if item["gpu"]]
         return {
-            "sample_count": len(self._samples),
+            "sample_count": len(samples),
             "process_cpu_average_percent": _mean(process_cpu),
             "process_cpu_peak_percent": max(process_cpu, default=None),
             "process_ram_average_bytes": _mean(process_ram, rounded=True),
@@ -241,5 +257,49 @@ def _aggregate_gpu(samples: list[dict[str, Any]]) -> dict[str, Any] | None:
     result["dedicated_memory_total_bytes"] = samples[-1].get(
         "dedicated_memory_total_bytes"
     )
+    result["shared_memory_total_bytes"] = samples[-1].get(
+        "shared_memory_total_bytes"
+    )
     result["power_limit_watts"] = samples[-1].get("power_limit_watts")
     return result
+
+
+def _windows_host(sample: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Normalize both inference and training Windows-bridge schemas."""
+    if not sample:
+        return None
+    total = sample.get("host_memory_total_bytes", sample.get("total_bytes"))
+    used = sample.get("host_memory_used_bytes", sample.get("used_bytes"))
+    cpu = sample.get("host_cpu_percent", sample.get("cpu_percent"))
+    if total is None and used is None and cpu is None:
+        return None
+    return {
+        "source": sample.get("source", "windows_bridge"),
+        "scope": "windows_host",
+        "total_bytes": total,
+        "used_bytes": used,
+        "used_percent": (used / total * 100 if isinstance(used, (int, float)) and isinstance(total, (int, float)) and total else sample.get("used_percent")),
+        "cpu_percent": cpu,
+    }
+
+
+def _merge_gpu_samples(
+    nvidia: dict[str, Any] | None, windows: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Keep NVIDIA device counters and add Windows dedicated/shared counters."""
+    if nvidia is None and windows is None:
+        return None
+    value = dict(nvidia or {})
+    if windows:
+        value["shared_memory_used_bytes"] = windows.get(
+            "shared_used_bytes", windows.get("shared_memory_used_bytes")
+        )
+        value["shared_memory_total_bytes"] = windows.get("shared_total_bytes")
+        value["dedicated_memory_used_bytes"] = windows.get(
+            "dedicated_used_bytes", value.get("dedicated_memory_used_bytes")
+        )
+        value["dedicated_memory_total_bytes"] = windows.get(
+            "dedicated_total_bytes", value.get("dedicated_memory_total_bytes")
+        )
+        value["windows_source"] = windows.get("source")
+    return value

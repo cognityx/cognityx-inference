@@ -10,6 +10,7 @@ from typing import Iterator
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib import request as urllib_request
+from urllib.parse import urlencode, urlparse
 
 from cognityx_inference.contracts import DiscoveryPolicy, InferenceRequest
 
@@ -28,7 +29,7 @@ class CognityxInferenceClient:
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str | None = None,
         *,
         api_key: str | None = None,
         timeout_seconds: float = 120,
@@ -39,7 +40,18 @@ class CognityxInferenceClient:
         on_discovery_started: Any | None = None,
         on_discovery_event: Any | None = None,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        selected_url = (
+            (base_url or "").strip()
+            or os.environ.get("COGNITYX_INFERENCE_URL", "").strip()
+            or "http://127.0.0.1:8000"
+        )
+        parsed = urlparse(selected_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                "Inference base URL must be an absolute http(s) URL, for example "
+                "http://127.0.0.1:8000."
+            )
+        self.base_url = selected_url.rstrip("/")
         self.api_key = api_key or os.environ.get("COGNITYX_INFERENCE_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.discovery_policy = DiscoveryPolicy(discovery_policy)
@@ -239,6 +251,30 @@ class CognityxInferenceClient:
     def list_discoveries(self, *, include_history: bool = False) -> list[dict[str, Any]]:
         suffix = "?all=true" if include_history else ""
         return self._request("GET", f"/v1/cognityx/discoveries{suffix}")
+
+    def list_certified_profiles(
+        self,
+        *,
+        model: str | None = None,
+        backend: str | None = None,
+        profile: str | None = None,
+        kv_cache_precision: str | None = None,
+    ) -> list[dict[str, Any]]:
+        query = {
+            key: value
+            for key, value in {
+                "model": model,
+                "backend": backend,
+                "profile": profile,
+                "kv_cache_precision": kv_cache_precision,
+            }.items()
+            if value is not None
+        }
+        suffix = f"?{urlencode(query)}" if query else ""
+        return self._request("GET", f"/v1/cognityx/certified-profiles{suffix}")
+
+    def get_certified_profile(self, profile_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/cognityx/certified-profiles/{profile_id}")
 
     def start_discovery(self, model: str, backend: str = "vllm", profile: str = "bf16", runtime: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return self._request("POST", "/v1/cognityx/discoveries", {"model": model, "backend": backend, "profile": profile, "runtime": dict(runtime or {})})

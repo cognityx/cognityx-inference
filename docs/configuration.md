@@ -39,6 +39,21 @@ first_token_timeout_seconds = 60
 no_token_progress_timeout_seconds = 30
 minimum_tokens_per_second = 2
 slow_window_seconds = 10
+
+[workload]
+system_prompt = "You are a concise technical assistant."
+user_prompt = "Briefly explain why model context capacity matters."
+enable_thinking = false
+temperature = 0.2
+# top_p = 0.95
+# top_k = 40
+# min_p = 0.05
+# seed = 42
+
+[telemetry]
+interval_seconds = 0.25
+# windows_bridge_path = "/mnt/d/AI/cognityx/windows-performance.json"
+windows_bridge_max_age_seconds = 5
 ```
 
 ## Axis Meanings
@@ -87,3 +102,16 @@ The load and inference APIs also accept backend-specific runtime fields under
 
 These fields do not replace the common normalized interface. They are carried as
 backend-specific extensions where needed.
+
+## Discovery Workload and Telemetry
+
+`[workload]` defines the fixed representative request used for each discovery
+trial. It records the system/user prompts, requested reasoning mode and common
+generation settings with the resulting certification. This makes the capacity
+limit traceable to the actual prompt and completion budget that produced it.
+
+`[telemetry]` controls phase-aware sampling for model loading and inference.
+NVIDIA counters provide dedicated memory, utilization, temperature and power;
+an optional Windows bridge adds Windows-host CPU/RAM and shared GPU memory.
+The final trial/profile stores average and peak measurements. Unsupported or
+unavailable fields are `null`, never estimated.

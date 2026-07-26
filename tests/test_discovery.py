@@ -7,7 +7,9 @@ from cognityx_inference.contracts import (
     InferenceResponse,
     InferenceTimings,
     ModelCapabilities,
+    TokenUsage,
 )
+from cognityx_inference.capabilities import RuntimeCompatibility, hardware_fingerprint
 from cognityx_inference.discovery import (
     BoundaryDiscoveryCoordinator,
     DiscoveryConfig,
@@ -45,7 +47,10 @@ class FakeBackend:
             timings=InferenceTimings(
                 time_to_first_token_seconds=0.1,
                 tokens_per_second=10,
+                prompt_processing_seconds=0.02,
+                token_generation_seconds=0.1,
             ),
+            usage=TokenUsage(prompt_tokens=4, completion_tokens=2, total_tokens=6),
         )
 
 
@@ -98,6 +103,89 @@ def test_discovery_saves_profile_and_keeps_winner_ready(tmp_path, monkeypatch) -
     assert events[-1]["event"] == "discovery_completed"
     assert [event["sequence"] for event in events] == list(
         range(1, len(events) + 1)
+    )
+
+
+def test_discovery_preserves_winning_runtime_and_evidence(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "cognityx_inference.discovery.discover_model_context_limit",
+        lambda *args, **kwargs: (256, "revision-1"),
+    )
+    monkeypatch.setattr("cognityx_inference.discovery._backend_version", lambda _: "1")
+
+    class Monitor:
+        def start(self): pass
+        def mark_phase(self, phase): pass
+        def stop(self):
+            return {
+                "host_cpu_average_percent": 10,
+                "host_cpu_peak_percent": 20,
+                "gpu_usage": {
+                    "dedicated_memory_used_bytes_peak": 100,
+                    "shared_memory_used_bytes_peak": 50,
+                    "temperature_celsius_peak": 70,
+                    "power_watts_peak": 250,
+                },
+                "phases": {
+                    "model_loading": {
+                        "host_cpu_peak_percent": 12,
+                        "gpu_usage": {
+                            "dedicated_memory_used_bytes_average": 90,
+                            "dedicated_memory_used_bytes_peak": 100,
+                            "power_watts_average": 200,
+                            "power_watts_peak": 250,
+                            "power_limit_watts": 575,
+                        },
+                    },
+                },
+            }
+
+    monkeypatch.setattr("cognityx_inference.discovery.ResourceMonitor", lambda **_: Monitor())
+    class FailingAutoBackend(FakeBackend):
+        def infer(self, request, on_text=None):
+            if self.runtime.get("kv_cache_precision") == "auto" and self.runtime.get("context_length") == 256:
+                raise RuntimeError("out of memory")
+            return super().infer(request, on_text)
+
+    storage = StorageClient(LocalStorageBackend(tmp_path)).for_shared_data()
+    profiles = CertifiedProfileRepository(storage)
+    models = ModelManager({"fake": FailingAutoBackend})
+    coordinator = BoundaryDiscoveryCoordinator(
+        models, profiles, BoundaryArtifactRepository(storage),
+        lambda: {"gpu_name": "GPU", "gpu_total_memory_gb": 32},
+        DiscoveryConfig(
+            context_candidates=(128, 256), kv_cache_precisions=("auto", "fp8"),
+            generation_lengths=(4, 8), system_prompt="system", prompt="user",
+        ),
+    )
+    job_id = coordinator.start(model="model-a", backend="fake", profile="int4", model_context_limit=256, runtime={})
+    deadline = time.monotonic() + 2
+    while coordinator.status(job_id)["state"] not in {"completed", "failed"}:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    status = coordinator.status(job_id)
+    assert status["state"] == "completed"
+    loaded = models.statuses()[0]
+    runtime = dict(loaded.identity.runtime)
+    assert runtime["kv_cache_precision"] == "'fp8'"
+    profile = profiles.find_compatible(
+        RuntimeCompatibility(
+            hardware_fingerprint=hardware_fingerprint({"gpu_name": "GPU", "gpu_total_memory_gb": 32}),
+            model="model-a", model_revision="revision-1", backend="fake", backend_version="1",
+            profile="int4", kv_cache_precision="fp8",
+        )
+    )
+    assert profile is not None
+    assert profile.certified_configuration["kv_cache_precision"] == "fp8"
+    assert profile.workload["system_prompt"] == "system"
+    assert profile.token_breakdown["prompt_tokens"] == 4
+    assert profile.resource_summary["gpu_usage"]["power_watts_peak"] == 250
+    assert profile.certified_trial["configuration"]["kv_cache_precision"] == "fp8"
+    assert (
+        profile.certified_trial["metrics"]["resource_summary"]["phases"]
+        ["model_loading"]["gpu_usage"]["power_limit_watts"]
+        == 575
     )
 
 

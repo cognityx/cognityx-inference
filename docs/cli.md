@@ -272,6 +272,48 @@ Typical use:
 The command is owner-scoped, so one user only sees their own jobs unless they
 explicitly ask for history in the same principal scope.
 
+### List Certified Profiles
+
+Discovery runs and certified profiles are separate: a run is a job history;
+a profile is a reusable hardware result. List profiles without manually
+browsing storage paths:
+
+```bash
+uv run cognityx-inference certified-profiles list \
+  --base-url "${COGNITYX_INFERENCE_URL:-http://127.0.0.1:8000}" \
+  --model Qwen/Qwen3-8B \
+  --backend vllm \
+  --profile int4
+```
+
+Inspect one complete result, including `certified_trial` and its nested phase
+telemetry:
+
+```bash
+uv run cognityx-inference certified-profiles show <profile-id> \
+  --base-url "${COGNITYX_INFERENCE_URL:-http://127.0.0.1:8000}"
+```
+
+Control-plane commands use readable terminal output by default. List/status
+commands render compact tables; profile show renders identity, runtime,
+performance, overall resources and measured phases. For the exact API payload
+for scripts or archival use, add `--format json`:
+
+```bash
+uv run cognityx-inference certified-profiles show <profile-id> \
+  --format json
+
+uv run cognityx-inference discovery watch <job-id> \
+  --format json
+```
+
+`discovery watch` otherwise shows one concise line per event with trial
+progress, context, generation length, KV-cache precision, elapsed time,
+throughput and TTFT.
+
+The client uses `COGNITYX_INFERENCE_URL` when present, otherwise defaults to
+`http://127.0.0.1:8000`. Passing an empty `--base-url` follows the same rule.
+
 ### Cancel a Discovery Job
 
 ```bash
@@ -363,6 +405,26 @@ The common inference parameters travel with the call:
 The `client_type` argument defaults to `openai`. Use it when you want the
 client-facing interface to stay explicit even as more client types are added
 later.
+
+### Inspect Discovery Runs and Certified Profiles
+
+```python
+runs = client.list_discoveries(include_history=True)
+
+profiles = client.list_certified_profiles(
+    model="Qwen/Qwen3-8B",
+    backend="vllm",
+    profile="int4",
+)
+for profile in profiles:
+    print(profile["profile_id"], profile["compatibility"]["kv_cache_precision"])
+
+complete_profile = client.get_certified_profile(profiles[0]["profile_id"])
+print(complete_profile["certified_trial"]["metrics"]["resource_summary"])
+```
+
+Constructing `CognityxInferenceClient()` with no URL, or an empty URL, uses
+`COGNITYX_INFERENCE_URL` when set and otherwise uses `http://127.0.0.1:8000`.
 
 ### One-Call Automatic Load or Discovery
 

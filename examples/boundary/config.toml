@@ -36,3 +36,28 @@ first_token_timeout_seconds = 60
 no_token_progress_timeout_seconds = 30
 minimum_tokens_per_second = 2
 slow_window_seconds = 10
+
+[workload]
+# The fixed representative chat workload used for every discovery trial.
+# Keep it close to your production data-preparation or RAG workload.
+system_prompt = "You are a concise technical assistant."
+user_prompt = "Briefly explain why model context capacity matters."
+# Whether the selected model's reasoning mode is requested. Unsupported modes
+# remain explicitly unavailable rather than being silently simulated.
+enable_thinking = false
+# Optional common generation settings. Remove/comment a value to use backend defaults.
+temperature = 0.2
+# top_p = 0.95
+# top_k = 40
+# min_p = 0.05
+# seed = 42
+
+[telemetry]
+# Resource samples are collected during loading and inference, then stored as
+# average/peak evidence in each trial and the certified profile.
+interval_seconds = 0.25
+# Optional JSON file written by the compatible Windows performance-counter
+# bridge used by cognityx-training. It enables Windows host RAM/CPU and shared
+# GPU-memory evidence alongside nvidia-smi dedicated memory/power/temperature.
+# windows_bridge_path = "/mnt/d/AI/cognityx/windows-performance.json"
+windows_bridge_max_age_seconds = 5

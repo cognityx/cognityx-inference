@@ -17,6 +17,7 @@ from cognityx_inference.discovery import BoundaryDiscoveryCoordinator
 from cognityx_inference.discovery import DiscoveryConfig
 from cognityx_inference.environment import configure_huggingface_cache
 from cognityx_inference.providers import OpenAIProvider, XAIProvider
+from cognityx_inference.presentation import render
 from cognityx_inference.service import InferenceService
 from cognityx_inference.storage import (
     BoundaryArtifactRepository,
@@ -26,6 +27,21 @@ from cognityx_inference.storage import (
 from cognityx_inference.vllm_runtime import VLLMRuntimeError, ensure_vllm_runtime
 from cognityx_jobs import JobRepository
 from llm_benchmark.reporting import get_system_metadata
+
+
+DEFAULT_BASE_URL = os.environ.get("COGNITYX_INFERENCE_URL") or "http://127.0.0.1:8000"
+
+
+def _add_output_format(
+    parser: argparse.ArgumentParser, *, default: str = "detail"
+) -> None:
+    parser.add_argument(
+        "--format",
+        dest="output_format",
+        choices=("table", "detail", "json"),
+        default=default,
+        help="Terminal presentation format; use json for machine-readable output.",
+    )
 
 
 def build_service() -> InferenceService:
@@ -78,7 +94,7 @@ def main(argv: list[str] | None = None) -> None:
     model = subparsers.add_parser("model")
     model_commands = model.add_subparsers(dest="model_command", required=True)
     load = model_commands.add_parser("load")
-    load.add_argument("--base-url", default="http://127.0.0.1:8000")
+    load.add_argument("--base-url", default=DEFAULT_BASE_URL)
     load.add_argument("--model", required=True)
     load.add_argument("--backend", default="vllm")
     load.add_argument("--profile", default="bf16")
@@ -87,16 +103,20 @@ def main(argv: list[str] | None = None) -> None:
         choices=("ask", "auto", "require_existing"),
         default="ask",
     )
+    _add_output_format(load)
     status = model_commands.add_parser("status")
-    status.add_argument("--base-url", default="http://127.0.0.1:8000")
+    status.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    _add_output_format(status)
     unload = model_commands.add_parser("unload")
-    unload.add_argument("--base-url", default="http://127.0.0.1:8000")
+    unload.add_argument("--base-url", default=DEFAULT_BASE_URL)
     unload.add_argument("--model", required=True)
+    _add_output_format(unload)
     unload_all = model_commands.add_parser("unload-all")
-    unload_all.add_argument("--base-url", default="http://127.0.0.1:8000")
+    unload_all.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    _add_output_format(unload_all)
 
     infer = subparsers.add_parser("infer")
-    infer.add_argument("--base-url", default="http://127.0.0.1:8000")
+    infer.add_argument("--base-url", default=DEFAULT_BASE_URL)
     infer.add_argument("--model", required=True)
     infer.add_argument("--prompt", required=True)
     infer.add_argument("--backend", default="vllm")
@@ -109,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
         dest="stream",
         help="Wait for completion and print the full JSON response.",
     )
+    _add_output_format(infer, default="json")
     infer.set_defaults(stream=True)
     infer.add_argument(
         "--discovery-policy",
@@ -118,23 +139,40 @@ def main(argv: list[str] | None = None) -> None:
     discovery = subparsers.add_parser("discovery")
     discovery_commands = discovery.add_subparsers(dest="discovery_command", required=True)
     start = discovery_commands.add_parser("start")
-    start.add_argument("--base-url", default="http://127.0.0.1:8000")
+    start.add_argument("--base-url", default=DEFAULT_BASE_URL)
     start.add_argument("--model", required=True)
     start.add_argument("--backend", default="vllm")
     start.add_argument("--profile", default="bf16")
+    _add_output_format(start)
     discovery_status = discovery_commands.add_parser("status")
-    discovery_status.add_argument("--base-url", default="http://127.0.0.1:8000")
+    discovery_status.add_argument("--base-url", default=DEFAULT_BASE_URL)
     discovery_status.add_argument(
         "--all",
         action="store_true",
         help="Include completed, failed, and cancelled jobs.",
     )
+    _add_output_format(discovery_status)
     watch = discovery_commands.add_parser("watch")
-    watch.add_argument("--base-url", default="http://127.0.0.1:8000")
+    watch.add_argument("--base-url", default=DEFAULT_BASE_URL)
     watch.add_argument("job_id")
+    _add_output_format(watch)
     cancel = discovery_commands.add_parser("cancel")
-    cancel.add_argument("--base-url", default="http://127.0.0.1:8000")
+    cancel.add_argument("--base-url", default=DEFAULT_BASE_URL)
     cancel.add_argument("job_id")
+    _add_output_format(cancel)
+    certified = subparsers.add_parser("certified-profiles")
+    certified_commands = certified.add_subparsers(dest="certified_command", required=True)
+    certified_list = certified_commands.add_parser("list")
+    certified_list.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    certified_list.add_argument("--model")
+    certified_list.add_argument("--backend")
+    certified_list.add_argument("--profile")
+    certified_list.add_argument("--kv-cache-precision")
+    _add_output_format(certified_list)
+    certified_show = certified_commands.add_parser("show")
+    certified_show.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    certified_show.add_argument("profile_id")
+    _add_output_format(certified_show)
     args = parser.parse_args(original_argv)
     if args.command not in {None, "serve"}:
         client = CognityxInferenceClient(
@@ -143,7 +181,7 @@ def main(argv: list[str] | None = None) -> None:
                 args, "discovery_policy", "require_existing"
             ),
             on_discovery_started=lambda event: print(
-                json.dumps(
+                render(
                     {
                         **event,
                         "watch": (
@@ -154,11 +192,20 @@ def main(argv: list[str] | None = None) -> None:
                             f"cognityx-inference discovery cancel --base-url "
                             f"{args.base_url} {event['job_id']}"
                         ),
-                    }
+                    },
+                    kind="detail",
+                    output_format=getattr(args, "output_format", "detail"),
                 ),
                 flush=True,
             ),
-            on_discovery_event=lambda event: print(json.dumps(event), flush=True),
+            on_discovery_event=lambda event: print(
+                render(
+                    event,
+                    kind="discovery_event",
+                    output_format=getattr(args, "output_format", "detail"),
+                ),
+                flush=True,
+            ),
         )
         try:
             if args.command == "model":
@@ -175,6 +222,16 @@ def main(argv: list[str] | None = None) -> None:
                     value = client.unload_model(args.model, "vllm")
                 else:
                     value = client.unload_all()
+            elif args.command == "certified-profiles":
+                if args.certified_command == "list":
+                    value = client.list_certified_profiles(
+                        model=args.model,
+                        backend=args.backend,
+                        profile=args.profile,
+                        kv_cache_precision=args.kv_cache_precision,
+                    )
+                else:
+                    value = client.get_certified_profile(args.profile_id)
             else:
                 if args.command == "discovery":
                     if args.discovery_command == "start":
@@ -185,7 +242,7 @@ def main(argv: list[str] | None = None) -> None:
                         value = client.list_discoveries(include_history=args.all)
                     else:
                         for event in client.stream_discovery(args.job_id):
-                            print(json.dumps(event), flush=True)
+                            print(render(event, kind="discovery_event", output_format=args.output_format), flush=True)
                         return
                 else:
                     parameters = {
@@ -216,7 +273,8 @@ def main(argv: list[str] | None = None) -> None:
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(2) from None
-        print(json.dumps(value, indent=2))
+        kind = _output_kind(args)
+        print(render(value, kind=kind, output_format=args.output_format))
         return
     host = getattr(args, "host", "127.0.0.1")
     port = getattr(args, "port", 8000)
@@ -231,6 +289,20 @@ def main(argv: list[str] | None = None) -> None:
             "Install API dependencies with: uv sync --extra api"
         ) from exc
     uvicorn.run(create_app(build_service()), host=host, port=port)
+
+
+def _output_kind(args: Any) -> str:
+    if args.command == "model" and args.model_command == "status":
+        return "model_status"
+    if args.command == "discovery" and args.discovery_command == "status":
+        return "discovery_list"
+    if args.command == "certified-profiles":
+        return (
+            "certified_profile_list"
+            if args.certified_command == "list"
+            else "certified_profile_show"
+        )
+    return "detail"
 
 
 if __name__ == "__main__":

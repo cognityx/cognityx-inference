@@ -84,6 +84,16 @@ class CertifiedInferenceProfile:
     maximum_time_to_first_token_seconds: float | None = None
     evidence_job_id: str | None = None
     evidence_summary_key: str | None = None
+    # Complete, machine-readable evidence for the selected successful trial.
+    # These optional fields keep profiles written by earlier releases readable.
+    certified_configuration: Mapping[str, Any] = field(default_factory=dict)
+    workload: Mapping[str, Any] = field(default_factory=dict)
+    token_breakdown: Mapping[str, Any] = field(default_factory=dict)
+    performance: Mapping[str, Any] = field(default_factory=dict)
+    resource_summary: Mapping[str, Any] = field(default_factory=dict)
+    # The complete successful trial selected for this certification, including
+    # every nested phase/resource measurement persisted by discovery.
+    certified_trial: Mapping[str, Any] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

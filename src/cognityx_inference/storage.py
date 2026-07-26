@@ -144,3 +144,104 @@ class CertifiedProfileRepository:
             if candidate.compatibility == compatibility:
                 matches.append(candidate)
         return max(matches, key=lambda item: item.created_at, default=None)
+
+    def list_profiles(
+        self,
+        *,
+        model: str | None = None,
+        backend: str | None = None,
+        profile: str | None = None,
+        kv_cache_precision: str | None = None,
+    ) -> list[Any]:
+        """List saved certified profiles without exposing storage paths to callers."""
+        from cognityx_inference.capabilities import CertifiedInferenceProfile
+
+        prefix = "evaluations/hardware-boundary/certified-profiles"
+        profiles = []
+        for stored in self._walk(prefix):
+            if getattr(stored, "is_directory", False) or not getattr(stored, "key", "").endswith(".json"):
+                continue
+            key = str(stored.key)
+            relative = key[key.find(prefix):] if prefix in key else key
+            try:
+                with self.storage.open(relative) as source:
+                    candidate = CertifiedInferenceProfile.from_dict(json.loads(source.read()))
+            except (OSError, ValueError, TypeError, KeyError):
+                continue
+            identity = candidate.compatibility
+            if model is not None and identity.model != model:
+                continue
+            if backend is not None and identity.backend != backend:
+                continue
+            if profile is not None and identity.profile != profile:
+                continue
+            if kv_cache_precision is not None and identity.kv_cache_precision != kv_cache_precision:
+                continue
+            profiles.append(candidate)
+        return sorted(profiles, key=lambda item: item.created_at, reverse=True)
+
+    def get_profile(self, profile_id: str) -> Any | None:
+        return next(
+            (item for item in self.list_profiles() if item.profile_id == profile_id),
+            None,
+        )
+
+    def _walk(self, prefix: str) -> tuple[Any, ...]:
+        try:
+            children = self.storage.list(prefix)
+        except FileNotFoundError:
+            return ()
+        result = []
+        for child in children:
+            result.append(child)
+            if getattr(child, "is_directory", False):
+                key = str(getattr(child, "key", ""))
+                relative = key[key.find(prefix):] if prefix in key else key
+                result.extend(self._walk(relative))
+        return tuple(result)
+
+    def find_compatible_any_kv_cache(self, compatibility: Any) -> Any | None:
+        """Find the best profile when callers did not pin a KV-cache dtype."""
+        from cognityx_inference.capabilities import CertifiedInferenceProfile
+
+        prefix = self.prefix(
+            compatibility.hardware_fingerprint,
+            compatibility.backend,
+            compatibility.model,
+            compatibility.profile,
+        )
+        matches = []
+        try:
+            stored_objects = self.storage.list(prefix)
+        except FileNotFoundError:
+            return None
+        for stored in stored_objects:
+            if getattr(stored, "is_directory", False):
+                continue
+            key = getattr(stored, "key", "")
+            relative = key[key.find(prefix):] if prefix in key else key
+            try:
+                with self.storage.open(relative) as source:
+                    candidate = CertifiedInferenceProfile.from_dict(json.loads(source.read()))
+            except (OSError, ValueError, TypeError, KeyError):
+                continue
+            actual = candidate.compatibility
+            if (
+                actual.hardware_fingerprint == compatibility.hardware_fingerprint
+                and actual.model == compatibility.model
+                and actual.model_revision == compatibility.model_revision
+                and actual.backend == compatibility.backend
+                and actual.backend_version == compatibility.backend_version
+                and actual.profile == compatibility.profile
+                and actual.tensor_parallelism == compatibility.tensor_parallelism
+            ):
+                matches.append(candidate)
+        return max(
+            matches,
+            key=lambda item: (
+                item.maximum_certified_context_length,
+                int(item.certified_configuration.get("generation_length", 0)),
+                item.created_at,
+            ),
+            default=None,
+        )

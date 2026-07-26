@@ -53,17 +53,38 @@ requested model/backend/profile combination.
 
 For each trial, the system records:
 
-- configuration values;
-- runtime duration;
-- model loading time;
-- generation duration;
+- complete effective configuration, including quantization, KV-cache precision,
+  engine context length, GPU-memory utilization and other runtime extensions;
+- representative system/user prompts, reasoning mode and generation parameters;
+- available prompt, completion, reasoning and answer token breakdowns;
+- model loading, prompt-processing, TTFT, generation and total duration;
 - tokens per second;
-- time to first token when available;
+- process and host CPU/RAM average and peak values;
+- dedicated/shared GPU memory, GPU utilization, temperature and power average
+  and peak values when the local counters provide them;
 - failure or out-of-memory details when relevant.
 
 Each trial is persisted independently before the final summary. The final
 summary may also publish a `CertifiedInferenceProfile`, which is then used by
-future model loads.
+future model loads. The profile contains the selected winner's full evidence;
+in particular, an `fp8` winner is certified and loaded as `fp8`, rather than
+being silently represented as `auto`.
+
+`certified_trial` is an immutable copy of the winning trial as saved by the
+job. It retains the complete nested telemetry record, including every phase's
+`gpu_usage` averages/peaks, dedicated/shared memory, utilization, temperature,
+power draw and power limit. The shorter profile telemetry fields are retained
+as convenient summaries, not as a replacement for this evidence.
+
+Trials are grouped by engine load identity. For example, all generation-length
+requests for the same model, quantization, KV-cache precision and context
+length reuse one resident model. Impossible combinations where the requested
+completion budget is not smaller than the engine context are recorded without
+performing a model load.
+
+Windows host and shared-GPU values are optional. Configure the compatible
+Windows performance-counter bridge in the telemetry section; unavailable
+fields remain `null` and identify their measurement source.
 
 ## Artifact Persistence
 

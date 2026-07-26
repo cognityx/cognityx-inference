@@ -63,6 +63,33 @@ def test_ask_policy_approves_waits_and_retries_loaded_model() -> None:
     assert final_payload["cognityx"]["client_type"] == "openai"
 
 
+def test_empty_base_url_uses_environment_then_local_default(monkeypatch) -> None:
+    monkeypatch.setenv("COGNITYX_INFERENCE_URL", "http://127.0.0.1:8013/")
+    assert CognityxInferenceClient("").base_url == "http://127.0.0.1:8013"
+
+    monkeypatch.delenv("COGNITYX_INFERENCE_URL")
+    assert CognityxInferenceClient(None).base_url == "http://127.0.0.1:8000"
+
+
+def test_certified_profile_client_paths() -> None:
+    class Client(CognityxInferenceClient):
+        def __init__(self):
+            super().__init__("http://example")
+            self.paths = []
+
+        def _request(self, method, path, payload=None):
+            self.paths.append((method, path))
+            return [] if path.startswith("/v1/cognityx/certified-profiles?") else {"profile_id": "p-1"}
+
+    client = Client()
+    assert client.list_certified_profiles(model="org/model", profile="int4") == []
+    assert client.get_certified_profile("p-1") == {"profile_id": "p-1"}
+    assert client.paths == [
+        ("GET", "/v1/cognityx/certified-profiles?model=org%2Fmodel&profile=int4"),
+        ("GET", "/v1/cognityx/certified-profiles/p-1"),
+    ]
+
+
 def test_auto_discovery_publishes_its_job_id_before_waiting() -> None:
     published = []
     events = []
