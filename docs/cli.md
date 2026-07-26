@@ -282,6 +282,9 @@ uv run cognityx-inference discovery cancel \
 
 ## Python Client
 
+The Python client accepts the same OpenAI-style `messages` list used by the
+HTTP API, so system and user prompts are just dictionaries in order.
+
 ### Explicit Load Followed by Repeated Inference
 
 Use explicit loading when an application wants to prepare the model before
@@ -308,10 +311,21 @@ print(client.model_status())
 final_chunk = None
 for chunk in client.stream_chat(
     model="Qwen/Qwen3-8B",
+    client_type="openai",
     backend="vllm",
     profile="int4",
-    prompt="Explain KV caching.",
+    messages=[
+        {"role": "system", "content": "You are a careful assistant."},
+        {"role": "user", "content": "Explain KV caching."},
+    ],
     max_tokens=128,
+    temperature=0.6,
+    top_p=0.95,
+    top_k=20,
+    min_p=0.05,
+    stop=["END"],
+    seed=42,
+    log_probabilities=True,
     discovery_policy="require_existing",
 ):
     choices = chunk.get("choices") or []
@@ -333,6 +347,23 @@ if final_chunk is not None:
 model is already resident, the lifecycle manager reuses it; weights are not
 loaded again.
 
+The common inference parameters travel with the call:
+
+- `temperature`
+- `top_p`
+- `top_k`
+- `min_p`
+- `max_tokens`
+- `stop`
+- `seed`
+- `log_probabilities`
+- `top_log_probabilities`
+- `required_context_length`
+
+The `client_type` argument defaults to `openai`. Use it when you want the
+client-facing interface to stay explicit even as more client types are added
+later.
+
 ### One-Call Automatic Load or Discovery
 
 An application may omit a separate `load_model()` call:
@@ -347,9 +378,13 @@ client = CognityxInferenceClient(
 
 for chunk in client.stream_chat(
     model="Qwen/Qwen3-8B",
+    client_type="openai",
     backend="vllm",
     profile="int4",
-    prompt="Explain KV caching.",
+    messages=[
+        {"role": "system", "content": "You are a careful assistant."},
+        {"role": "user", "content": "Explain KV caching."},
+    ],
     max_tokens=128,
     discovery_policy="auto",
 ):
@@ -366,6 +401,31 @@ print()
 This sequence checks certification, starts durable discovery when necessary,
 loads the certified configuration, keeps it resident, and then opens the SSE
 inference stream.
+
+If you want the raw non-streaming JSON response instead of SSE chunks, use
+`chat(...)` with the same message list and parameters:
+
+```python
+reply = client.chat(
+    model="Qwen/Qwen3-8B",
+    client_type="openai",
+    backend="vllm",
+    profile="int4",
+    messages=[
+        {"role": "system", "content": "You are a careful assistant."},
+        {"role": "user", "content": "Explain KV caching."},
+    ],
+    temperature=0.6,
+    top_p=0.95,
+    top_k=20,
+    min_p=0.05,
+    max_tokens=128,
+    stop=["END"],
+    seed=42,
+    discovery_policy="require_existing",
+)
+print(reply["choices"][0]["message"]["content"])
+```
 
 ### Non-Streaming JSON and Unload
 

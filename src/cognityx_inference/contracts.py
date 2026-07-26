@@ -95,6 +95,7 @@ class InferenceRequest:
     model: str
     messages: tuple[JSON, ...] = ()
     prompt: str | None = None
+    client_type: str = "openai"
     provider: str = "local"
     backend: str = "vllm"
     profile: str = "bf16"
@@ -128,6 +129,8 @@ class InferenceRequest:
             )
         if not self.model.strip():
             raise ValueError("model cannot be empty")
+        if not self.client_type.strip():
+            raise ValueError("client_type cannot be empty")
         if not self.messages and self.prompt is None:
             raise ValueError("messages or prompt must be supplied")
         if self.messages and self.prompt is not None:

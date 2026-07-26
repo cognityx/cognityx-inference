@@ -13,6 +13,7 @@ def test_request_accepts_common_and_extension_parameters() -> None:
     request = InferenceRequest(
         model="model-a",
         prompt="hello",
+        client_type="openai",
         top_p=0.9,
         top_k=40,
         min_p=0.05,
@@ -23,6 +24,7 @@ def test_request_accepts_common_and_extension_parameters() -> None:
 
     assert request.to_dict()["top_k"] == 40
     assert request.extensions["runtime"]["quantization"] == "int4"
+    assert request.client_type == "openai"
 
 
 def test_request_requires_exactly_one_input_shape() -> None:

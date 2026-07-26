@@ -94,6 +94,7 @@ def create_app(
             normalized = InferenceRequest(
                 model=str(payload["model"]),
                 messages=tuple(payload.get("messages") or ()),
+                client_type=str(extension.get("client_type", "openai")),
                 provider=str(extension.get("provider", "local")),
                 backend=str(extension.get("backend", "vllm")),
                 profile=str(extension.get("profile", "bf16")),

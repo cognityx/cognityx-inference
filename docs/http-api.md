@@ -35,6 +35,7 @@ Cognityx-specific routing and runtime fields are carried under `cognityx`:
   ],
   "max_tokens": 32,
   "cognityx": {
+    "client_type": "openai",
     "provider": "local",
     "backend": "vllm",
     "profile": "int4",
@@ -60,6 +61,7 @@ Cognityx-specific routing and runtime fields are carried under `cognityx`:
 
 Important behavior:
 
+- `client_type` defaults to `openai`
 - `provider` defaults to `local`
 - `backend` defaults to `vllm`
 - `profile` defaults to `bf16`

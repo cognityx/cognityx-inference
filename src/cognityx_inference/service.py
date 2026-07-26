@@ -231,7 +231,7 @@ class InferenceService:
         if unsupported:
             raise ValueError(
                 "Explicitly requested parameter(s) unsupported by "
-                f"{request.provider}/{request.backend}: {', '.join(unsupported)}"
+                f"{request.client_type}/{request.backend}: {', '.join(unsupported)}"
             )
 
 

@@ -60,6 +60,7 @@ def test_ask_policy_approves_waits_and_retries_loaded_model() -> None:
     assert any(path.endswith("/discoveries/job-1") for _, path, _ in client.calls)
     final_payload = client.calls[-1][2]
     assert final_payload["cognityx"]["load_policy"] == "require_loaded"
+    assert final_payload["cognityx"]["client_type"] == "openai"
 
 
 def test_auto_discovery_publishes_its_job_id_before_waiting() -> None:
@@ -245,6 +246,7 @@ def test_stream_chat_preloads_model_and_yields_sse_chunks(monkeypatch) -> None:
     assert loads[0][0][:3] == ("model-a", "vllm", "int4")
     assert requests[0]["stream"] is True
     assert requests[0]["cognityx"]["load_policy"] == "require_loaded"
+    assert requests[0]["cognityx"]["client_type"] == "openai"
     assert chunks[0]["choices"][0]["delta"]["content"] == "Hello"
     assert chunks[-1]["usage"]["total_tokens"] == 3
 
