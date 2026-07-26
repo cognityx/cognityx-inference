@@ -551,7 +551,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=1.14.0" },
     { name = "bitsandbytes", specifier = ">=0.49.2" },
-    { name = "cognityx-jobs", directory = "../cognityx-jobs" },
+    { name = "cognityx-jobs", git = "https://github.com/cognityx/cognityx-jobs.git" },
     { name = "cognityx-storage", git = "https://github.com/cognityx/cognityx-storage.git" },
     { name = "datasets", specifier = ">=5.0.0" },
     { name = "evaluate", specifier = ">=0.4.6" },
@@ -581,7 +581,7 @@ dev = [
 [[package]]
 name = "cognityx-jobs"
 version = "0.1.0"
-source = { directory = "../cognityx-jobs" }
+source = { git = "https://github.com/cognityx/cognityx-jobs.git#aec7e10356b57ca1dc76b45ed9f21fcd5e7e2b4e" }
 
 [[package]]
 name = "cognityx-storage"

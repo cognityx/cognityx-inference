@@ -46,7 +46,7 @@ dev = [
 
 [tool.uv.sources]
 cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git" }
-cognityx-jobs = { path = "../cognityx-jobs" }
+cognityx-jobs = { git = "https://github.com/cognityx/cognityx-jobs.git" }
 
 [build-system]
 requires = ["hatchling"]
