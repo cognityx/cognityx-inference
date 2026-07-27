@@ -147,6 +147,19 @@ class InferenceService:
         status = self.models.load(model, backend, resolved)
         return status, context
 
+    def count_input_tokens(self, request: InferenceRequest) -> int | None:
+        """Count a prompt against the active local backend without generating."""
+        if request.provider != "local":
+            return None
+        canonical_model = resolve_local_model_reference(request.model).resolved
+        try:
+            lease = self.models.acquire_loaded(canonical_model)
+        except LookupError as exc:
+            raise ModelNotLoadedError(str(exc)) from exc
+        with lease as backend:
+            counter = getattr(backend, "count_input_tokens", None)
+            return counter(replace(request, model=canonical_model)) if counter else None
+
     def prepare_runtime(
         self,
         model: str,

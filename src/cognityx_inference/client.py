@@ -119,6 +119,7 @@ class CognityxInferenceClient:
             "stop": list(request.stop) or None,
             "seed": request.seed,
             "logprobs": request.log_probabilities,
+            "top_logprobs": request.top_log_probabilities,
             "stream": request.stream,
             "cognityx": {
                 "client_type": request.client_type,
@@ -232,6 +233,28 @@ class CognityxInferenceClient:
 
     def model_status(self) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/cognityx/models/status")
+
+    def count_input_tokens(
+        self,
+        *,
+        model: str,
+        messages: list[Mapping[str, Any]] | None = None,
+        prompt: str | None = None,
+        backend: str = "vllm",
+        profile: str = "bf16",
+    ) -> int | None:
+        value = self._request(
+            "POST",
+            "/v1/cognityx/tokens/count",
+            {
+                "model": model,
+                "messages": list(messages or ()),
+                "prompt": prompt,
+                "backend": backend,
+                "profile": profile,
+            },
+        )
+        return value.get("input_tokens") if isinstance(value, Mapping) else None
 
     def unload_model(
         self, model: str, backend: str, runtime: Mapping[str, Any] | None = None

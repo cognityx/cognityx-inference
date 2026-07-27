@@ -210,6 +210,23 @@ def create_app(
     def statuses() -> list[dict[str, Any]]:
         return [_status(item) for item in service.models.statuses()]
 
+    @app.post("/v1/cognityx/tokens/count")
+    def count_tokens(payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            request = InferenceRequest(
+                model=str(payload["model"]),
+                messages=tuple(payload.get("messages") or ()),
+                prompt=payload.get("prompt"),
+                backend=str(payload.get("backend", "vllm")),
+                profile=str(payload.get("profile", "bf16")),
+                load_policy=LoadPolicy.REQUIRE_LOADED,
+            )
+            return {"input_tokens": service.count_input_tokens(request)}
+        except ModelNotLoadedError as exc:
+            raise HTTPException(status_code=409, detail={"error": "model_not_loaded", "message": str(exc)}) from exc
+        except (KeyError, ValueError, RuntimeError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/v1/cognityx/certified-profiles")
     def certified_profiles(
         model: str | None = None,

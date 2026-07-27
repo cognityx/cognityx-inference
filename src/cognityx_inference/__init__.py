@@ -6,6 +6,7 @@ from cognityx_inference.capabilities import (
     ModelContextLimitExceeded,
 )
 from cognityx_inference.client import CognityxInferenceClient
+from cognityx_inference.chat import ChatSettings, CognityxChatSession
 from cognityx_inference.contracts import (
     DiscoveryPolicy,
     FinishReason,
@@ -29,6 +30,8 @@ from cognityx_inference.service import InferenceService
 __all__ = [
     "FinishReason",
     "CognityxInferenceClient",
+    "CognityxChatSession",
+    "ChatSettings",
     "CertifiedContextLimitExceeded",
     "DiscoveryPolicy",
     "InferenceRequest",

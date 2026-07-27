@@ -122,6 +122,24 @@ Behavior:
 
 Return all currently tracked model statuses.
 
+### `POST /v1/cognityx/tokens/count`
+
+Count a message list using the active local backend's prompt formatting without
+generating output. The interactive chat client uses this endpoint to reserve
+certified context for both the next completion and history compression.
+
+```json
+{
+  "model": "Qwen/Qwen3-8B",
+  "messages": [{"role": "user", "content": "Count these tokens."}],
+  "backend": "vllm",
+  "profile": "int4"
+}
+```
+
+The model must already be loaded. A backend that cannot count this prompt
+returns `input_tokens: null`; callers must not estimate it as an exact value.
+
 ### `POST /v1/cognityx/models/unload`
 
 Unload either:

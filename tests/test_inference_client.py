@@ -63,6 +63,14 @@ def test_ask_policy_approves_waits_and_retries_loaded_model() -> None:
     assert final_payload["cognityx"]["client_type"] == "openai"
 
 
+def test_inference_payload_carries_top_log_probabilities() -> None:
+    payload = CognityxInferenceClient._inference_payload(
+        InferenceRequest(model="model-a", prompt="hello", top_log_probabilities=5),
+        DiscoveryPolicy.REQUIRE_EXISTING,
+    )
+    assert payload["top_logprobs"] == 5
+
+
 def test_empty_base_url_uses_environment_then_local_default(monkeypatch) -> None:
     monkeypatch.setenv("COGNITYX_INFERENCE_URL", "http://127.0.0.1:8013/")
     assert CognityxInferenceClient("").base_url == "http://127.0.0.1:8013"

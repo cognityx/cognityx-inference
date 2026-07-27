@@ -32,6 +32,9 @@ repository, but the primary surface is now a reusable inference service with:
 - [CLI and Python Client](cli.md)
   Commands and client calls for model lifecycle, inference, discovery, live
   job viewing, and cancellation.
+- [Interactive chat](chat.md)
+  Conversation history, certification-aware compression, session telemetry and
+  saved chats.
 - [HTTP API](http-api.md)
   OpenAI-compatible requests plus Cognityx control endpoints.
 - [Boundary Evaluation](boundary-evaluation.md)

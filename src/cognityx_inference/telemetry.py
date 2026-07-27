@@ -139,6 +139,12 @@ class ResourceMonitor:
         }
         return report
 
+    def summary(self) -> dict[str, Any]:
+        """Return session-to-date aggregates without stopping collection."""
+        if not self._samples:
+            return self._aggregate([])
+        return self._aggregate()
+
     def mark_phase(self, phase: str) -> None:
         """Label subsequent samples with a measured execution phase."""
         if not phase.strip():

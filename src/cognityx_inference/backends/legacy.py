@@ -155,6 +155,18 @@ class TransformersBackend:
             allow_download=bool(self.runtime.get("allow_download", False)),
         )[0]
 
+    def count_input_tokens(self, request: InferenceRequest) -> int | None:
+        """Count the same role-formatted prompt used by this legacy adapter."""
+        self.load()
+        assert self.engine is not None
+        tokenizer = getattr(self.engine, "tokenizer", None)
+        if tokenizer is None:
+            return None
+        try:
+            return len(tokenizer.encode(_prompt(request), add_special_tokens=False))
+        except (AttributeError, TypeError, ValueError):
+            return None
+
 
 class VLLMBackend(TransformersBackend):
     """Expose the existing persistent vLLM engine."""

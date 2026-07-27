@@ -13,11 +13,19 @@ from cognityx_inference.api import create_app
 from cognityx_inference.backends import TransformersBackend, VLLMBackend
 from cognityx_inference.lifecycle import ModelManager
 from cognityx_inference.client import CognityxInferenceClient, InferenceAPIError
+from cognityx_inference.chat import (
+    ChatContextError,
+    ChatModelNotLoadedError,
+    ChatSettings,
+    CognityxChatSession,
+)
 from cognityx_inference.discovery import BoundaryDiscoveryCoordinator
 from cognityx_inference.discovery import DiscoveryConfig
 from cognityx_inference.environment import configure_huggingface_cache
 from cognityx_inference.providers import OpenAIProvider, XAIProvider
 from cognityx_inference.presentation import render
+from cognityx_inference.storage import ChatSessionRepository
+from cognityx_inference.telemetry import ResourceMonitor, read_windows_bridge
 from cognityx_inference.service import InferenceService
 from cognityx_inference.storage import (
     BoundaryArtifactRepository,
@@ -129,6 +137,30 @@ def main(argv: list[str] | None = None) -> None:
         dest="stream",
         help="Wait for completion and print the full JSON response.",
     )
+    chat = subparsers.add_parser("chat", help="Interactive conversation-aware local chat.")
+    chat.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    chat.add_argument("--model")
+    chat.add_argument("--backend", default="vllm")
+    chat.add_argument("--profile", default="bf16")
+    chat.add_argument("--system-prompt")
+    chat.add_argument("--temperature", type=float, default=0.6)
+    chat.add_argument("--top-p", type=float)
+    chat.add_argument("--top-k", type=int)
+    chat.add_argument("--min-p", type=float)
+    chat.add_argument("--max-tokens", type=int, default=512)
+    chat.add_argument("--stop", action="append", default=[])
+    chat.add_argument("--seed", type=int)
+    chat.add_argument("--log-probabilities", action="store_true")
+    chat.add_argument("--top-log-probabilities", type=int)
+    chat.add_argument("--reasoning", action="store_true")
+    chat.add_argument("--timeout", type=float)
+    chat.add_argument("--first-token-timeout", type=float)
+    chat.add_argument("--no-token-progress-timeout", type=float)
+    chat.add_argument("--autosave", action="store_true")
+    chat.add_argument("--owner-id", default=os.environ.get("COGNITYX_INFERENCE_USER", "local"))
+    chat.add_argument("--telemetry-interval", type=float, default=0.25)
+    chat.add_argument("--windows-bridge-path")
+    chat.add_argument("--windows-bridge-max-age", type=float, default=5)
     _add_output_format(infer, default="json")
     infer.set_defaults(stream=True)
     infer.add_argument(
@@ -222,6 +254,9 @@ def main(argv: list[str] | None = None) -> None:
                     value = client.unload_model(args.model, "vllm")
                 else:
                     value = client.unload_all()
+            elif args.command == "chat":
+                _run_chat(args, client)
+                return
             elif args.command == "certified-profiles":
                 if args.certified_command == "list":
                     value = client.list_certified_profiles(
@@ -289,6 +324,200 @@ def main(argv: list[str] | None = None) -> None:
             "Install API dependencies with: uv sync --extra api"
         ) from exc
     uvicorn.run(create_app(build_service()), host=host, port=port)
+
+
+def _run_chat(args: Any, client: CognityxInferenceClient) -> None:
+    """Run the no-required-arguments interactive chat loop."""
+    from cognityx_storage import StorageClient
+
+    storage = StorageClient().for_user(args.owner_id)
+    session = CognityxChatSession(
+        client,
+        ChatSessionRepository(storage),
+        model=args.model,
+        backend=args.backend,
+        profile=args.profile,
+        system_prompt=args.system_prompt,
+        settings=ChatSettings(
+            temperature=args.temperature, top_p=args.top_p, top_k=args.top_k,
+            min_p=args.min_p, max_tokens=args.max_tokens, stop=args.stop,
+            seed=args.seed, log_probabilities=args.log_probabilities,
+            top_log_probabilities=args.top_log_probabilities,
+            reasoning=args.reasoning,
+            timeout_seconds=args.timeout,
+            first_token_timeout_seconds=args.first_token_timeout,
+            no_token_progress_timeout_seconds=args.no_token_progress_timeout,
+        ),
+        autosave=args.autosave,
+    )
+    monitor = ResourceMonitor(
+        interval_seconds=args.telemetry_interval,
+        windows_sampler=(lambda: read_windows_bridge(args.windows_bridge_path, max_age_seconds=args.windows_bridge_max_age)) if args.windows_bridge_path else None,
+    )
+    try:
+        monitor.start()
+    except RuntimeError as exc:
+        monitor = None  # type: ignore[assignment]
+        print(f"Telemetry unavailable: {exc}")
+    if args.model:
+        try:
+            session.load_model(args.model, args.backend, args.profile)
+        except (InferenceAPIError, RuntimeError) as exc:
+            print(f"Model not ready: {exc}\nUse /load <model> [backend] [profile].")
+    else:
+        try:
+            session.refresh_active_model()
+        except (InferenceAPIError, RuntimeError):
+            pass
+    print("Interactive Cognityx chat. Use /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
+    try:
+        while True:
+            name = session.model or "no model"
+            try:
+                line = input(f"You [{name}]> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                line = "/quit"
+            if not line:
+                continue
+            if line.startswith("/"):
+                if _chat_command(line, session):
+                    break
+                continue
+            try:
+                print(f"{session.model or 'Assistant'}> ", end="", flush=True)
+                final = session.send(line, on_text=lambda text: print(text, end="", flush=True))
+                print()
+                _print_chat_stats(final, monitor.summary() if monitor else None, session.show)
+            except ChatModelNotLoadedError as exc:
+                print(f"\n{exc}\nUse /load <model> [backend] [profile].")
+            except ChatContextError as exc:
+                print(f"\nContext protection: {exc}")
+            except (InferenceAPIError, RuntimeError, OSError) as exc:
+                print(f"\nInference unavailable: {exc}\nCheck the server, then use /load when it is ready.")
+    finally:
+        if session.dirty and not session.autosave:
+            answer = input("Save this chat before exit? [y/N] ").strip().lower()
+            if answer in {"y", "yes"}:
+                print(f"Saved chat: {session.save()}")
+        if monitor:
+            monitor.stop()
+
+
+def _chat_command(line: str, session: CognityxChatSession) -> bool:
+    parts = line.split()
+    command = parts[0].lower()
+    if command == "/quit":
+        return True
+    if command == "/load":
+        if len(parts) < 2:
+            print("Usage: /load <model> [backend] [profile]")
+            return False
+        backend = parts[2] if len(parts) > 2 else "vllm"
+        profile = parts[3] if len(parts) > 3 else "bf16"
+        try:
+            session.load_model(parts[1], backend, profile)
+            print(f"Loaded {session.model}; certified context: {session.certified_context_length}")
+        except (InferenceAPIError, RuntimeError) as exc:
+            print(f"Load failed: {exc}")
+        return False
+    if command == "/save":
+        print(f"Saved chat: {session.save(parts[1] if len(parts) > 1 else None)}")
+        return False
+    if command == "/load_chat":
+        if len(parts) != 2:
+            print("Usage: /load_chat <chat-id>")
+            return False
+        try:
+            session.load_chat(parts[1])
+            print(f"Restored chat {parts[1]} for {session.model}. Use /load if that model is not resident.")
+        except (KeyError, RuntimeError) as exc:
+            print(exc)
+        return False
+    if command == "/autosave":
+        if len(parts) != 2 or parts[1].lower() not in {"on", "off"}:
+            print(f"Autosave is {'on' if session.autosave else 'off'}. Usage: /autosave on|off")
+        else:
+            session.autosave = parts[1].lower() == "on"
+            print(f"Autosave {'enabled' if session.autosave else 'disabled'}.")
+        return False
+    if command == "/history":
+        print(f"Summary: {session.summary or '-'}")
+        for message in session.messages:
+            print(f"{message['role']}: {message['content']}")
+        return False
+    if command == "/clear":
+        session.summary = None
+        session.messages.clear()
+        session.dirty = True
+        print("Conversation history cleared.")
+        return False
+    if command == "/settings":
+        _chat_settings(parts[1:], session)
+        return False
+    print("Unknown command. Use /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
+    return False
+
+
+def _chat_settings(parts: list[str], session: CognityxChatSession) -> None:
+    if not parts:
+        print(json.dumps({"parameters": session.settings.request_parameters(), "autosave": session.autosave, "show": session.show, "certified_context": session.certified_context_length}, indent=2))
+        return
+    if len(parts) == 3 and parts[0] == "show" and parts[1] in {"power", "cpu", "ram"}:
+        session.show[parts[1]] = parts[2].lower() == "on"
+        print(f"{parts[1]} display {'enabled' if session.show[parts[1]] else 'disabled'}.")
+        return
+    if len(parts) != 2:
+        print("Usage: /settings <temperature|top_p|top_k|min_p|max_tokens|log_probabilities|top_log_probabilities|reasoning|timeouts|show|perf> <value>")
+        return
+    key, raw = parts[0], parts[1]
+    if key == "perf":
+        session.show["perf"] = raw.lower() == "on"
+        print(f"Performance display {'enabled' if session.show['perf'] else 'disabled'}.")
+        return
+    if key == "stop":
+        session.settings.stop = [] if raw.lower() in {"none", "clear"} else [raw]
+        session.dirty = True
+        print(f"stop = {session.settings.stop}")
+        return
+    if key.startswith("show_") and key[5:] in session.show:
+        session.show[key[5:]] = raw.lower() == "on"
+        return
+    if not hasattr(session.settings, key):
+        print(f"Unknown setting: {key}")
+        return
+    try:
+        current = getattr(session.settings, key)
+        if key in {"top_k", "max_tokens", "seed", "top_log_probabilities"}:
+            value = int(raw)
+        elif isinstance(current, bool):
+            value: Any = raw.lower() in {"on", "true", "yes", "1"}
+        elif isinstance(current, float) or key in {"temperature", "top_p", "min_p"}:
+            value = float(raw)
+        else:
+            value = raw
+        setattr(session.settings, key, value)
+        session.dirty = True
+        print(f"{key} = {value}")
+    except ValueError as exc:
+        print(f"Invalid value: {exc}")
+
+
+def _print_chat_stats(final: dict[str, Any], telemetry: dict[str, Any] | None, show: dict[str, bool]) -> None:
+    response = final.get("cognityx") or {}
+    usage = response.get("usage") or {}
+    quality = ((response.get("extensions") or {}).get("legacy_result") or {}).get("quality_indicators") or {}
+    print(f"Tokens: input={usage.get('prompt_tokens')} thinking={quality.get('thinking_tokens')} answer={quality.get('answer_tokens')} completion={usage.get('completion_tokens')} total={usage.get('total_tokens')}")
+    if not show.get("perf", True) or not telemetry:
+        return
+    timings = response.get("timings") or {}
+    print(f"Timing: generation={timings.get('token_generation_seconds')} s TTFT={timings.get('time_to_first_token_seconds')} s")
+    gpu = telemetry.get("gpu_usage") or {}
+    if show.get("power", True):
+        print(f"Power: avg={gpu.get('power_watts_average')} W peak={gpu.get('power_watts_peak')} W")
+    if show.get("ram", True):
+        print(f"GPU memory: avg={gpu.get('dedicated_memory_used_bytes_average')} B peak={gpu.get('dedicated_memory_used_bytes_peak')} B | Host RAM avg={telemetry.get('host_ram_average_used_bytes')} B peak={telemetry.get('host_ram_peak_used_bytes')} B")
+    if show.get("cpu", True):
+        print(f"CPU: host avg={telemetry.get('host_cpu_average_percent')}% peak={telemetry.get('host_cpu_peak_percent')}% | client avg={telemetry.get('process_cpu_average_percent')}% peak={telemetry.get('process_cpu_peak_percent')}%")
 
 
 def _output_kind(args: Any) -> str:

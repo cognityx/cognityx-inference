@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import re
+import uuid
 from typing import Any, Protocol
 
 from cognityx_inference.contracts import InferenceRequest, InferenceResponse
@@ -54,6 +55,36 @@ class InferenceArtifactRepository:
     def materialize_model(self, logical_key: str) -> Any:
         """Ask storage to make a model available locally to a local runtime."""
         return self.storage.materialize(logical_key)
+
+
+@dataclass(slots=True)
+class ChatSessionRepository:
+    """Append-only saved chat states within an already user-scoped client."""
+
+    storage: StorageClientLike
+
+    def save(self, chat_id: str, revision: int, value: Any) -> Any:
+        return self.storage.put_json(
+            f"inference/chats/{_segment(chat_id)}/{revision:08d}.json", value
+        )
+
+    def new_id(self) -> str:
+        return str(uuid.uuid4())
+
+    def load_latest(self, chat_id: str) -> Any:
+        prefix = f"inference/chats/{_segment(chat_id)}"
+        try:
+            objects = self.storage.list(prefix)
+        except FileNotFoundError as exc:
+            raise KeyError(f"Chat session not found: {chat_id}") from exc
+        files = [item for item in objects if not getattr(item, "is_directory", False)]
+        if not files:
+            raise KeyError(f"Chat session has no saved revisions: {chat_id}")
+        latest = max(files, key=lambda item: getattr(item, "key", ""))
+        key = getattr(latest, "key", "")
+        relative = key[key.find(prefix):] if prefix in key else key
+        with self.storage.open(relative) as source:
+            return json.loads(source.read())
 
 
 @dataclass(slots=True)
