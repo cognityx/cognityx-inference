@@ -45,13 +45,7 @@ class CognityxInferenceClient:
             or os.environ.get("COGNITYX_INFERENCE_URL", "").strip()
             or "http://127.0.0.1:8000"
         )
-        parsed = urlparse(selected_url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError(
-                "Inference base URL must be an absolute http(s) URL, for example "
-                "http://127.0.0.1:8000."
-            )
-        self.base_url = selected_url.rstrip("/")
+        self.base_url = self._normalise_base_url(selected_url)
         self.api_key = api_key or os.environ.get("COGNITYX_INFERENCE_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.discovery_policy = DiscoveryPolicy(discovery_policy)
@@ -60,6 +54,64 @@ class CognityxInferenceClient:
         self.input_fn = input_fn
         self.on_discovery_started = on_discovery_started
         self.on_discovery_event = on_discovery_event
+
+    @staticmethod
+    def _normalise_base_url(value: str) -> str:
+        selected_url = value.strip()
+        parsed = urlparse(selected_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError(
+                "Inference base URL must be an absolute http(s) URL, for example "
+                "http://127.0.0.1:8000."
+            )
+        return selected_url.rstrip("/")
+
+    def set_base_url(self, value: str) -> None:
+        """Switch this client to another Cognityx inference server."""
+        self.base_url = self._normalise_base_url(value)
+
+    def diagnose_server(
+        self,
+        *,
+        model: str | None = None,
+        backend: str = "vllm",
+        profile: str = "bf16",
+    ) -> dict[str, Any]:
+        """Return a non-throwing operator diagnostic for the selected server."""
+        result: dict[str, Any] = {"base_url": self.base_url, "reachable": False}
+        try:
+            models = self._request("GET", "/v1/models")
+            result.update(reachable=True, openai_models_endpoint="available", models=models.get("data", []))
+        except InferenceAPIError as exc:
+            result.update(error="unexpected_http_response", detail=_diagnostic_detail(exc))
+            return result
+        except (URLError, OSError, TimeoutError) as exc:
+            result.update(error="connection_failed", detail=str(exc))
+            return result
+
+        try:
+            statuses = self.model_status()
+            result["lifecycle_endpoint"] = "available"
+            result["loaded_models"] = statuses
+        except InferenceAPIError as exc:
+            result["lifecycle_endpoint"] = "unavailable"
+            result["lifecycle_detail"] = _diagnostic_detail(exc)
+            return result
+
+        token_model = model or _status_model(statuses)
+        if not token_model:
+            result["token_count_endpoint"] = "not_checked_no_model_loaded"
+            return result
+        try:
+            self.count_input_tokens(
+                model=token_model, backend=backend, profile=profile,
+                messages=[{"role": "user", "content": "diagnostic"}],
+            )
+            result["token_count_endpoint"] = "available"
+        except InferenceAPIError as exc:
+            result["token_count_endpoint"] = "unavailable"
+            result["token_count_detail"] = _diagnostic_detail(exc)
+        return result
 
     def infer(self, request: InferenceRequest) -> dict[str, Any]:
         policy = (
@@ -530,3 +582,17 @@ def _error_detail(payload: Any) -> dict[str, Any]:
         return {}
     detail = payload.get("detail", payload)
     return detail if isinstance(detail, dict) else {}
+
+
+def _diagnostic_detail(exc: InferenceAPIError) -> str:
+    detail = _error_detail(exc.payload)
+    message = detail.get("message") if detail else None
+    return str(message or exc)
+
+
+def _status_model(statuses: list[dict[str, Any]]) -> str | None:
+    if not statuses:
+        return None
+    identity = statuses[-1].get("identity") or {}
+    model = identity.get("model")
+    return str(model) if model else None

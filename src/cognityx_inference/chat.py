@@ -79,6 +79,13 @@ class CognityxChatSession:
             self.refresh_active_model()
         return result
 
+    def set_server_url(self, url: str) -> None:
+        """Change server without carrying stale loaded-model state across it."""
+        self.client.set_base_url(url)
+        self.model = None
+        self.certified_context_length = None
+        self.certified_profile_id = None
+
     def refresh_active_model(self) -> None:
         statuses = self.client.model_status()
         if not statuses:

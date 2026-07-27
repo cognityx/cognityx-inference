@@ -98,6 +98,50 @@ def test_certified_profile_client_paths() -> None:
     ]
 
 
+def test_client_can_switch_base_url_and_diagnose_current_server() -> None:
+    class Client(CognityxInferenceClient):
+        def __init__(self):
+            super().__init__("http://first:8000")
+
+        def _request(self, method, path, payload=None):
+            if path == "/v1/models":
+                return {"data": []}
+            if path == "/v1/cognityx/models/status":
+                return [{"identity": {"model": "model-a", "backend": "vllm"}, "state": "ready"}]
+            if path == "/v1/cognityx/tokens/count":
+                return {"input_tokens": 1}
+            raise AssertionError(path)
+
+    client = Client()
+    client.set_base_url("http://second:8013/")
+    diagnostic = client.diagnose_server()
+
+    assert client.base_url == "http://second:8013"
+    assert diagnostic["reachable"] is True
+    assert diagnostic["lifecycle_endpoint"] == "available"
+    assert diagnostic["token_count_endpoint"] == "available"
+
+
+def test_diagnostic_identifies_old_server_without_token_counter() -> None:
+    class Client(CognityxInferenceClient):
+        def __init__(self):
+            super().__init__("http://example")
+
+        def _request(self, method, path, payload=None):
+            if path == "/v1/models":
+                return {"data": []}
+            if path == "/v1/cognityx/models/status":
+                return [{"identity": {"model": "model-a", "backend": "vllm"}, "state": "ready"}]
+            if path == "/v1/cognityx/tokens/count":
+                raise InferenceAPIError(404, {"detail": "Not Found"})
+            raise AssertionError(path)
+
+    diagnostic = Client().diagnose_server()
+
+    assert diagnostic["reachable"] is True
+    assert diagnostic["token_count_endpoint"] == "unavailable"
+
+
 def test_auto_discovery_publishes_its_job_id_before_waiting() -> None:
     published = []
     events = []

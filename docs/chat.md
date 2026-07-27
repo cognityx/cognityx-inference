@@ -12,6 +12,20 @@ No arguments are required:
 uv run cognityx-inference chat
 ```
 
+By default, chat connects to `http://127.0.0.1:8000`. Set a different server
+when starting chat with `--base-url`, or set `COGNITYX_INFERENCE_URL`:
+
+```bash
+uv run cognityx-inference chat --base-url http://127.0.0.1:8013
+# or: export COGNITYX_INFERENCE_URL=http://127.0.0.1:8013
+```
+
+Use `/status` immediately if a reply cannot be sent. It checks the selected
+URL, the OpenAI-compatible endpoint, the Cognityx lifecycle endpoint, loaded
+models, and the token-count endpoint required for safe conversation-history
+compression. A 404 for the token-count endpoint normally means that an older
+server process is still running; stop it and restart the current checkout.
+
 If no model is resident, load one from inside chat:
 
 ```text
@@ -66,6 +80,9 @@ conversation history. If safe compression is impossible, it asks you to reduce
 /load_chat <chat-id>
 /autosave on|off
 /settings
+/settings url
+/settings url http://127.0.0.1:8013
+/status
 /settings temperature 0.7
 /settings top_k 40
 /settings top_p 0.95
@@ -86,6 +103,10 @@ conversation history. If safe compression is impossible, it asks you to reduce
 
 `/autosave on` writes a new immutable revision after every completed turn.
 When autosave is off, `/quit` asks whether to save unsaved work.
+
+`/settings url` displays the active server. Supplying a URL switches chat to
+that server and clears the old server's loaded-model state; run `/status` and
+then `/load` if necessary.
 
 ## Saved sessions
 

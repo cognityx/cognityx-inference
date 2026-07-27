@@ -369,7 +369,8 @@ def _run_chat(args: Any, client: CognityxInferenceClient) -> None:
             session.refresh_active_model()
         except (InferenceAPIError, RuntimeError):
             pass
-    print("Interactive Cognityx chat. Use /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
+    print(f"Interactive Cognityx chat connected to {client.base_url}.")
+    print("Use /status, /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
     try:
         while True:
             name = session.model or "no model"
@@ -393,7 +394,7 @@ def _run_chat(args: Any, client: CognityxInferenceClient) -> None:
             except ChatContextError as exc:
                 print(f"\nContext protection: {exc}")
             except (InferenceAPIError, RuntimeError, OSError) as exc:
-                print(f"\nInference unavailable: {exc}\nCheck the server, then use /load when it is ready.")
+                print(f"\n{_chat_inference_error(exc, session.client.base_url)}")
     finally:
         if session.dirty and not session.autosave:
             answer = input("Save this chat before exit? [y/N] ").strip().lower()
@@ -419,6 +420,9 @@ def _chat_command(line: str, session: CognityxChatSession) -> bool:
             print(f"Loaded {session.model}; certified context: {session.certified_context_length}")
         except (InferenceAPIError, RuntimeError) as exc:
             print(f"Load failed: {exc}")
+        return False
+    if command == "/status":
+        _chat_status(session)
         return False
     if command == "/save":
         print(f"Saved chat: {session.save(parts[1] if len(parts) > 1 else None)}")
@@ -454,20 +458,33 @@ def _chat_command(line: str, session: CognityxChatSession) -> bool:
     if command == "/settings":
         _chat_settings(parts[1:], session)
         return False
-    print("Unknown command. Use /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
+    print("Unknown command. Use /status, /load, /settings, /history, /save, /load_chat, /autosave, /clear, or /quit.")
     return False
 
 
 def _chat_settings(parts: list[str], session: CognityxChatSession) -> None:
     if not parts:
-        print(json.dumps({"parameters": session.settings.request_parameters(), "autosave": session.autosave, "show": session.show, "certified_context": session.certified_context_length}, indent=2))
+        print(json.dumps({"server_url": session.client.base_url, "parameters": session.settings.request_parameters(), "autosave": session.autosave, "show": session.show, "certified_context": session.certified_context_length}, indent=2))
+        return
+    if parts[0] == "url":
+        if len(parts) == 1:
+            print(f"Server URL: {session.client.base_url}")
+            return
+        if len(parts) != 2:
+            print("Usage: /settings url <http://host:port>")
+            return
+        try:
+            session.set_server_url(parts[1])
+            print(f"Server URL changed to {session.client.base_url}. Use /status, then /load.")
+        except ValueError as exc:
+            print(f"Invalid server URL: {exc}")
         return
     if len(parts) == 3 and parts[0] == "show" and parts[1] in {"power", "cpu", "ram"}:
         session.show[parts[1]] = parts[2].lower() == "on"
         print(f"{parts[1]} display {'enabled' if session.show[parts[1]] else 'disabled'}.")
         return
     if len(parts) != 2:
-        print("Usage: /settings <temperature|top_p|top_k|min_p|max_tokens|log_probabilities|top_log_probabilities|reasoning|timeouts|show|perf> <value>")
+        print("Usage: /settings <url|temperature|top_p|top_k|min_p|max_tokens|log_probabilities|top_log_probabilities|reasoning|timeouts|show|perf> <value>")
         return
     key, raw = parts[0], parts[1]
     if key == "perf":
@@ -500,6 +517,45 @@ def _chat_settings(parts: list[str], session: CognityxChatSession) -> None:
         print(f"{key} = {value}")
     except ValueError as exc:
         print(f"Invalid value: {exc}")
+
+
+def _chat_status(session: CognityxChatSession) -> None:
+    diagnostic = session.client.diagnose_server(
+        model=session.model, backend=session.backend, profile=session.profile,
+    )
+    print(f"Server: {diagnostic['base_url']}")
+    if not diagnostic.get("reachable"):
+        print(f"Status: unavailable ({diagnostic.get('detail', diagnostic.get('error'))})")
+        print("Start this checkout with: uv run cognityx-inference serve --host 127.0.0.1 --port <port>")
+        return
+    print("OpenAI /v1/models: available")
+    lifecycle = diagnostic.get("lifecycle_endpoint")
+    if lifecycle != "available":
+        print(f"Cognityx lifecycle API: unavailable ({diagnostic.get('lifecycle_detail')})")
+        print("This is not a current Cognityx inference server. Restart it from this checkout.")
+        return
+    loaded = diagnostic.get("loaded_models") or []
+    if loaded:
+        for item in loaded:
+            identity = item.get("identity") or {}
+            print(f"Loaded: {identity.get('model')} [{identity.get('backend')}] state={item.get('state')}")
+    else:
+        print("Loaded: none; use /load <model> [backend] [profile].")
+    token_state = diagnostic.get("token_count_endpoint")
+    print(f"Token-count API: {token_state}")
+    if token_state == "unavailable":
+        print(f"Detail: {diagnostic.get('token_count_detail')}")
+        print("Chat needs this endpoint for safe history compression. Stop and restart the server from this checkout.")
+
+
+def _chat_inference_error(exc: Exception, base_url: str) -> str:
+    if isinstance(exc, InferenceAPIError) and exc.status == 404:
+        return (
+            f"Inference server {base_url} does not provide a required Cognityx chat endpoint.\n"
+            "Run /status for the exact diagnostic. It is usually an older server process; "
+            "stop it and restart `uv run cognityx-inference serve` from this checkout."
+        )
+    return f"Inference unavailable at {base_url}: {exc}\nRun /status, then use /load when the server is ready."
 
 
 def _print_chat_stats(final: dict[str, Any], telemetry: dict[str, Any] | None, show: dict[str, bool]) -> None:

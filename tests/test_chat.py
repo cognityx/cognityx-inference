@@ -79,3 +79,22 @@ def test_refresh_requires_active_model() -> None:
         assert "Use /load" in str(exc)
     else:
         raise AssertionError("missing loaded-model error")
+
+
+def test_switching_server_clears_stale_model_state() -> None:
+    class Switchable(FakeClient):
+        base_url = "http://first:8000"
+
+        def set_base_url(self, value):
+            self.base_url = value.rstrip("/")
+
+    session = CognityxChatSession(
+        Switchable(), model="model-a", certified_context_length=100,
+        certified_profile_id="profile-1",
+    )
+
+    session.set_server_url("http://second:8013/")
+
+    assert session.client.base_url == "http://second:8013"
+    assert session.model is None
+    assert session.certified_context_length is None
