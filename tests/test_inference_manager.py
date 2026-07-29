@@ -26,6 +26,12 @@ class MemoryState:
     def load(self) -> dict[str, Any] | None:
         return self.value
 
+    def exists(self, key: str) -> bool:
+        return self.value is not None
+
+    def delete(self, key: str, *, recursive: bool = False) -> None:
+        self.value = None
+
 
 class MemoryJobs:
     def __init__(self) -> None:
