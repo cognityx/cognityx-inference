@@ -20,6 +20,12 @@ class FakeStorage:
         self.materialized.append(key)
         return "/opaque/materialized/value"
 
+    def exists(self, key):
+        return key in self.values
+
+    def delete(self, key, *, recursive=False):
+        self.values.pop(key, None)
+
 
 def test_inference_records_use_logical_keys() -> None:
     storage = FakeStorage()
@@ -48,6 +54,16 @@ def test_model_paths_only_come_from_storage_materialization() -> None:
 
     assert result == "/opaque/materialized/value"
     assert storage.materialized == ["models/qwen/version-1"]
+
+
+def test_manager_state_replaces_mutable_snapshot() -> None:
+    from cognityx_inference.storage import ManagerStateRepository
+
+    storage = FakeStorage()
+    repository = ManagerStateRepository(storage)
+    repository.save({"state": "STARTING"})
+    repository.save({"state": "READY"})
+    assert storage.values[repository.key] == {"state": "READY"}
 
 
 def test_boundary_records_are_append_only_per_trial() -> None:

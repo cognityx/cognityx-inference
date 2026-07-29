@@ -25,6 +25,8 @@ class StorageClientLike(Protocol):
 
     def list(self, prefix: str = "") -> tuple[Any, ...]: ...
 
+    def delete(self, key: str, *, recursive: bool = False) -> None: ...
+
 
 def _segment(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip()).strip("-")
@@ -65,6 +67,14 @@ class ManagerStateRepository:
     key: str = "inference/manager/server-state.json"
 
     def save(self, value: Any) -> Any:
+        # Manager state is mutable operational state, unlike published
+        # inference artifacts. Replace the prior snapshot before publishing
+        # the next one so immutable logical storage does not wedge recovery.
+        if self.storage.exists(self.key):
+            delete = getattr(self.storage, "delete", None)
+            if delete is None:
+                raise RuntimeError("Manager state storage must support replacement")
+            delete(self.key)
         return self.storage.put_json(self.key, value)
 
     def load(self) -> dict[str, Any] | None:
