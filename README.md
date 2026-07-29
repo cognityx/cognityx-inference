@@ -6,9 +6,10 @@ hardware/configuration boundary evaluator. It evolves the original
 vLLM engines, diagnostics, interactive commands, or saved-result structure.
 
 The platform adds normalized inference contracts, an OpenAI-compatible API and
-client, explicit local-model lifecycle leases, local/OpenAI/xAI routing,
-logical-key persistence through `cognityx-storage`, finite Cartesian boundary
-plans with contextual monotonic pruning, and local machine telemetry.
+client, explicit local-model lifecycle leases, configuration-driven local and
+commercial provider adapters, logical-key persistence through
+`cognityx-storage`, finite Cartesian boundary plans with contextual monotonic
+pruning, and local machine telemetry.
 
 The legacy `llm-benchmark` command and `llm_benchmark` imports remain available
 as compatibility interfaces.
@@ -20,9 +21,38 @@ uv sync --extra api --extra telemetry
 uv run cognityx-inference serve --host 127.0.0.1 --port 8013
 ```
 
-Commercial adapters are enabled only when their configured environment
-credential is present. OpenAI, Groq, and the existing xAI adapter are
-supported; credentials never belong in normal configuration.
+Primary commercial adapters anticipate OpenAI, Groq, Google Gemini, Cerebras,
+OpenRouter, GitHub Models, Cloudflare Workers AI, and Anthropic. A missing
+credential is safely reported as `not_configured`; it does not trigger network
+access. Credentials come from environment variables or an external secrets
+JSON file and never belong in normal configuration.
+
+```bash
+uv run cognityx-inference providers setup
+uv run cognityx-inference providers status
+uv run cognityx-inference providers models --provider openai --refresh
+uv run cognityx-inference providers test --provider openai
+```
+
+See the [provider guide](docs/providers/index.md) for provider-specific setup,
+capability policies, routing, billing links, rotation, and diagnostics.
+
+The same client selects local or commercial inference without changing the
+application response model:
+
+```python
+client.chat(provider="local", model="Qwen/Qwen3-8B", messages=messages)
+client.chat(provider="groq", model="llama-3.1-8b-instant", messages=messages)
+client.chat(provider="gemini", model="models/gemini-flash-latest", messages=messages)
+client.chat(
+    provider="openrouter",
+    model="openai/gpt-4.1-mini",
+    messages=messages,
+)
+```
+
+Without the corresponding credential, `providers status` reports
+`not_configured` and `providers test` returns a skipped diagnostic.
 
 Run the lightweight manager and let the Cognityx client start one named local
 worker on demand:

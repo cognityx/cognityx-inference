@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 
-from cognityx_inference.vllm_runtime import VLLMRuntimeError, ensure_vllm_runtime
+from cognityx_inference.vllm_runtime import (
+    VLLMRuntimeError,
+    _runtime_source_roots,
+    ensure_vllm_runtime,
+)
 
 
 def test_isolated_runtime_import_failure_is_actionable(monkeypatch) -> None:
@@ -19,8 +22,14 @@ def test_isolated_runtime_import_failure_is_actionable(monkeypatch) -> None:
         ensure_vllm_runtime(["serve"])
 
 
-def test_runtime_path_includes_shared_service_sources() -> None:
-    project_root = Path(__file__).resolve().parents[1]
-    assert (project_root.parent / "cognityx-resource" / "src").is_dir()
-    assert (project_root.parent / "cognityx-storage" / "src").is_dir()
-    assert (project_root.parent / "cognityx-jobs" / "src").is_dir()
+def test_runtime_path_includes_only_available_service_sources(tmp_path) -> None:
+    project_root = tmp_path / "cognityx-inference"
+    project_source = project_root / "src"
+    resource_source = tmp_path / "cognityx-resource" / "src"
+    project_source.mkdir(parents=True)
+    resource_source.mkdir(parents=True)
+
+    assert _runtime_source_roots(project_root) == (
+        str(project_source),
+        str(resource_source),
+    )

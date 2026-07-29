@@ -41,7 +41,9 @@ llm-benchmark = "llm_benchmark.app:main"
 dev = [
     "mkdocs-material>=9.7.7",
     "mkdocstrings-python>=2.0.5",
+    "mypy>=1.17",
     "pytest>=8",
+    "ruff>=0.12",
 ]
 
 [tool.uv.sources]
@@ -54,3 +56,47 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cognityx_inference", "src/llm_benchmark"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+include = [
+    "src/cognityx_inference/api.py",
+    "src/cognityx_inference/cli.py",
+    "src/cognityx_inference/client.py",
+    "src/cognityx_inference/configuration.py",
+    "src/cognityx_inference/contracts.py",
+    "src/cognityx_inference/errors.py",
+    "src/cognityx_inference/security.py",
+    "src/cognityx_inference/service.py",
+    "src/cognityx_inference/routing.py",
+    "src/cognityx_inference/providers/*.py",
+    "tests/test_inference_cli.py",
+    "tests/test_inference_client.py",
+    "tests/test_provider*.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E402", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "src/cognityx_inference/configuration.py",
+    "src/cognityx_inference/contracts.py",
+    "src/cognityx_inference/errors.py",
+    "src/cognityx_inference/security.py",
+    "src/cognityx_inference/routing.py",
+    "src/cognityx_inference/providers",
+]
+exclude = [
+    "^src/llm_benchmark/",
+    "^tests/",
+    "^src/cognityx_inference/(backends|evaluation)/",
+    "^src/cognityx_inference/(?!configuration\\.py$|contracts\\.py$|errors\\.py$|security\\.py$|routing\\.py$)[^/]+\\.py$",
+]
+follow_imports = "skip"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true

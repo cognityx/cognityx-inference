@@ -207,6 +207,8 @@ def test_auto_start_watch_infer_budget_and_stop_end_to_end() -> None:
         )
         assert client.server_status()["state"] == "READY"
         assert process.starts == 1
+        if not any(event["event"] == "server_ready" for event in events):
+            events.extend(client.stream_server_events())
         assert any(event["event"] == "server_ready" for event in events)
         assert client.server_stop()["state"] == "STOPPED"
         assert process.stops == 1

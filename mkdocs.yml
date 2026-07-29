@@ -18,6 +18,16 @@ nav:
   - Discovery jobs: jobs.md
   - Boundary evaluation: boundary-evaluation.md
   - Configuration: configuration.md
+  - Providers:
+      - Overview: providers/index.md
+      - OpenAI: providers/openai.md
+      - Groq: providers/groq.md
+      - Google Gemini: providers/gemini.md
+      - Cerebras: providers/cerebras.md
+      - OpenRouter: providers/openrouter.md
+      - GitHub Models: providers/github-models.md
+      - Cloudflare Workers AI: providers/cloudflare.md
+      - Anthropic: providers/anthropic.md
   - Usage: usage.md
   - Architecture: architecture.md
   - Modules: modules/index.md

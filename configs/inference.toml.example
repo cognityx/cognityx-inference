@@ -21,10 +21,13 @@ port = 8100
 kv_cache_precision = "fp8"
 
 [providers.openai]
+enabled = true
 adapter = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
-api_key_secret = "openai_api_key"
+api_key_secret = "OPENAI_API_KEY"
+default_model = "gpt-4.1-mini"
+default_profile = "openai-default"
 smoke_test_model = "gpt-4.1-mini"
 
 [providers.openai.models."gpt-4.1-mini".context]
@@ -35,10 +38,13 @@ tokenizer = "openai/gpt-4.1-mini"
 allow_estimated_counting = true
 
 [providers.groq]
+enabled = true
 adapter = "openai_compatible"
 base_url = "https://api.groq.com/openai/v1"
 api_key_env = "GROQ_API_KEY"
-api_key_secret = "groq_api_key"
+api_key_secret = "GROQ_API_KEY"
+default_model = "llama-3.1-8b-instant"
+default_profile = "groq-default"
 smoke_test_model = "llama-3.1-8b-instant"
 
 [providers.groq.models."llama-3.1-8b-instant".context]
@@ -47,3 +53,128 @@ max_output_tokens_limit = 8192
 reserved_tokens = 256
 tokenizer = "meta-llama/Llama-3.1-8B-Instruct"
 allow_estimated_counting = true
+
+[providers.groq.models."llama-3.1-8b-instant".capabilities]
+streaming = true
+stop_conditions = true
+seed = true
+tools = true
+structured_output = true
+
+[providers.groq.models."llama-3.1-8b-instant".parameter_policy]
+supported = [
+  "messages", "model", "temperature", "top_p", "max_output_tokens",
+  "stop", "seed", "tools", "tool_choice", "response_format"
+]
+translated = { max_output_tokens = "max_completion_tokens" }
+ignored_when_unset = ["stop", "seed", "tools", "tool_choice", "response_format"]
+rejected_when_supplied = ["logprobs", "top_logprobs", "logit_bias", "n"]
+
+[providers.gemini]
+enabled = true
+adapter = "gemini_native"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key_env = "GEMINI_API_KEY"
+api_key_secret = "GEMINI_API_KEY"
+default_model = "models/gemini-flash-latest"
+default_profile = "gemini-default"
+smoke_test_model = "models/gemini-flash-latest"
+
+[providers.gemini_openai]
+enabled = false
+adapter = "openai_compatible"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+api_key_env = "GEMINI_API_KEY"
+api_key_secret = "GEMINI_API_KEY"
+default_profile = "gemini-openai-default"
+
+[providers.cerebras]
+enabled = true
+adapter = "openai_compatible"
+base_url = "https://api.cerebras.ai/v1"
+api_key_env = "CEREBRAS_API_KEY"
+api_key_secret = "CEREBRAS_API_KEY"
+default_model = "gpt-oss-120b"
+default_profile = "cerebras-default"
+smoke_test_model = "gpt-oss-120b"
+
+[providers.openrouter]
+enabled = true
+adapter = "openai_compatible"
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
+api_key_secret = "OPENROUTER_API_KEY"
+default_model = "openai/gpt-4.1-mini"
+default_profile = "openrouter-default"
+smoke_test_model = "openai/gpt-4.1-mini"
+
+[providers.github_models]
+enabled = true
+adapter = "github_models"
+base_url = "https://models.github.ai/inference"
+api_key_env = "GITHUB_MODELS_TOKEN"
+api_key_secret = "GITHUB_MODELS_TOKEN"
+default_model = "openai/gpt-4.1-mini"
+default_profile = "github-models-default"
+smoke_test_model = "openai/gpt-4.1-mini"
+
+[providers.github_models.options]
+models_url = "https://models.github.ai/catalog/models"
+
+[providers.cloudflare]
+enabled = true
+adapter = "openai_compatible"
+base_url = "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"
+api_key_env = "CLOUDFLARE_API_TOKEN"
+api_key_secret = "CLOUDFLARE_API_TOKEN"
+account_id_env = "CLOUDFLARE_ACCOUNT_ID"
+account_id_secret = "CLOUDFLARE_ACCOUNT_ID"
+default_model = "@cf/meta/llama-3.1-8b-instruct"
+default_profile = "cloudflare-default"
+smoke_test_model = "@cf/meta/llama-3.1-8b-instruct"
+
+[providers.cloudflare.options]
+model_discovery = false
+
+[providers.anthropic]
+enabled = true
+adapter = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+api_key_env = "ANTHROPIC_API_KEY"
+api_key_secret = "ANTHROPIC_API_KEY"
+api_version = "2023-06-01"
+default_model = "claude-sonnet-4-20250514"
+default_profile = "anthropic-default"
+smoke_test_model = "claude-sonnet-4-20250514"
+
+# Enterprise extension points. They intentionally have no active adapter yet.
+[providers.azure_openai]
+enabled = false
+adapter = "extension"
+
+[providers.aws_bedrock]
+enabled = false
+adapter = "extension"
+
+[providers.google_vertex]
+enabled = false
+adapter = "extension"
+
+[[routing.bulk_generation.preferred]]
+provider = "local"
+profile = "qwen3-8b-int4"
+
+[[routing.primary_validation.preferred]]
+provider = "groq"
+profile = "groq-default"
+
+[[routing.primary_validation.preferred]]
+provider = "local"
+profile = "qwen3-8b-int4"
+
+[routing.sensitive_data]
+allowed_providers = ["local"]
+
+[[routing.sensitive_data.preferred]]
+provider = "local"
+profile = "qwen3-8b-int4"

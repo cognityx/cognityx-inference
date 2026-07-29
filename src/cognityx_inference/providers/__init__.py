@@ -1,11 +1,6 @@
-"""Commercial inference provider adapters."""
+"""Commercial inference provider adapters with cycle-safe lazy exports."""
 
-from cognityx_inference.providers.openai_compatible import (
-    OpenAICompatibleProvider,
-    OpenAIProvider,
-    GroqProvider,
-    XAIProvider,
-)
+from typing import Any
 
 __all__ = [
     "GroqProvider",
@@ -13,3 +8,11 @@ __all__ = [
     "OpenAIProvider",
     "XAIProvider",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    if name in __all__:
+        from cognityx_inference.providers import openai_compatible
+
+        return getattr(openai_compatible, name)
+    raise AttributeError(name)

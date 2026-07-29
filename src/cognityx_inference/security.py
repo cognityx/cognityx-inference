@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any, Iterable
-
 
 _SENSITIVE = re.compile(
     r"(?i)(authorization|api[-_ ]?key|bearer|token|secret|credential)"
@@ -49,14 +48,26 @@ class CredentialResolver:
         if not self.secrets_file or not secret_name:
             return None
         document = self._document()
-        value = document.get(secret_name)
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError(
-                f"Credential entry '{secret_name}' must be a string."
+        candidates = tuple(
+            dict.fromkeys(
+                item
+                for item in (
+                    secret_name,
+                    environment_name,
+                    secret_name.lower() if secret_name else None,
+                    environment_name.lower() if environment_name else None,
+                )
+                if item
             )
-        return value.strip() or None
+        )
+        for candidate in candidates:
+            value = document.get(candidate)
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise ValueError(f"Credential entry '{candidate}' must be a string.")
+            return value.strip() or None
+        return None
 
     def available(
         self,
@@ -78,9 +89,7 @@ class CredentialResolver:
             with path.open(encoding="utf-8") as source:
                 value = json.load(source)
         except FileNotFoundError as exc:
-            raise ValueError(
-                f"Configured secrets file does not exist: {path}"
-            ) from exc
+            raise ValueError(f"Configured secrets file does not exist: {path}") from exc
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(
                 f"Configured secrets file cannot be read as JSON: {path}"

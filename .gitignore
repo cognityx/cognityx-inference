@@ -23,6 +23,10 @@ configs/secrets
 secrets/
 config/secrets/
 .cognityx/inference.toml
+.cognityx/secrets.json
+.cognityx/*secrets*.json
+secrets.json
+*.secrets.json
 
 # Generated long-context artifacts (the registry documentation is tracked)
 data/contexts/*/chunks.jsonl

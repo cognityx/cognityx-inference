@@ -263,3 +263,28 @@ Common service errors:
 
 The `428` response includes structured fields such as model, backend, profile,
 model context limit, and optional `discovery_request_id`.
+
+## Provider endpoints
+
+- `GET /v1/cognityx/providers`
+  Lists provider definitions with safe readiness state.
+- `GET /v1/cognityx/providers/status`
+  Lists configuration state and the last successful in-process diagnostic.
+- `GET /v1/cognityx/providers/{provider}/models?refresh=true`
+  Discovers exact provider model IDs. Results use the configured TTL cache.
+- `GET /v1/cognityx/providers/{provider}/capabilities?model=...`
+  Returns the explicit model profile, parameter policy, and account-limit
+  declaration. Unknown information remains `null`.
+- `POST /v1/cognityx/providers/{provider}/test`
+  Runs bounded non-streaming and streaming smoke tests, with optional structured
+  output.
+
+The test body accepts `model`, `structured_output`, and `timeout_seconds`.
+Provider failures are normalized to safe categories; upstream bodies and
+authorization values are not exposed.
+
+`POST /v1/chat/completions` continues to accept the OpenAI-shaped request. Use
+`cognityx.provider` to select a commercial provider. A pure OpenAI client can
+send the same extension object. Local requests retain model lifecycle and
+hardware telemetry; commercial responses contain only provider-reported and
+client-observed information.

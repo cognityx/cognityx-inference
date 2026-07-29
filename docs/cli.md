@@ -128,7 +128,7 @@ Credentials may come from the configured JSON path; exporting provider keys is
 not required:
 
 ```toml
-secrets_file = "/mnt/d/MyDev/llmapps/secrets.json"
+secrets_file = "/secure/location/provider-secrets.json"
 ```
 
 Successful diagnostic output includes measured prompt/completion/total usage
@@ -729,3 +729,58 @@ uv run cognityx-inference server watch
 `worker_load_http_400`; secrets and raw provider responses are never returned.
 `DEGRADED` means a recovered worker PID exists but its health endpoint is not
 ready. Stop the worker, correct its profile/certification, and start it again.
+
+## Provider operations
+
+```bash
+# Human-readable status; add --json for automation.
+uv run cognityx-inference providers list
+uv run cognityx-inference providers status
+
+# Safe empty credential template and exact requirements.
+uv run cognityx-inference providers setup
+uv run cognityx-inference providers setup --create-template --yes
+
+# Exact model identifiers, declared capability/profile, and smoke tests.
+uv run cognityx-inference providers models --provider groq --refresh
+uv run cognityx-inference providers capabilities \
+  --provider groq --model llama-3.1-8b-instant
+uv run cognityx-inference providers test --provider groq
+uv run cognityx-inference providers test --all
+```
+
+`test --all` skips providers without credentials and reports why. It never
+prints credential values. Add `--start-local` to start the configured local
+worker for its smoke test, and `--stop-local` to release it afterward.
+
+Python exposes the same control surface:
+
+```python
+from cognityx_inference import CognityxInferenceClient
+
+client = CognityxInferenceClient("http://127.0.0.1:8000")
+print(client.list_providers())
+print(client.provider_status())
+print(client.provider_models("openai", refresh=True))
+print(client.provider_capabilities("openai", "gpt-4.1-mini"))
+print(client.test_provider("openai", model="gpt-4.1-mini"))
+```
+
+For inference, use the existing message-list contract and choose a provider:
+
+```python
+reply = client.chat(
+    provider="openai",
+    model="gpt-4.1-mini",
+    messages=[
+        {"role": "system", "content": "Answer concisely."},
+        {"role": "user", "content": "Explain KV cache precision."},
+    ],
+    temperature=0.2,
+    top_p=0.9,
+    max_output_tokens=256,
+)
+```
+
+Provider-specific request metadata belongs in extensions. Unsupported common
+parameters are rejected explicitly instead of silently changing semantics.

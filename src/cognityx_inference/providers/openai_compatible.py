@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Callable
-from urllib.error import HTTPError, URLError
+from typing import Any, Callable, Self
 from urllib import request as urllib_request
+from urllib.error import HTTPError, URLError
 
 from cognityx_inference.capabilities import CertifiedContextProfile
 from cognityx_inference.configuration import ProviderDefinition
@@ -22,18 +22,13 @@ from cognityx_inference.contracts import (
 from cognityx_inference.errors import (
     ProviderCredentialMissing,
     ProviderRequestError,
+    UnsupportedProviderParameter,
 )
+from cognityx_inference.providers.models import ParameterPolicy, supplied_parameters
+from cognityx_inference.providers.policies import OPENAI_COMPATIBLE_POLICIES
 from cognityx_inference.security import CredentialResolver
 from cognityx_inference.token_budget import serialized_request
 
-
-_ALLOWED_EXTENSIONS = {
-    "frequency_penalty",
-    "presence_penalty",
-    "parallel_tool_calls",
-    "reasoning_effort",
-    "service_tier",
-}
 _RATE_LIMIT_HEADERS = {
     "x-ratelimit-limit-requests": "limit_requests",
     "x-ratelimit-limit-tokens": "limit_tokens",
@@ -53,6 +48,9 @@ class OpenAICompatibleProvider:
         seed=True,
         log_probabilities=True,
         reasoning=True,
+        tools=True,
+        structured_output=True,
+        vision=True,
     )
 
     def __init__(
@@ -67,6 +65,10 @@ class OpenAICompatibleProvider:
         model_capabilities: dict[str, CertifiedContextProfile] | None = None,
         default_timeout_seconds: float = 120,
         output_tokens_parameter: str = "max_completion_tokens",
+        parameter_policy: ParameterPolicy | None = None,
+        model_parameter_policies: dict[str, ParameterPolicy] | None = None,
+        secondary_credential: str | None = None,
+        supports_model_discovery: bool = True,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -77,6 +79,13 @@ class OpenAICompatibleProvider:
         self.model_capabilities = dict(model_capabilities or {})
         self.default_timeout_seconds = default_timeout_seconds
         self.output_tokens_parameter = output_tokens_parameter
+        self.parameter_policy = parameter_policy or OPENAI_COMPATIBLE_POLICIES.get(
+            name,
+            OPENAI_COMPATIBLE_POLICIES["openai"],
+        )
+        self.model_parameter_policies = dict(model_parameter_policies or {})
+        self.secondary_credential = secondary_credential
+        self.supports_model_discovery = supports_model_discovery
 
     @classmethod
     def from_definition(
@@ -84,18 +93,35 @@ class OpenAICompatibleProvider:
         definition: ProviderDefinition,
         *,
         credential_resolver: CredentialResolver | None = None,
-    ) -> "OpenAICompatibleProvider":
+    ) -> Self:
         if definition.adapter != "openai_compatible":
-            raise ValueError(
-                f"Unsupported provider adapter: {definition.adapter}"
+            raise ValueError(f"Unsupported provider adapter: {definition.adapter}")
+        base_url = definition.base_url or ""
+        account_id = None
+        if "{account_id}" in base_url:
+            account_id = (credential_resolver or CredentialResolver()).resolve(
+                environment_name=definition.account_id_env,
+                secret_name=definition.account_id_secret,
             )
+            if account_id:
+                base_url = base_url.format(account_id=account_id)
         return cls(
             definition.name,
-            definition.base_url,
+            base_url,
             api_key_env=definition.api_key_env,
             api_key_secret=definition.api_key_secret,
             credential_resolver=credential_resolver,
             model_capabilities=dict(definition.model_capabilities),
+            parameter_policy=OPENAI_COMPATIBLE_POLICIES.get(definition.name),
+            model_parameter_policies={
+                model: profile.parameter_policy
+                for model, profile in definition.model_profiles.items()
+                if profile.parameter_policy.supported
+            },
+            secondary_credential=account_id,
+            supports_model_discovery=bool(
+                definition.options.get("model_discovery", True)
+            ),
         )
 
     def context_profile(self, model: str) -> CertifiedContextProfile | None:
@@ -140,9 +166,11 @@ class OpenAICompatibleProvider:
         )
 
     def list_models(self, *, timeout_seconds: float = 20) -> tuple[str, ...]:
-        body, _, _, _ = self._request(
-            "models", None, timeout_seconds, method="GET"
-        )
+        if not self.supports_model_discovery:
+            raise LookupError(
+                f"Provider '{self.name}' does not expose model discovery."
+            )
+        body, _, _, _ = self._request("models", None, timeout_seconds, method="GET")
         return tuple(
             str(item["id"])
             for item in body.get("data", ())
@@ -150,26 +178,36 @@ class OpenAICompatibleProvider:
         )
 
     def _payload(self, request: InferenceRequest) -> dict[str, Any]:
-        if request.top_k is not None or request.min_p is not None:
-            raise ValueError(
-                f"{self.name} does not expose top_k/min_p through its common API"
-            )
-        unknown = sorted(set(request.extensions) - _ALLOWED_EXTENSIONS)
-        if unknown:
-            raise ValueError(
-                f"{self.name} unsupported extension parameter(s): "
-                + ", ".join(unknown)
-            )
+        policy = self.model_parameter_policies.get(request.model, self.parameter_policy)
+        explicit = supplied_parameters(request)
+        rejected = sorted(
+            (explicit & policy.rejected_when_supplied) | (explicit - policy.supported)
+        )
+        if self.name == "groq":
+            if any(
+                isinstance(message, dict) and message.get("name") is not None
+                for message in request.messages
+            ):
+                rejected.append("messages[].name")
+            n = request.extensions.get("n")
+            if n == 1:
+                rejected = [item for item in rejected if item != "n"]
+            elif n is not None:
+                rejected.append("n")
+        if rejected:
+            raise UnsupportedProviderParameter(self.name, sorted(set(rejected)))
         messages = (
             list(request.messages)
             if request.messages
             else [{"role": "user", "content": request.prompt}]
         )
         payload: dict[str, Any] = {"model": request.model, "messages": messages}
-        optional = {
+        values = {
             "temperature": request.temperature,
             "top_p": request.top_p,
-            self.output_tokens_parameter: request.max_output_tokens,
+            "top_k": request.top_k,
+            "min_p": request.min_p,
+            "max_output_tokens": request.max_output_tokens,
             "seed": request.seed,
             "logprobs": request.log_probabilities or None,
             "top_logprobs": request.top_log_probabilities,
@@ -177,16 +215,14 @@ class OpenAICompatibleProvider:
             "tools": list(request.tools) or None,
             "tool_choice": request.tool_choice,
             "response_format": request.response_format,
+            "reasoning_effort": request.reasoning.get("effort"),
         }
-        payload.update(
-            {key: value for key, value in optional.items() if value is not None}
-        )
-        payload.update(request.extensions)
-        if request.reasoning:
-            payload.setdefault(
-                "reasoning_effort",
-                request.reasoning.get("effort"),
-            )
+        values.update(request.extensions)
+        for name, value in values.items():
+            if value is None or name not in policy.supported:
+                continue
+            payload[policy.wire_name(name)] = value
+        payload.update(policy.defaults)
         return {key: value for key, value in payload.items() if value is not None}
 
     def _stream(
@@ -224,7 +260,7 @@ class OpenAICompatibleProvider:
                         event = json.loads(data)
                     except json.JSONDecodeError as exc:
                         raise ProviderRequestError(
-                            self.name, "invalid_stream_event"
+                            self.name, "invalid_response"
                         ) from exc
                     provider_request_id = str(event.get("id") or header_id)
                     model = str(event.get("model") or model)
@@ -244,11 +280,9 @@ class OpenAICompatibleProvider:
                         if choice.get("finish_reason"):
                             finish = _finish_reason(choice["finish_reason"])
         except HTTPError as exc:
-            raise ProviderRequestError(
-                self.name, _http_category(exc.code), status=exc.code
-            ) from exc
+            raise _provider_http_error(self.name, exc) from exc
         except (URLError, TimeoutError, OSError) as exc:
-            raise ProviderRequestError(self.name, "connection_error") from exc
+            raise ProviderRequestError(self.name, "network_error") from exc
         elapsed = time.monotonic() - started
         return InferenceResponse(
             request_id=provider_request_id,
@@ -292,21 +326,17 @@ class OpenAICompatibleProvider:
                 request_id = response.headers.get("x-request-id", "")
                 rate_limits = _rate_limits(response.headers)
         except HTTPError as exc:
-            raise ProviderRequestError(
-                self.name, _http_category(exc.code), status=exc.code
-            ) from exc
+            raise _provider_http_error(self.name, exc) from exc
         except json.JSONDecodeError as exc:
-            raise ProviderRequestError(self.name, "invalid_json") from exc
+            raise ProviderRequestError(self.name, "invalid_response") from exc
         except (URLError, TimeoutError, OSError) as exc:
-            raise ProviderRequestError(self.name, "connection_error") from exc
+            raise ProviderRequestError(self.name, "network_error") from exc
         return body, time.monotonic() - started, request_id, rate_limits
 
     def _outgoing(
         self, path: str, payload: dict[str, Any] | None, *, method: str
     ) -> urllib_request.Request:
-        encoded = (
-            json.dumps(payload).encode("utf-8") if payload is not None else None
-        )
+        encoded = json.dumps(payload).encode("utf-8") if payload is not None else None
         return urllib_request.Request(
             f"{self.base_url}/{path.lstrip('/')}",
             data=encoded,
@@ -335,10 +365,14 @@ class OpenAICompatibleProvider:
     def credential_available(self) -> bool:
         """Check configured credential sources without returning a value."""
         if self._api_key:
-            return True
-        return self.credential_resolver.available(
-            environment_name=self.api_key_env,
-            secret_name=self.api_key_secret,
+            primary = True
+        else:
+            primary = self.credential_resolver.available(
+                environment_name=self.api_key_env,
+                secret_name=self.api_key_secret,
+            )
+        return primary and (
+            "{account_id}" not in self.base_url or self.secondary_credential is not None
         )
 
     def _response(
@@ -367,7 +401,9 @@ class OpenAICompatibleProvider:
             requested_parameters=request.to_dict(),
             effective_parameters=_safe_parameters(self._payload(request)),
             extensions={
-                "system_fingerprint": body.get("system_fingerprint"),
+                "provider_metadata": {
+                    "system_fingerprint": body.get("system_fingerprint")
+                },
                 "rate_limits": rate_limits,
                 "account_balance": None,
             },
@@ -448,20 +484,47 @@ def _usage(value: dict[str, Any]) -> TokenUsage:
 
 def _safe_parameters(payload: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: value
-        for key, value in payload.items()
-        if key not in {"messages", "tools"}
+        key: value for key, value in payload.items() if key not in {"messages", "tools"}
     }
 
 
-def _http_category(status: int) -> str:
-    if status in {401, 403}:
-        return "authentication"
+def _http_category(status: int, code: str | None = None) -> str:
+    normalized = (code or "").lower()
+    if status == 401:
+        return "authentication_failed"
+    if status == 403:
+        return "permission_denied"
     if status == 429:
-        return "rate_limit"
+        return "rate_limited"
+    if status in {408, 504}:
+        return "network_error"
+    if status in {400, 413, 422} and any(
+        marker in normalized for marker in ("context", "token_limit", "too_long")
+    ):
+        return "context_limit_exceeded"
+    if status == 404 and "model" in normalized:
+        return "model_unavailable"
     if status >= 500:
         return "provider_unavailable"
-    return "invalid_request"
+    return "unknown_provider_error"
+
+
+def _provider_http_error(provider: str, exc: HTTPError) -> ProviderRequestError:
+    """Classify a bounded provider error without retaining raw response text."""
+    code: str | None = None
+    try:
+        body = json.loads(exc.read(65536))
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict):
+            selected = error.get("code") or error.get("type")
+            code = str(selected) if selected is not None else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    return ProviderRequestError(
+        provider,
+        _http_category(exc.code, code),
+        status=exc.code,
+    )
 
 
 def _rate_limits(headers: Any) -> dict[str, str]:

@@ -98,6 +98,9 @@ class ModelCapabilities:
     log_probabilities: bool = False
     token_offsets: bool = False
     reasoning: bool = False
+    tools: bool = False
+    structured_output: bool = False
+    vision: bool = False
     local_telemetry: bool = False
 
 
@@ -135,6 +138,8 @@ class InferenceRequest:
     timeout_seconds: float | None = None
     first_token_timeout_seconds: float | None = None
     no_token_progress_timeout_seconds: float | None = None
+    execution_context: JSON = field(default_factory=dict)
+    request_metadata: JSON = field(default_factory=dict)
     extensions: JSON = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -167,14 +172,15 @@ class InferenceRequest:
             and self.max_tokens is not None
             and self.max_output_tokens != self.max_tokens
         ):
-            raise ValueError(
-                "max_output_tokens and legacy max_tokens cannot disagree"
-            )
+            raise ValueError("max_output_tokens and legacy max_tokens cannot disagree")
         if self.max_output_tokens is None and self.max_tokens is not None:
             object.__setattr__(self, "max_output_tokens", self.max_tokens)
         if self.max_output_tokens is not None and self.max_output_tokens <= 0:
             raise ValueError("max_output_tokens must be positive")
-        if self.required_context_length is not None and self.required_context_length <= 0:
+        if (
+            self.required_context_length is not None
+            and self.required_context_length <= 0
+        ):
             raise ValueError("required_context_length must be positive")
         for name in (
             "timeout_seconds",
@@ -212,6 +218,7 @@ class InferenceResponse:
     requested_parameters: JSON = field(default_factory=dict)
     effective_parameters: JSON = field(default_factory=dict)
     telemetry: JSON = field(default_factory=dict)
+    warnings: tuple[str, ...] = ()
     extensions: JSON = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
