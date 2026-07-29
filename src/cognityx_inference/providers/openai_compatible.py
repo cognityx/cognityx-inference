@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -24,6 +23,7 @@ from cognityx_inference.errors import (
     ProviderCredentialMissing,
     ProviderRequestError,
 )
+from cognityx_inference.security import CredentialResolver
 from cognityx_inference.token_budget import serialized_request
 
 
@@ -33,6 +33,14 @@ _ALLOWED_EXTENSIONS = {
     "parallel_tool_calls",
     "reasoning_effort",
     "service_tier",
+}
+_RATE_LIMIT_HEADERS = {
+    "x-ratelimit-limit-requests": "limit_requests",
+    "x-ratelimit-limit-tokens": "limit_tokens",
+    "x-ratelimit-remaining-requests": "remaining_requests",
+    "x-ratelimit-remaining-tokens": "remaining_tokens",
+    "x-ratelimit-reset-requests": "reset_requests",
+    "x-ratelimit-reset-tokens": "reset_tokens",
 }
 
 
@@ -54,6 +62,8 @@ class OpenAICompatibleProvider:
         api_key: str | None = None,
         *,
         api_key_env: str | None = None,
+        api_key_secret: str | None = None,
+        credential_resolver: CredentialResolver | None = None,
         model_capabilities: dict[str, CertifiedContextProfile] | None = None,
         default_timeout_seconds: float = 120,
         output_tokens_parameter: str = "max_completion_tokens",
@@ -62,13 +72,18 @@ class OpenAICompatibleProvider:
         self.base_url = base_url.rstrip("/")
         self._api_key = api_key
         self.api_key_env = api_key_env
+        self.api_key_secret = api_key_secret
+        self.credential_resolver = credential_resolver or CredentialResolver()
         self.model_capabilities = dict(model_capabilities or {})
         self.default_timeout_seconds = default_timeout_seconds
         self.output_tokens_parameter = output_tokens_parameter
 
     @classmethod
     def from_definition(
-        cls, definition: ProviderDefinition
+        cls,
+        definition: ProviderDefinition,
+        *,
+        credential_resolver: CredentialResolver | None = None,
     ) -> "OpenAICompatibleProvider":
         if definition.adapter != "openai_compatible":
             raise ValueError(
@@ -78,6 +93,8 @@ class OpenAICompatibleProvider:
             definition.name,
             definition.base_url,
             api_key_env=definition.api_key_env,
+            api_key_secret=definition.api_key_secret,
+            credential_resolver=credential_resolver,
             model_capabilities=dict(definition.model_capabilities),
         )
 
@@ -111,7 +128,7 @@ class OpenAICompatibleProvider:
         payload = self._payload(request)
         if request.stream:
             return self._stream(payload, request, on_text)
-        body, elapsed, request_id = self._request(
+        body, elapsed, request_id, rate_limits = self._request(
             "chat/completions", payload, request.timeout_seconds
         )
         return self._response(
@@ -119,10 +136,13 @@ class OpenAICompatibleProvider:
             request,
             elapsed=elapsed,
             request_id=request_id,
+            rate_limits=rate_limits,
         )
 
     def list_models(self, *, timeout_seconds: float = 20) -> tuple[str, ...]:
-        body, _, _ = self._request("models", None, timeout_seconds, method="GET")
+        body, _, _, _ = self._request(
+            "models", None, timeout_seconds, method="GET"
+        )
         return tuple(
             str(item["id"])
             for item in body.get("data", ())
@@ -185,12 +205,14 @@ class OpenAICompatibleProvider:
         model = request.model
         provider_request_id = ""
         finish = FinishReason.UNKNOWN
+        rate_limits: dict[str, str] = {}
         try:
             with urllib_request.urlopen(
                 outgoing,
                 timeout=request.timeout_seconds or self.default_timeout_seconds,
             ) as response:
                 header_id = response.headers.get("x-request-id", "")
+                rate_limits = _rate_limits(response.headers)
                 for raw in response:
                     line = raw.decode("utf-8", errors="replace").strip()
                     if not line.startswith("data:"):
@@ -244,7 +266,11 @@ class OpenAICompatibleProvider:
             ),
             requested_parameters=request.to_dict(),
             effective_parameters=_safe_parameters(payload),
-            extensions={"streaming": True},
+            extensions={
+                "streaming": True,
+                "rate_limits": rate_limits,
+                "account_balance": None,
+            },
         )
 
     def _request(
@@ -254,7 +280,7 @@ class OpenAICompatibleProvider:
         timeout_seconds: float | None,
         *,
         method: str = "POST",
-    ) -> tuple[dict[str, Any], float, str]:
+    ) -> tuple[dict[str, Any], float, str, dict[str, str]]:
         outgoing = self._outgoing(path, payload, method=method)
         started = time.monotonic()
         try:
@@ -264,6 +290,7 @@ class OpenAICompatibleProvider:
             ) as response:
                 body = json.loads(response.read())
                 request_id = response.headers.get("x-request-id", "")
+                rate_limits = _rate_limits(response.headers)
         except HTTPError as exc:
             raise ProviderRequestError(
                 self.name, _http_category(exc.code), status=exc.code
@@ -272,7 +299,7 @@ class OpenAICompatibleProvider:
             raise ProviderRequestError(self.name, "invalid_json") from exc
         except (URLError, TimeoutError, OSError) as exc:
             raise ProviderRequestError(self.name, "connection_error") from exc
-        return body, time.monotonic() - started, request_id
+        return body, time.monotonic() - started, request_id, rate_limits
 
     def _outgoing(
         self, path: str, payload: dict[str, Any] | None, *, method: str
@@ -292,13 +319,27 @@ class OpenAICompatibleProvider:
 
     def _credential(self) -> str:
         value = self._api_key
-        if value is None and self.api_key_env:
-            value = os.environ.get(self.api_key_env)
+        if value is None:
+            value = self.credential_resolver.resolve(
+                environment_name=self.api_key_env,
+                secret_name=self.api_key_secret,
+            )
         if not value:
             raise ProviderCredentialMissing(
-                self.name, self.api_key_env or "configured provider credential"
+                self.name,
+                self.api_key_env or "configured provider credential",
+                self.api_key_secret,
             )
         return value
+
+    def credential_available(self) -> bool:
+        """Check configured credential sources without returning a value."""
+        if self._api_key:
+            return True
+        return self.credential_resolver.available(
+            environment_name=self.api_key_env,
+            secret_name=self.api_key_secret,
+        )
 
     def _response(
         self,
@@ -307,6 +348,7 @@ class OpenAICompatibleProvider:
         *,
         elapsed: float,
         request_id: str,
+        rate_limits: dict[str, str],
     ) -> InferenceResponse:
         choice = (body.get("choices") or [{}])[0]
         message = choice.get("message") or {}
@@ -326,6 +368,8 @@ class OpenAICompatibleProvider:
             effective_parameters=_safe_parameters(self._payload(request)),
             extensions={
                 "system_fingerprint": body.get("system_fingerprint"),
+                "rate_limits": rate_limits,
+                "account_balance": None,
             },
         )
 
@@ -418,3 +462,12 @@ def _http_category(status: int) -> str:
     if status >= 500:
         return "provider_unavailable"
     return "invalid_request"
+
+
+def _rate_limits(headers: Any) -> dict[str, str]:
+    """Copy only documented non-secret quota headers."""
+    return {
+        field: str(value)
+        for header, field in _RATE_LIMIT_HEADERS.items()
+        if (value := headers.get(header)) is not None
+    }

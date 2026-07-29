@@ -69,8 +69,12 @@ def build_service(
     """Build the default service without loading a model."""
     configure_huggingface_cache()
     selected = configuration or InferenceConfiguration.load()
+    credential_resolver = selected.credential_resolver()
     providers: dict[str, Any] = {
-        name: OpenAICompatibleProvider.from_definition(definition)
+        name: OpenAICompatibleProvider.from_definition(
+            definition,
+            credential_resolver=credential_resolver,
+        )
         for name, definition in selected.providers.items()
     }
     if key := os.environ.get("XAI_API_KEY"):
@@ -318,6 +322,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     if args.command == "providers":
         configuration = InferenceConfiguration.load(args.config)
+        credential_resolver = configuration.credential_resolver()
         names = ("openai", "groq") if args.all else (args.provider,)
         results = []
         for name in names:
@@ -332,7 +337,12 @@ def main(argv: list[str] | None = None) -> None:
                     }
                 )
             else:
-                results.append(test_provider(definition).to_dict())
+                results.append(
+                    test_provider(
+                        definition,
+                        credential_resolver=credential_resolver,
+                    ).to_dict()
+                )
         print(json.dumps(results, indent=2, sort_keys=True))
         if any(result.get("status") == "failed" for result in results):
             raise SystemExit(1)

@@ -11,7 +11,7 @@ from cognityx_inference.configuration import InferenceConfiguration
 from cognityx_inference.contracts import InferenceRequest
 from cognityx_inference.errors import ProviderCredentialMissing
 from cognityx_inference.providers import OpenAICompatibleProvider
-from cognityx_inference.security import redact
+from cognityx_inference.security import CredentialResolver, redact
 
 
 def _provider(api_key: str | None = "secret-value") -> OpenAICompatibleProvider:
@@ -67,8 +67,15 @@ def test_secret_free_configuration_loads_profiles_and_provider_capabilities(
     tmp_path,
 ) -> None:
     path = tmp_path / "inference.toml"
+    secrets = tmp_path / "secrets.json"
+    secrets.write_text(
+        json.dumps({"groq_api_key": "file-secret"}),
+        encoding="utf-8",
+    )
     path.write_text(
         """
+secrets_file = "secrets.json"
+
 [manager]
 port = 9010
 
@@ -80,6 +87,7 @@ certified_profile_id = "profile-1"
 adapter = "openai_compatible"
 base_url = "https://api.groq.com/openai/v1"
 api_key_env = "GROQ_API_KEY"
+api_key_secret = "groq_api_key"
 smoke_test_model = "configured-model"
 
 [providers.groq.models.configured-model.context]
@@ -94,15 +102,63 @@ allow_estimated_counting = true
     configuration = InferenceConfiguration.load(path)
 
     assert configuration.manager.port == 9010
+    assert configuration.secrets_file == str(secrets)
     assert (
         configuration.server_profiles["local"].certified_profile_id
         == "profile-1"
     )
     groq = configuration.providers["groq"]
     assert groq.api_key_env == "GROQ_API_KEY"
+    assert groq.api_key_secret == "groq_api_key"
     assert groq.model_capabilities[
         "configured-model"
     ].max_output_tokens_limit == 1024
+
+
+def test_credential_resolver_prefers_environment_and_never_returns_document(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "secrets.json"
+    path.write_text(
+        json.dumps({"provider_key": "file-secret"}),
+        encoding="utf-8",
+    )
+    resolver = CredentialResolver(str(path))
+    monkeypatch.setenv("PROVIDER_KEY", "environment-secret")
+
+    assert (
+        resolver.resolve(
+            environment_name="PROVIDER_KEY",
+            secret_name="provider_key",
+        )
+        == "environment-secret"
+    )
+    monkeypatch.delenv("PROVIDER_KEY")
+    assert (
+        resolver.resolve(
+            environment_name="PROVIDER_KEY",
+            secret_name="provider_key",
+        )
+        == "file-secret"
+    )
+    assert "file-secret" not in repr(resolver.__dict__)
+
+
+def test_credential_resolver_rejects_invalid_documents_without_values(
+    tmp_path,
+) -> None:
+    path = tmp_path / "secrets.json"
+    path.write_text('{"provider_key": 123}', encoding="utf-8")
+    resolver = CredentialResolver(str(path))
+
+    with pytest.raises(ValueError, match="must be a string") as captured:
+        resolver.resolve(
+            environment_name=None,
+            secret_name="provider_key",
+        )
+
+    assert "123" not in str(captured.value)
 
 
 def test_missing_credential_names_variable_without_value(
@@ -163,6 +219,8 @@ def test_openai_compatible_provider_against_mock_http_server() -> None:
                 ).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
+                self.send_header("x-ratelimit-remaining-requests", "49")
+                self.send_header("x-ratelimit-remaining-tokens", "999")
                 self.send_header("Content-Length", str(len(events)))
                 self.end_headers()
                 self.wfile.write(events)
@@ -186,6 +244,10 @@ def test_openai_compatible_provider_against_mock_http_server() -> None:
             ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("x-ratelimit-limit-requests", "50")
+            self.send_header("x-ratelimit-remaining-requests", "49")
+            self.send_header("x-ratelimit-remaining-tokens", "999")
+            self.send_header("x-unrelated-private-header", "do-not-copy")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -229,7 +291,15 @@ def test_openai_compatible_provider_against_mock_http_server() -> None:
     assert plain.content == "OK"
     assert plain.finish_reason.value == "stop"
     assert plain.usage.total_tokens == 3
+    assert plain.extensions["rate_limits"] == {
+        "limit_requests": "50",
+        "remaining_requests": "49",
+        "remaining_tokens": "999",
+    }
+    assert plain.extensions["account_balance"] is None
+    assert "do-not-copy" not in json.dumps(plain.to_dict())
     assert streamed.content == "OK"
     assert streamed.usage.total_tokens == 3
+    assert streamed.extensions["rate_limits"]["remaining_tokens"] == "999"
     assert chunks == ["O", "K"]
     assert received[0]["max_completion_tokens"] == 4

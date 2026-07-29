@@ -1,3 +1,6 @@
+# This path points to a local JSON object; it never contains credential values.
+# secrets_file = "/absolute/path/to/secrets.json"
+
 [manager]
 host = "127.0.0.1"
 port = 8000
@@ -21,6 +24,7 @@ kv_cache_precision = "fp8"
 adapter = "openai_compatible"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
+api_key_secret = "openai_api_key"
 smoke_test_model = "gpt-4.1-mini"
 
 [providers.openai.models."gpt-4.1-mini".context]
@@ -34,6 +38,7 @@ allow_estimated_counting = true
 adapter = "openai_compatible"
 base_url = "https://api.groq.com/openai/v1"
 api_key_env = "GROQ_API_KEY"
+api_key_secret = "groq_api_key"
 smoke_test_model = "llama-3.1-8b-instant"
 
 [providers.groq.models."llama-3.1-8b-instant".context]

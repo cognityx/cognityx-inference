@@ -119,8 +119,10 @@ def test_serialized_request_includes_history_tools_and_schema() -> None:
         assert marker in serialized
 
 
-def test_service_dispatches_calculated_budget_from_new_certified_profile(
+@pytest.mark.parametrize("legacy_profile", [False, True])
+def test_service_dispatches_calculated_budget_from_certified_profile(
     monkeypatch: pytest.MonkeyPatch,
+    legacy_profile: bool,
 ) -> None:
     inventory = {"gpu_name": "test-gpu"}
     compatibility = RuntimeCompatibility(
@@ -136,12 +138,16 @@ def test_service_dispatches_calculated_budget_from_new_certified_profile(
         profile_id="profile",
         created_at="2026-01-01T00:00:00+00:00",
         compatibility=compatibility,
-        model_context_limit=100,
-        maximum_certified_context_length=100,
-        context=CertifiedContextProfile(
-            max_context_tokens=100,
-            max_output_tokens_limit=25,
-            reserved_tokens=5,
+        model_context_limit=1000,
+        maximum_certified_context_length=1000,
+        context=(
+            None
+            if legacy_profile
+            else CertifiedContextProfile(
+                max_context_tokens=1000,
+                max_output_tokens_limit=25,
+                reserved_tokens=5,
+            )
         ),
     )
 
@@ -178,7 +184,7 @@ def test_service_dispatches_calculated_budget_from_new_certified_profile(
 
     monkeypatch.setattr(
         "cognityx_inference.service.discover_model_context_limit",
-        lambda *args, **kwargs: (100, "revision"),
+        lambda *args, **kwargs: (1000, "revision"),
     )
     monkeypatch.setattr(
         "cognityx_inference.service._backend_version",
@@ -205,6 +211,8 @@ def test_service_dispatches_calculated_budget_from_new_certified_profile(
     )
 
     assert Backend.dispatched is not None
-    assert Backend.dispatched.max_output_tokens == 25
+    assert Backend.dispatched.max_output_tokens == (734 if legacy_profile else 25)
     assert response.token_budget is not None
-    assert response.token_budget.effective_max_output_tokens == 25
+    assert response.token_budget.effective_max_output_tokens == (
+        734 if legacy_profile else 25
+    )

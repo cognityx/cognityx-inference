@@ -14,15 +14,23 @@ class TokenCountingUnavailable(RuntimeError):
 
 
 class ProviderCredentialMissing(RuntimeError):
-    """A configured provider credential environment variable is absent."""
+    """No credential was found in the configured provider sources."""
 
-    def __init__(self, provider: str, environment_name: str) -> None:
+    def __init__(
+        self,
+        provider: str,
+        environment_name: str,
+        secret_name: str | None = None,
+    ) -> None:
+        sources = f"environment variable {environment_name}"
+        if secret_name:
+            sources += f" or configured secret entry {secret_name}"
         super().__init__(
-            f"Provider '{provider}' requires environment variable "
-            f"{environment_name}."
+            f"Provider '{provider}' requires {sources}."
         )
         self.provider = provider
         self.environment_name = environment_name
+        self.secret_name = secret_name
 
 
 class ProviderRequestError(RuntimeError):

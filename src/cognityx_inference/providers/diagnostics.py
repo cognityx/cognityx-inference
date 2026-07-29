@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import os
 import time
 from typing import Any
 
@@ -16,6 +15,7 @@ from cognityx_inference.errors import (
 from cognityx_inference.providers.openai_compatible import (
     OpenAICompatibleProvider,
 )
+from cognityx_inference.security import CredentialResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +28,9 @@ class ProviderDiagnosticResult:
     model_list_authenticated: bool = False
     non_streaming: bool = False
     streaming: bool = False
+    usage: dict[str, int | None] | None = None
+    rate_limits: dict[str, str] | None = None
+    account_balance: None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -35,9 +38,24 @@ class ProviderDiagnosticResult:
 
 def test_provider(
     definition: ProviderDefinition,
+    *,
+    credential_resolver: CredentialResolver | None = None,
 ) -> ProviderDiagnosticResult:
     model = definition.smoke_test_model
-    if not os.environ.get(definition.api_key_env):
+    adapter = OpenAICompatibleProvider.from_definition(
+        definition,
+        credential_resolver=credential_resolver,
+    )
+    try:
+        available = adapter.credential_available()
+    except ValueError:
+        return ProviderDiagnosticResult(
+            provider=definition.name,
+            model=model,
+            status="failed",
+            error_category="credential_configuration",
+        )
+    if not available:
         return ProviderDiagnosticResult(
             provider=definition.name,
             model=model,
@@ -51,7 +69,6 @@ def test_provider(
             status="failed",
             error_category="smoke_test_model_not_configured",
         )
-    adapter = OpenAICompatibleProvider.from_definition(definition)
     started = time.monotonic()
     try:
         adapter.list_models()
@@ -102,6 +119,12 @@ def test_provider(
             model_list_authenticated=True,
             non_streaming=True,
             streaming=True,
+            usage={
+                "prompt_tokens": plain.usage.prompt_tokens,
+                "completion_tokens": plain.usage.completion_tokens,
+                "total_tokens": plain.usage.total_tokens,
+            },
+            rate_limits=dict(plain.extensions.get("rate_limits") or {}),
         )
     except ProviderCredentialMissing:
         return ProviderDiagnosticResult(

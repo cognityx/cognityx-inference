@@ -131,14 +131,14 @@ class InferenceService:
                 lease = self.models.acquire(request.model, request.backend, runtime)
             with lease as backend:
                 self._validate_capabilities(request, backend)
-                # Profiles written before token-budget capabilities were added
-                # remain valid for runtime selection. Only newer profiles with
-                # an explicit context policy enable automatic output budgeting.
-                if certified is not None and certified.context is not None:
+                counter = getattr(backend, "count_input_tokens", None)
+                # Older profiles retain their stored context boundary and gain
+                # the default reserve only when the backend can count exactly.
+                if certified is not None and counter is not None:
                     dispatched_request, budget = apply_token_budget(
                         request,
-                        certified.context,
-                        lambda selected: backend.count_input_tokens(selected),
+                        certified.context_profile,
+                        counter,
                     )
                 else:
                     budget = None

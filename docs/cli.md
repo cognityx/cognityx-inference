@@ -124,6 +124,24 @@ one tiny non-streaming and one streaming `OK` response. Output contains only
 provider, configured model, status, latency, and a safe error category. A
 missing credential is `skipped`.
 
+Credentials may come from the configured JSON path; exporting provider keys is
+not required:
+
+```toml
+secrets_file = "/mnt/d/MyDev/llmapps/secrets.json"
+```
+
+Successful diagnostic output includes measured prompt/completion/total usage
+and the provider's allowlisted rate-limit headers when supplied:
+
+- remaining requests;
+- remaining tokens;
+- request/token reset windows.
+
+These are rate-window budgets, not account credit balances. Provider account
+balance is reported as unavailable because the inference APIs do not return a
+portable billing balance.
+
 Automated tests never make these calls unless explicitly enabled:
 
 ```bash
@@ -152,6 +170,8 @@ reply = client.chat(
     max_output_tokens=8,
 )
 print(reply["cognityx"]["usage"])
+print(reply["cognityx"]["token_budget"])
+print(reply["cognityx"]["extensions"]["rate_limits"])
 ```
 
 Change `provider` and `model` to the configured Groq values without changing

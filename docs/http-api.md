@@ -82,6 +82,28 @@ The `cognityx` object includes normalized fields such as content, usage,
 timings, finish reason, provider/backend/model identity, request metadata,
 extensions, and local telemetry where available.
 
+Commercial responses expose only documented, non-secret rate-limit headers:
+
+```json
+{
+  "extensions": {
+    "rate_limits": {
+      "limit_requests": "10000",
+      "remaining_requests": "9999",
+      "limit_tokens": "200000",
+      "remaining_tokens": "199980",
+      "reset_requests": "1s",
+      "reset_tokens": "6m"
+    },
+    "account_balance": null
+  }
+}
+```
+
+Missing fields remain absent. `account_balance` is `null` because a portable
+remaining-credit value is not supplied by OpenAI-compatible inference
+responses.
+
 When a certified context capability applies, it also includes:
 
 ```json

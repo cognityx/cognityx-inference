@@ -9,6 +9,7 @@ import tomllib
 from typing import Any, Mapping
 
 from cognityx_inference.capabilities import CertifiedContextProfile
+from cognityx_inference.security import CredentialResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +18,7 @@ class ProviderDefinition:
     adapter: str
     base_url: str
     api_key_env: str
+    api_key_secret: str | None = None
     smoke_test_model: str | None = None
     model_capabilities: Mapping[str, CertifiedContextProfile] = field(
         default_factory=dict
@@ -49,6 +51,7 @@ class InferenceConfiguration:
     manager: ManagerConfiguration = field(default_factory=ManagerConfiguration)
     server_profiles: Mapping[str, LocalServerProfile] = field(default_factory=dict)
     providers: Mapping[str, ProviderDefinition] = field(default_factory=dict)
+    secrets_file: str | None = None
     source: str | None = None
 
     @classmethod
@@ -60,7 +63,10 @@ class InferenceConfiguration:
     ) -> "InferenceConfiguration":
         selected = _select_path(path, cwd=cwd)
         if selected is None:
-            return cls(providers=_default_providers())
+            return cls(
+                providers=_default_providers(),
+                secrets_file=os.environ.get("COGNITYX_SECRETS_FILE"),
+            )
         with selected.open("rb") as source:
             document = tomllib.load(source)
         manager = ManagerConfiguration(**dict(document.get("manager") or {}))
@@ -88,8 +94,13 @@ class InferenceConfiguration:
             manager=manager,
             server_profiles=profiles,
             providers=providers,
+            secrets_file=_secrets_file(document, selected),
             source=str(selected),
         )
+
+    def credential_resolver(self) -> CredentialResolver:
+        """Build a lazy resolver without loading credential values."""
+        return CredentialResolver(self.secrets_file)
 
 
 def _provider(name: str, value: Mapping[str, Any]) -> ProviderDefinition:
@@ -106,6 +117,11 @@ def _provider(name: str, value: Mapping[str, Any]) -> ProviderDefinition:
         adapter=str(value.get("adapter", "openai_compatible")),
         base_url=str(value["base_url"]).rstrip("/"),
         api_key_env=str(value["api_key_env"]),
+        api_key_secret=(
+            str(value["api_key_secret"])
+            if value.get("api_key_secret") is not None
+            else None
+        ),
         smoke_test_model=value.get("smoke_test_model"),
         model_capabilities=capabilities,
     )
@@ -118,12 +134,14 @@ def _default_providers() -> dict[str, ProviderDefinition]:
             adapter="openai_compatible",
             base_url="https://api.openai.com/v1",
             api_key_env="OPENAI_API_KEY",
+            api_key_secret="openai_api_key",
         ),
         "groq": ProviderDefinition(
             name="groq",
             adapter="openai_compatible",
             base_url="https://api.groq.com/openai/v1",
             api_key_env="GROQ_API_KEY",
+            api_key_secret="groq_api_key",
         ),
     }
 
@@ -141,3 +159,16 @@ def _select_path(
         return _select_path(environment, cwd=cwd)
     project = Path(cwd or Path.cwd()) / ".cognityx" / "inference.toml"
     return project if project.is_file() else None
+
+
+def _secrets_file(document: Mapping[str, Any], config_path: Path) -> str | None:
+    configured = os.environ.get("COGNITYX_SECRETS_FILE")
+    if configured is None:
+        raw = document.get("secrets_file")
+        configured = str(raw) if raw is not None else None
+    if not configured:
+        return None
+    selected = Path(configured).expanduser()
+    if not selected.is_absolute():
+        selected = config_path.parent / selected
+    return str(selected.resolve())
