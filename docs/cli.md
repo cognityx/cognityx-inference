@@ -20,7 +20,8 @@ export COGNITYX_INFERENCE_URL=http://127.0.0.1:8013
 The CLI does not read this variable automatically; the commands below pass it
 through `--base-url`.
 
-If commercial providers are needed, set `OPENAI_API_KEY` or `XAI_API_KEY`
+If commercial providers are needed, set `OPENAI_API_KEY`, `GROQ_API_KEY`, or
+`XAI_API_KEY`
 before starting the service.
 
 The discovery job database is shared with the service process. For a local
@@ -71,13 +72,110 @@ uv run cognityx-inference infer \
   --backend vllm \
   --profile int4 \
   --prompt "Explain KV cache precision." \
-  --max-tokens 256 \
+  --max-output-tokens 256 \
   --discovery-policy ask
 ```
 
 ## CLI Overview
 
 The main operational CLI is `cognityx-inference`.
+
+### Run the manager and start a worker
+
+Prepare `.cognityx/inference.toml` as described in
+[Configuration](configuration.md), then keep the lightweight manager running:
+
+```bash
+export COGNITYX_INFERENCE_CONFIG="$PWD/.cognityx/inference.toml"
+uv run cognityx-inference manager serve
+```
+
+In another terminal:
+
+```bash
+uv run cognityx-inference server status
+uv run cognityx-inference server start --profile qwen3-8b-int4
+uv run cognityx-inference server watch
+uv run cognityx-inference server stop
+```
+
+Use `--manager-url http://127.0.0.1:8000` when the manager is not at its
+default URL. `server watch` prints durable startup events and can reconnect
+with `--after <sequence>`.
+
+The earlier `cognityx-inference serve` command remains the direct worker mode.
+Use it when an external supervisor already owns the worker lifecycle.
+
+### Test configured commercial providers
+
+Provider smoke tests are explicit and make only small calls:
+
+```bash
+uv run cognityx-inference providers test --provider openai \
+  --config .cognityx/inference.toml
+uv run cognityx-inference providers test --provider groq \
+  --config .cognityx/inference.toml
+uv run cognityx-inference providers test --all \
+  --config .cognityx/inference.toml
+```
+
+The diagnostic authenticates through the model-list endpoint, then validates
+one tiny non-streaming and one streaming `OK` response. Output contains only
+provider, configured model, status, latency, and a safe error category. A
+missing credential is `skipped`.
+
+Credentials may come from the configured JSON path; exporting provider keys is
+not required:
+
+```toml
+secrets_file = "/mnt/d/MyDev/llmapps/secrets.json"
+```
+
+Successful diagnostic output includes measured prompt/completion/total usage
+and the provider's allowlisted rate-limit headers when supplied:
+
+- remaining requests;
+- remaining tokens;
+- request/token reset windows.
+
+These are rate-window budgets, not account credit balances. Provider account
+balance is reported as unavailable because the inference APIs do not return a
+portable billing balance.
+
+Automated tests never make these calls unless explicitly enabled:
+
+```bash
+export COGNITYX_LIVE_PROVIDER_TESTS=1
+export COGNITYX_INFERENCE_CONFIG="$PWD/.cognityx/inference.toml"
+uv run pytest -q tests/test_live_providers.py
+```
+
+Both the opt-in flag and each provider credential must be present; otherwise
+that provider's live test is skipped.
+
+Applications use the same client contract for configured providers:
+
+```python
+from cognityx_inference import InferenceClient
+
+client = InferenceClient("http://127.0.0.1:8013")
+reply = client.chat(
+    model="gpt-4.1-mini",
+    provider="openai",
+    messages=[
+        {"role": "system", "content": "Answer concisely."},
+        {"role": "user", "content": "Reply with OK."},
+    ],
+    temperature=0,
+    max_output_tokens=8,
+)
+print(reply["cognityx"]["usage"])
+print(reply["cognityx"]["token_budget"])
+print(reply["cognityx"]["extensions"]["rate_limits"])
+```
+
+Change `provider` and `model` to the configured Groq values without changing
+application flow. Remote providers do not start a local worker.
 
 ### Load a Local Model
 
@@ -187,7 +285,7 @@ uv run cognityx-inference infer \
   --backend vllm \
   --profile int4 \
   --prompt "Explain KV cache precision." \
-  --max-tokens 256 \
+  --max-output-tokens 256 \
   --discovery-policy ask
 ```
 
@@ -208,7 +306,7 @@ uv run cognityx-inference infer \
 Optional CLI parameters currently exposed on the command line:
 
 - `--required-context-length`
-- `--max-tokens`
+- `--max-output-tokens` (`--max-tokens` remains a migration alias)
 - `--backend`
 - `--profile`
 - `--discovery-policy`
@@ -360,7 +458,7 @@ for chunk in client.stream_chat(
         {"role": "system", "content": "You are a careful assistant."},
         {"role": "user", "content": "Explain KV caching."},
     ],
-    max_tokens=128,
+    max_output_tokens=128,
     temperature=0.6,
     top_p=0.95,
     top_k=20,
@@ -395,7 +493,7 @@ The common inference parameters travel with the call:
 - `top_p`
 - `top_k`
 - `min_p`
-- `max_tokens`
+- `max_output_tokens` (`max_tokens` remains a Python migration alias)
 - `stop`
 - `seed`
 - `log_probabilities`
@@ -447,7 +545,7 @@ for chunk in client.stream_chat(
         {"role": "system", "content": "You are a careful assistant."},
         {"role": "user", "content": "Explain KV caching."},
     ],
-    max_tokens=128,
+    max_output_tokens=128,
     discovery_policy="auto",
 ):
     choices = chunk.get("choices") or []
@@ -463,6 +561,42 @@ print()
 This sequence checks certification, starts durable discovery when necessary,
 loads the certified configuration, keeps it resident, and then opens the SSE
 inference stream.
+
+### Manager-owned local auto-start
+
+Use this mode when the manager should start the named worker on demand:
+
+```python
+from cognityx_inference import InferenceClient, InferenceRequest
+
+events = []
+client = InferenceClient(
+    backend="local",
+    profile="qwen3-8b-int4",
+    auto_start=True,
+    manager_url="http://127.0.0.1:8000",
+    startup_timeout_seconds=600,
+    on_server_event=events.append,
+)
+
+reply = client.infer(
+    InferenceRequest(
+        model="Qwen/Qwen3-8B",
+        messages=(
+            {"role": "system", "content": "Answer concisely."},
+            {"role": "user", "content": "Explain KV cache precision."},
+        ),
+        max_output_tokens=None,
+    )
+)
+print(reply["choices"][0]["message"]["content"])
+print(reply["cognityx"]["token_budget"])
+```
+
+The client checks manager status, submits one idempotent start, follows
+reconnectable events until `READY`, and then sends the original request to the
+worker using `require_loaded`. Concurrent callers for the same profile share
+the same manager startup. Commercial requests never invoke this path.
 
 If you want the raw non-streaming JSON response instead of SSE chunks, use
 `chat(...)` with the same message list and parameters:
@@ -481,7 +615,7 @@ reply = client.chat(
     top_p=0.95,
     top_k=20,
     min_p=0.05,
-    max_tokens=128,
+    max_output_tokens=128,
     stop=["END"],
     seed=42,
     discovery_policy="require_existing",
@@ -497,7 +631,7 @@ reply = client.chat(
     backend="vllm",
     profile="int4",
     prompt="Reply with READY.",
-    max_tokens=32,
+    max_output_tokens=32,
     discovery_policy="require_existing",
 )
 print(reply["choices"][0]["message"]["content"])
@@ -581,3 +715,17 @@ Use the exact cached Hugging Face model identifier. For example, the existing
 cache directory `models--Qwen--Qwen3-8B` corresponds to
 `Qwen/Qwen3-8B`, not `Qwen/Qwen-8B`. Confirm that `HF_HOME` points at the
 intended shared cache before starting the server.
+
+### Manager reports `FAILED` or `DEGRADED`
+
+Run:
+
+```bash
+uv run cognityx-inference server status
+uv run cognityx-inference server watch
+```
+
+`FAILED` includes a categorical error such as `worker_startup_timeout` or
+`worker_load_http_400`; secrets and raw provider responses are never returned.
+`DEGRADED` means a recovered worker PID exists but its health endpoint is not
+ready. Stop the worker, correct its profile/certification, and start it again.

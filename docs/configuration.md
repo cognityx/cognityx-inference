@@ -1,5 +1,119 @@
 # Configuration
 
+## Manager, local server, and provider configuration
+
+Copy the checked-in secret-free example:
+
+```bash
+mkdir -p .cognityx
+cp configs/inference.toml.example .cognityx/inference.toml
+export COGNITYX_INFERENCE_CONFIG="$PWD/.cognityx/inference.toml"
+```
+
+The file contains:
+
+- `[manager]` for the lightweight management API;
+- `[server_profiles.<name>]` for one named local worker configuration;
+- `[providers.openai]` and `[providers.groq]` for endpoint metadata;
+- provider model context capabilities used for safe token budgeting.
+
+### Local secrets file
+
+Normal configuration contains only a path and JSON entry names:
+
+```toml
+secrets_file = "/mnt/d/MyDev/llmapps/secrets.json"
+
+[providers.openai]
+adapter = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+api_key_secret = "openai_api_key"
+```
+
+The referenced file is a local JSON object:
+
+```json
+{
+  "openai_api_key": "",
+  "groq_api_key": ""
+}
+```
+
+Credential precedence is:
+
+1. the provider's environment variable;
+2. its named entry in `secrets_file`.
+
+The file is read lazily when a provider authenticates. Credential values are
+never copied into the parsed configuration, API responses, diagnostics,
+exceptions, logs, or saved inference artifacts. Set
+`COGNITYX_SECRETS_FILE` to override the configured path for one process.
+
+On Windows-mounted WSL filesystems, Unix permission bits may appear as `777`
+even when Windows ACLs control access. Restrict the file using Windows ACLs and
+do not place it inside a Git repository.
+
+A local profile may select a specific saved certification:
+
+```toml
+[server_profiles.qwen3-8b-int4]
+model = "Qwen/Qwen3-8B"
+backend = "vllm"
+load_profile = "int4"
+certified_profile_id = "replace-with-a-saved-profile-id"
+host = "127.0.0.1"
+port = 8100
+
+[server_profiles.qwen3-8b-int4.runtime]
+kv_cache_precision = "fp8"
+```
+
+The selected profile must match the current model, backend, runtime, and
+hardware fingerprint. Otherwise startup fails rather than silently using
+incompatible evidence.
+
+Provider configuration stores only the environment-variable name:
+
+```toml
+[providers.openai]
+adapter = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+api_key_secret = "openai_api_key"
+smoke_test_model = "configured-model-name"
+```
+
+Set actual credentials only in the process environment:
+
+```bash
+export OPENAI_API_KEY="..."
+export GROQ_API_KEY="..."
+```
+
+`.env`, `.cognityx/inference.toml`, and local secret JSON/YAML paths are
+ignored. The application does not
+automatically read `.env`; use your shell or process supervisor to inject it.
+Missing credentials are reported by variable name without exposing any value.
+
+### Certified token capability
+
+Each newly discovered local profile, and each configured remote model, may
+provide:
+
+```toml
+[providers.example.models.example-model.context]
+max_context_tokens = 131072
+max_output_tokens_limit = 8192
+reserved_tokens = 256
+tokenizer = "tokenizer-or-model-identifier"
+allow_estimated_counting = false
+```
+
+Remote models require a configured capability. Estimated counting is used only
+when `allow_estimated_counting = true`, and response metadata labels it
+`conservative_estimate`.
+
 ## Boundary Evaluation Config
 
 The main boundary-evaluation configuration lives in:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+import json
 import time
 from typing import Any, Callable
 import uuid
@@ -16,6 +17,7 @@ from cognityx_inference.contracts import (
     TokenUsage,
 )
 from cognityx_inference.errors import ModelMetadataUnavailableError
+from cognityx_inference.token_budget import serialized_request
 from llm_benchmark.llm import GenerationSettings, LocalLLM
 from llm_benchmark.loading_decision import ModelLoadOptions
 from llm_benchmark.vllm_engine import VLLMLLM
@@ -38,7 +40,7 @@ def _settings(request: InferenceRequest) -> GenerationSettings:
         "temperature": request.temperature,
         "top_p": request.top_p,
         "top_k": request.top_k,
-        "max_new_tokens": request.max_tokens,
+        "max_new_tokens": request.max_output_tokens,
     }
     for name, value in mapping.items():
         if value is not None:
@@ -156,16 +158,55 @@ class TransformersBackend:
         )[0]
 
     def count_input_tokens(self, request: InferenceRequest) -> int | None:
-        """Count the same role-formatted prompt used by this legacy adapter."""
+        """Count the complete common request with the loaded model tokenizer."""
         self.load()
         assert self.engine is not None
         tokenizer = getattr(self.engine, "tokenizer", None)
         if tokenizer is None:
             return None
         try:
-            return len(tokenizer.encode(_prompt(request), add_special_tokens=False))
+            messages = (
+                list(request.messages)
+                if request.messages
+                else [{"role": "user", "content": request.prompt}]
+            )
+            token_ids = tokenizer.apply_chat_template(
+                messages,
+                tools=list(request.tools) or None,
+                tokenize=True,
+                add_generation_prompt=True,
+            )
+            base = len(token_ids)
+            metadata = {
+                key: value
+                for key, value in {
+                    "tool_choice": request.tool_choice,
+                    "response_format": request.response_format,
+                }.items()
+                if value is not None
+            }
+            if not metadata:
+                return base
+            metadata_tokens = tokenizer.encode(
+                json.dumps(
+                    metadata,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                add_special_tokens=False,
+            )
+            return base + len(metadata_tokens)
         except (AttributeError, TypeError, ValueError):
-            return None
+            try:
+                return len(
+                    tokenizer.encode(
+                        serialized_request(request),
+                        add_special_tokens=False,
+                    )
+                )
+            except (AttributeError, TypeError, ValueError):
+                return None
 
 
 class VLLMBackend(TransformersBackend):

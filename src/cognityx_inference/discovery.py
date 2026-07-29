@@ -15,6 +15,7 @@ import uuid
 
 from cognityx_inference.backends.legacy import discover_model_context_limit
 from cognityx_inference.capabilities import (
+    CertifiedContextProfile,
     CertifiedInferenceProfile,
     RuntimeCompatibility,
     hardware_fingerprint,
@@ -448,6 +449,13 @@ class BoundaryDiscoveryCoordinator:
                     "time_to_first_token_seconds"
                 ),
                 evidence_job_id=job.job_id,
+                context=CertifiedContextProfile(
+                    max_context_tokens=int(configuration["context_length"]),
+                    max_output_tokens_limit=int(
+                        configuration["generation_length"]
+                    ),
+                    tokenizer=job.model,
+                ),
                 certified_configuration=configuration,
                 workload=self._workload_evidence(),
                 token_breakdown=metrics.get("token_breakdown", {}),

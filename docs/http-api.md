@@ -6,6 +6,7 @@ The service exposes two API layers:
 
 - OpenAI-compatible inference at `/v1/chat/completions`
 - Cognityx control endpoints for model lifecycle and discovery
+- manager endpoints under `/management/v1` on the lightweight manager process
 
 The API app is created by `cognityx_inference.api.create_app(...)`.
 
@@ -19,7 +20,8 @@ Standard OpenAI-style fields are accepted, including:
 - `messages`
 - `temperature`
 - `top_p`
-- `max_tokens`
+- `max_tokens` (OpenAI compatibility alias)
+- `max_completion_tokens`
 - `stop`
 - `seed`
 - `logprobs`
@@ -33,7 +35,7 @@ Cognityx-specific routing and runtime fields are carried under `cognityx`:
   "messages": [
     {"role": "user", "content": "Reply with OK."}
   ],
-  "max_tokens": 32,
+  "max_completion_tokens": 32,
   "cognityx": {
     "client_type": "openai",
     "provider": "local",
@@ -79,6 +81,64 @@ The response contains:
 The `cognityx` object includes normalized fields such as content, usage,
 timings, finish reason, provider/backend/model identity, request metadata,
 extensions, and local telemetry where available.
+
+Commercial responses expose only documented, non-secret rate-limit headers:
+
+```json
+{
+  "extensions": {
+    "rate_limits": {
+      "limit_requests": "10000",
+      "remaining_requests": "9999",
+      "limit_tokens": "200000",
+      "remaining_tokens": "199980",
+      "reset_requests": "1s",
+      "reset_tokens": "6m"
+    },
+    "account_balance": null
+  }
+}
+```
+
+Missing fields remain absent. `account_balance` is `null` because a portable
+remaining-credit value is not supplied by OpenAI-compatible inference
+responses.
+
+When a certified context capability applies, it also includes:
+
+```json
+{
+  "token_budget": {
+    "input_tokens": 120,
+    "max_context_tokens": 8192,
+    "reserved_tokens": 256,
+    "requested_max_output_tokens": null,
+    "effective_max_output_tokens": 2048,
+    "source": "automatic",
+    "counting": "tokenizer"
+  }
+}
+```
+
+The complete serialized request is counted, including system messages,
+conversation history, tools, tool choice, and structured-response schema.
+Manual `max_output_tokens` wins over the automatic default but is rejected,
+not clamped, if it exceeds the certified context.
+
+## Management API
+
+Run the manager separately from the worker. Its endpoints are:
+
+- `POST /management/v1/server/start` with `{"profile": "<name>"}`
+- `POST /management/v1/server/stop`
+- `GET /management/v1/server/status`
+- `GET /management/v1/server/events?after=<sequence>`
+
+Status values are `STOPPED`, `STARTING`, `READY`, `DEGRADED`, `STOPPING`, and
+`FAILED`. Start and stop are idempotent. Startup returns the `server_id`,
+profile/model/backend, state, worker URL, and durable `job_id`. The events
+endpoint is SSE and terminates when the worker becomes ready, fails, or stops.
+Reconnect with `after` to resume after the last observed sequence.
 
 ### Streaming
 
@@ -196,8 +256,8 @@ Common service errors:
   An OpenAI-compatible local inference request targeted a model that is not
   already resident.
 - `422`
-  Requested context exceeded either the model-declared limit or the certified
-  hardware limit.
+  Requested context exceeded a model/certified limit, or exact token counting
+  was unavailable under the configured policy.
 - `428 hardware_discovery_required`
   No compatible certified hardware result exists for the requested local load.
 

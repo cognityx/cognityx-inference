@@ -20,8 +20,28 @@ uv sync --extra api --extra telemetry
 uv run cognityx-inference serve --host 127.0.0.1 --port 8013
 ```
 
-Commercial adapters are enabled only when `OPENAI_API_KEY` or `XAI_API_KEY` is
-present.
+Commercial adapters are enabled only when their configured environment
+credential is present. OpenAI, Groq, and the existing xAI adapter are
+supported; credentials never belong in normal configuration.
+
+Run the lightweight manager and let the Cognityx client start one named local
+worker on demand:
+
+```bash
+mkdir -p .cognityx
+cp configs/inference.toml.example .cognityx/inference.toml
+export COGNITYX_INFERENCE_CONFIG="$PWD/.cognityx/inference.toml"
+uv run cognityx-inference manager serve
+
+# In another terminal:
+uv run cognityx-inference server start --profile qwen3-8b-int4
+uv run cognityx-inference server watch
+uv run cognityx-inference server status
+```
+
+The manager persists secret-free state and durable startup events. The worker
+continues to use the existing inference service, lifecycle leases, certified
+profiles, and local backends.
 
 Inspect a finite boundary plan without loading a model:
 

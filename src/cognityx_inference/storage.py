@@ -58,6 +58,23 @@ class InferenceArtifactRepository:
 
 
 @dataclass(slots=True)
+class ManagerStateRepository:
+    """Persist one secret-free local worker state through logical storage."""
+
+    storage: StorageClientLike
+    key: str = "inference/manager/server-state.json"
+
+    def save(self, value: Any) -> Any:
+        return self.storage.put_json(self.key, value)
+
+    def load(self) -> dict[str, Any] | None:
+        if not self.storage.exists(self.key):
+            return None
+        with self.storage.open(self.key) as source:
+            return json.loads(source.read())
+
+
+@dataclass(slots=True)
 class ChatSessionRepository:
     """Append-only saved chat states within an already user-scoped client."""
 

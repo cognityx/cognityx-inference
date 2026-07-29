@@ -16,7 +16,11 @@ from cognityx_inference.capabilities import (
     CertifiedContextLimitExceeded,
     ModelContextLimitExceeded,
 )
-from cognityx_inference.errors import ModelMetadataUnavailableError
+from cognityx_inference.errors import (
+    ContextWindowExceeded,
+    ModelMetadataUnavailableError,
+    TokenCountingUnavailable,
+)
 from cognityx_inference.contracts import (
     DiscoveryPolicy,
     InferenceRequest,
@@ -94,6 +98,9 @@ def create_app(
             normalized = InferenceRequest(
                 model=str(payload["model"]),
                 messages=tuple(payload.get("messages") or ()),
+                tools=tuple(payload.get("tools") or ()),
+                tool_choice=payload.get("tool_choice"),
+                response_format=payload.get("response_format"),
                 client_type=str(extension.get("client_type", "openai")),
                 provider=str(extension.get("provider", "local")),
                 backend=str(extension.get("backend", "vllm")),
@@ -113,7 +120,11 @@ def create_app(
                 top_p=payload.get("top_p"),
                 top_k=extension.get("top_k"),
                 min_p=extension.get("min_p"),
-                max_tokens=payload.get("max_tokens"),
+                max_output_tokens=(
+                    extension.get("max_output_tokens")
+                    if extension.get("max_output_tokens") is not None
+                    else payload.get("max_completion_tokens", payload.get("max_tokens"))
+                ),
                 stop=tuple(
                     [payload["stop"]]
                     if isinstance(payload.get("stop"), str)
@@ -144,6 +155,11 @@ def create_app(
             ) from exc
         except (CertifiedContextLimitExceeded, ModelContextLimitExceeded) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except (ContextWindowExceeded, TokenCountingUnavailable) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": type(exc).__name__, "message": str(exc)},
+            ) from exc
         except ModelMetadataUnavailableError as exc:
             raise _model_metadata_http_exception(exc) from exc
         except (KeyError, ValueError, RuntimeError) as exc:
@@ -217,6 +233,9 @@ def create_app(
                 model=str(payload["model"]),
                 messages=tuple(payload.get("messages") or ()),
                 prompt=payload.get("prompt"),
+                tools=tuple(payload.get("tools") or ()),
+                tool_choice=payload.get("tool_choice"),
+                response_format=payload.get("response_format"),
                 backend=str(payload.get("backend", "vllm")),
                 profile=str(payload.get("profile", "bf16")),
                 load_policy=LoadPolicy.REQUIRE_LOADED,

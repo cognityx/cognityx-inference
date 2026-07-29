@@ -39,6 +39,12 @@ class CognityxInferenceClient:
         input_fn: Any = input,
         on_discovery_started: Any | None = None,
         on_discovery_event: Any | None = None,
+        backend: str | None = None,
+        profile: str | None = None,
+        auto_start: bool = False,
+        manager_url: str | None = None,
+        startup_timeout_seconds: float = 600,
+        on_server_event: Any | None = None,
     ) -> None:
         selected_url = (
             (base_url or "").strip()
@@ -54,6 +60,18 @@ class CognityxInferenceClient:
         self.input_fn = input_fn
         self.on_discovery_started = on_discovery_started
         self.on_discovery_event = on_discovery_event
+        self.client_backend = backend
+        self.server_profile = profile
+        self.auto_start = auto_start
+        self.manager_url = self._normalise_base_url(
+            manager_url or selected_url
+        )
+        self.startup_timeout_seconds = startup_timeout_seconds
+        self.on_server_event = on_server_event
+        if auto_start and backend not in {None, "local"}:
+            raise ValueError("auto_start is available only for backend='local'")
+        if auto_start and not profile:
+            raise ValueError("auto_start requires a local server profile")
 
     @staticmethod
     def _normalise_base_url(value: str) -> str:
@@ -114,6 +132,12 @@ class CognityxInferenceClient:
         return result
 
     def infer(self, request: InferenceRequest) -> dict[str, Any]:
+        if self.auto_start and request.provider == "local":
+            worker_url = self.ensure_server_ready()
+            managed = self._worker_client(worker_url)
+            return managed.infer(
+                replace(request, load_policy="require_loaded")
+            )
         policy = (
             request.discovery_policy
             if request.discovery_policy is not DiscoveryPolicy.REQUIRE_EXISTING
@@ -133,7 +157,16 @@ class CognityxInferenceClient:
             if request.discovery_policy is not DiscoveryPolicy.REQUIRE_EXISTING
             else self.discovery_policy
         )
-        if request.provider == "local":
+        if self.auto_start and request.provider == "local":
+            worker_url = self.ensure_server_ready()
+            yield from self._worker_client(worker_url).stream_infer(
+                replace(request, load_policy="require_loaded", stream=True)
+            )
+            return
+        if (
+            request.provider == "local"
+            and request.load_policy.value != "require_loaded"
+        ):
             runtime = request.extensions.get("runtime", {})
             self.load_model(
                 request.model,
@@ -165,9 +198,12 @@ class CognityxInferenceClient:
             "messages": list(request.messages)
             if request.messages
             else [{"role": "user", "content": request.prompt}],
+            "tools": list(request.tools) or None,
+            "tool_choice": request.tool_choice,
+            "response_format": request.response_format,
             "temperature": request.temperature,
             "top_p": request.top_p,
-            "max_tokens": request.max_tokens,
+            "max_tokens": request.max_output_tokens,
             "stop": list(request.stop) or None,
             "seed": request.seed,
             "logprobs": request.log_probabilities,
@@ -178,6 +214,7 @@ class CognityxInferenceClient:
                 "provider": request.provider,
                 "backend": request.backend,
                 "profile": request.profile,
+                "max_output_tokens": request.max_output_tokens,
                 "load_policy": request.load_policy.value,
                 "discovery_policy": policy.value,
                 "required_context_length": request.required_context_length,
@@ -319,6 +356,149 @@ class CognityxInferenceClient:
 
     def unload_all(self) -> dict[str, Any]:
         return self._request("POST", "/v1/cognityx/models/unload-all", {})
+
+    def server_start(self, profile: str | None = None) -> dict[str, Any]:
+        selected = profile or self.server_profile
+        if not selected:
+            raise ValueError("A local server profile is required.")
+        return self._manager_request(
+            "POST",
+            "/management/v1/server/start",
+            {"profile": selected},
+        )
+
+    def server_stop(self) -> dict[str, Any]:
+        return self._manager_request(
+            "POST", "/management/v1/server/stop", {}
+        )
+
+    def server_status(self) -> dict[str, Any]:
+        return self._manager_request(
+            "GET", "/management/v1/server/status"
+        )
+
+    def stream_server_events(
+        self, *, after: int = 0
+    ) -> Iterator[dict[str, Any]]:
+        headers = {"Accept": "text/event-stream"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        outgoing = urllib_request.Request(
+            f"{self.manager_url}/management/v1/server/events?after={after}",
+            headers=headers,
+        )
+        try:
+            with urllib_request.urlopen(
+                outgoing, timeout=self.startup_timeout_seconds
+            ) as response:
+                for raw in response:
+                    line = raw.decode("utf-8").strip()
+                    if line.startswith("data: "):
+                        yield json.loads(line[6:])
+        except HTTPError as exc:
+            raise InferenceAPIError(
+                exc.code,
+                {"error": "manager_event_stream_http_error"},
+            ) from exc
+        except (URLError, OSError, TimeoutError) as exc:
+            raise RuntimeError(
+                f"Cannot stream events from the Cognityx inference manager "
+                f"at {self.manager_url}."
+            ) from exc
+
+    def ensure_server_ready(self) -> str:
+        status = self.server_status()
+        if (
+            status.get("state") == "READY"
+            and status.get("profile") == self.server_profile
+            and status.get("worker_url")
+        ):
+            return str(status["worker_url"])
+        status = self.server_start()
+        deadline = time.monotonic() + self.startup_timeout_seconds
+        cursor = 0
+        while True:
+            try:
+                for event in self.stream_server_events(after=cursor):
+                    cursor = max(cursor, int(event.get("sequence", cursor)))
+                    if self.on_server_event:
+                        self.on_server_event(event)
+                    state = str(event.get("state", ""))
+                    if state == "READY":
+                        current = self.server_status()
+                        return str(current["worker_url"])
+                    if state == "FAILED":
+                        raise RuntimeError(
+                            f"Local inference server failed: "
+                            f"{current_error(event)}"
+                        )
+                    if state == "STOPPED":
+                        raise RuntimeError(
+                            "Local inference server stopped during startup."
+                        )
+            except (URLError, OSError, TimeoutError, HTTPError):
+                pass
+            status = self.server_status()
+            if status.get("state") == "READY":
+                return str(status["worker_url"])
+            if status.get("state") == "FAILED":
+                raise RuntimeError(
+                    "Local inference server failed: "
+                    f"{current_error(status)}"
+                )
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Timed out waiting for local server profile "
+                    f"{self.server_profile}."
+                )
+            time.sleep(min(self.discovery_poll_seconds, 1.0))
+
+    def _worker_client(self, worker_url: str) -> "CognityxInferenceClient":
+        return CognityxInferenceClient(
+            worker_url,
+            api_key=self.api_key,
+            timeout_seconds=self.timeout_seconds,
+            discovery_policy=self.discovery_policy,
+            discovery_poll_seconds=self.discovery_poll_seconds,
+            discovery_wait_timeout_seconds=self.discovery_wait_timeout_seconds,
+            input_fn=self.input_fn,
+            on_discovery_started=self.on_discovery_started,
+            on_discovery_event=self.on_discovery_event,
+        )
+
+    def _manager_request(
+        self, method: str, path: str, payload: Any | None = None
+    ) -> Any:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        outgoing = urllib_request.Request(
+            f"{self.manager_url}{path}",
+            data=(
+                json.dumps(payload).encode("utf-8")
+                if payload is not None
+                else None
+            ),
+            headers=headers,
+            method=method,
+        )
+        try:
+            with urllib_request.urlopen(
+                outgoing, timeout=self.timeout_seconds
+            ) as response:
+                return json.loads(response.read())
+        except HTTPError as exc:
+            try:
+                value = json.loads(exc.read())
+            except (ValueError, OSError):
+                value = {"error": "manager_http_error", "status": exc.code}
+            raise InferenceAPIError(exc.code, value) from exc
+        except (URLError, OSError, TimeoutError) as exc:
+            raise RuntimeError(
+                f"Cannot connect to the Cognityx inference manager at "
+                f"{self.manager_url}. Start it with "
+                "'cognityx-inference manager serve'."
+            ) from exc
 
     def discovery_status(self, job_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/cognityx/discoveries/{job_id}")
@@ -596,3 +776,8 @@ def _status_model(statuses: list[dict[str, Any]]) -> str | None:
     identity = statuses[-1].get("identity") or {}
     model = identity.get("model")
     return str(model) if model else None
+
+
+def current_error(value: Mapping[str, Any]) -> str:
+    """Return only the manager's safe categorical failure detail."""
+    return str(value.get("error_category") or "unknown_error")

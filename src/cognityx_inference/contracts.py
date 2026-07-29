@@ -60,6 +60,19 @@ class TokenUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class TokenBudget:
+    """Certified context calculation applied before inference dispatch."""
+
+    input_tokens: int
+    max_context_tokens: int
+    reserved_tokens: int
+    requested_max_output_tokens: int | None
+    effective_max_output_tokens: int
+    source: str
+    counting: str = "tokenizer"
+
+
+@dataclass(frozen=True, slots=True)
 class InferenceTimings:
     """Measured request stages in seconds."""
 
@@ -95,6 +108,9 @@ class InferenceRequest:
     model: str
     messages: tuple[JSON, ...] = ()
     prompt: str | None = None
+    tools: tuple[JSON, ...] = ()
+    tool_choice: Any | None = None
+    response_format: JSON | None = None
     client_type: str = "openai"
     provider: str = "local"
     backend: str = "vllm"
@@ -106,6 +122,9 @@ class InferenceRequest:
     top_p: float | None = None
     top_k: int | None = None
     min_p: float | None = None
+    max_output_tokens: int | None = None
+    # Migration alias accepted from older Python callers. New code should use
+    # max_output_tokens; OpenAI HTTP max_tokens is translated at the API edge.
     max_tokens: int | None = None
     stop: tuple[str, ...] = ()
     seed: int | None = None
@@ -143,8 +162,18 @@ class InferenceRequest:
             raise ValueError("top_k cannot be negative")
         if self.min_p is not None and not 0 <= self.min_p <= 1:
             raise ValueError("min_p must be in [0, 1]")
-        if self.max_tokens is not None and self.max_tokens <= 0:
-            raise ValueError("max_tokens must be positive")
+        if (
+            self.max_output_tokens is not None
+            and self.max_tokens is not None
+            and self.max_output_tokens != self.max_tokens
+        ):
+            raise ValueError(
+                "max_output_tokens and legacy max_tokens cannot disagree"
+            )
+        if self.max_output_tokens is None and self.max_tokens is not None:
+            object.__setattr__(self, "max_output_tokens", self.max_tokens)
+        if self.max_output_tokens is not None and self.max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be positive")
         if self.required_context_length is not None and self.required_context_length <= 0:
             raise ValueError("required_context_length must be positive")
         for name in (
@@ -158,7 +187,9 @@ class InferenceRequest:
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-compatible representation."""
-        return asdict(self)
+        value = asdict(self)
+        value.pop("max_tokens", None)
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +205,7 @@ class InferenceResponse:
     reasoning_content: str | None = None
     usage: TokenUsage = field(default_factory=TokenUsage)
     timings: InferenceTimings = field(default_factory=InferenceTimings)
+    token_budget: TokenBudget | None = None
     token_details: tuple[TokenDetail, ...] = ()
     retry_count: int = 0
     timed_out: bool = False

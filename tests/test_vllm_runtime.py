@@ -21,5 +21,6 @@ def test_isolated_runtime_import_failure_is_actionable(monkeypatch) -> None:
 
 def test_runtime_path_includes_shared_service_sources() -> None:
     project_root = Path(__file__).resolve().parents[1]
+    assert (project_root.parent / "cognityx-resource" / "src").is_dir()
     assert (project_root.parent / "cognityx-storage" / "src").is_dir()
     assert (project_root.parent / "cognityx-jobs" / "src").is_dir()

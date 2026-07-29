@@ -11,6 +11,18 @@ site/
 .venv
 .venv-vllm
 configs/secrets
+.env
+.env.*
+!.env.example
+*.secret.json
+*.secrets.json
+*.secret.yaml
+*.secret.yml
+*.secrets.yaml
+*.secrets.yml
+secrets/
+config/secrets/
+.cognityx/inference.toml
 
 # Generated long-context artifacts (the registry documentation is tracked)
 data/contexts/*/chunks.jsonl

@@ -82,6 +82,10 @@ class ModelLease(AbstractContextManager[InferenceBackend]):
     def __enter__(self) -> InferenceBackend:
         return self._resident.backend
 
+    @property
+    def identity(self) -> ModelIdentity:
+        return self._resident.identity
+
     def __exit__(
         self,
         exc_type: type[BaseException] | None,

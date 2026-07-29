@@ -584,9 +584,17 @@ version = "0.1.0"
 source = { git = "https://github.com/cognityx/cognityx-jobs.git#aec7e10356b57ca1dc76b45ed9f21fcd5e7e2b4e" }
 
 [[package]]
+name = "cognityx-resource"
+version = "0.1.0"
+source = { git = "https://github.com/cognityx/cognityx-resource.git#2f19066969dae40dd4775b0786278f1da0d24c05" }
+
+[[package]]
 name = "cognityx-storage"
 version = "0.1.0"
-source = { git = "https://github.com/cognityx/cognityx-storage.git#7aa89dd0105319c987fb6ff7cec95697480ffe2f" }
+source = { git = "https://github.com/cognityx/cognityx-storage.git#6ee8cb48af60d35896219a3388fdb84516fbaa86" }
+dependencies = [
+    { name = "cognityx-resource" },
+]
 
 [[package]]
 name = "colorama"
