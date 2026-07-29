@@ -12,6 +12,17 @@ class VLLMRuntimeError(RuntimeError):
     """The optional local vLLM runtime is unavailable or unhealthy."""
 
 
+def _runtime_source_roots(project_root: Path) -> tuple[str, ...]:
+    """Return project and available sibling service source roots."""
+    candidates = (
+        project_root / "src",
+        project_root.parent / "cognityx-resource" / "src",
+        project_root.parent / "cognityx-storage" / "src",
+        project_root.parent / "cognityx-jobs" / "src",
+    )
+    return tuple(str(path) for path in candidates if path.is_dir())
+
+
 def ensure_vllm_runtime(argv: list[str]) -> None:
     """Re-exec the API in ``.venv-vllm`` and validate its vLLM import.
 
@@ -43,17 +54,10 @@ def ensure_vllm_runtime(argv: list[str]) -> None:
     environment[marker] = "1"
     environment.setdefault("VLLM_USE_V2_MODEL_RUNNER", "0")
     environment.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
-    source_root = str(project_root / "src")
-    resource_source_root = str(project_root.parent / "cognityx-resource" / "src")
-    storage_source_root = str(project_root.parent / "cognityx-storage" / "src")
-    jobs_source_root = str(project_root.parent / "cognityx-jobs" / "src")
     environment["PYTHONPATH"] = ":".join(
         item
         for item in (
-            source_root,
-            resource_source_root,
-            storage_source_root,
-            jobs_source_root,
+            *_runtime_source_roots(project_root),
             environment.get("PYTHONPATH"),
         )
         if item
