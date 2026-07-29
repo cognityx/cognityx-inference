@@ -1,9 +1,9 @@
 # Cognityx Inference
 
 `cognityx-inference` is the Cognityx model-inference platform and
-hardware/configuration boundary evaluator. It evolves the original
-`llm-benchmark` repository without discarding its persistent Transformers and
-vLLM engines, diagnostics, interactive commands, or saved-result structure.
+hardware/configuration boundary evaluator. It evolved from the original
+`llm-benchmark` project without discarding its persistent Transformers and vLLM
+engines, diagnostics, interactive commands, or saved-result structure.
 
 The platform adds normalized inference contracts, an OpenAI-compatible API and
 client, explicit local-model lifecycle leases, configuration-driven local and

@@ -46,6 +46,9 @@ dev = [
     "ruff>=0.12",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.uv.sources]
 cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git" }
 cognityx-jobs = { git = "https://github.com/cognityx/cognityx-jobs.git" }

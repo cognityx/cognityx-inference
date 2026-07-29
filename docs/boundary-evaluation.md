@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The original `llm-benchmark` repository is retained inside
+The original `llm-benchmark` functionality is retained inside
 `cognityx-inference` as the hardware-capacity and configuration-boundary
 evaluation capability.
 
