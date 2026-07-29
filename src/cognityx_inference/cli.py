@@ -22,7 +22,14 @@ from cognityx_inference.chat import (
 from cognityx_inference.discovery import BoundaryDiscoveryCoordinator
 from cognityx_inference.discovery import DiscoveryConfig
 from cognityx_inference.environment import configure_huggingface_cache
-from cognityx_inference.providers import OpenAIProvider, XAIProvider
+from cognityx_inference.configuration import InferenceConfiguration
+from cognityx_inference.manager import InferenceManager
+from cognityx_inference.manager_api import create_manager_app
+from cognityx_inference.providers import (
+    OpenAICompatibleProvider,
+    XAIProvider,
+)
+from cognityx_inference.providers.diagnostics import test_provider
 from cognityx_inference.presentation import render
 from cognityx_inference.storage import ChatSessionRepository
 from cognityx_inference.telemetry import ResourceMonitor, read_windows_bridge
@@ -31,6 +38,7 @@ from cognityx_inference.storage import (
     BoundaryArtifactRepository,
     CertifiedProfileRepository,
     InferenceArtifactRepository,
+    ManagerStateRepository,
 )
 from cognityx_inference.vllm_runtime import VLLMRuntimeError, ensure_vllm_runtime
 from cognityx_jobs import JobRepository
@@ -38,6 +46,9 @@ from llm_benchmark.reporting import get_system_metadata
 
 
 DEFAULT_BASE_URL = os.environ.get("COGNITYX_INFERENCE_URL") or "http://127.0.0.1:8000"
+DEFAULT_MANAGER_URL = (
+    os.environ.get("COGNITYX_INFERENCE_MANAGER_URL") or "http://127.0.0.1:8000"
+)
 
 
 def _add_output_format(
@@ -52,12 +63,16 @@ def _add_output_format(
     )
 
 
-def build_service() -> InferenceService:
+def build_service(
+    configuration: InferenceConfiguration | None = None,
+) -> InferenceService:
     """Build the default service without loading a model."""
     configure_huggingface_cache()
-    providers: dict[str, Any] = {}
-    if key := os.environ.get("OPENAI_API_KEY"):
-        providers["openai"] = OpenAIProvider(key)
+    selected = configuration or InferenceConfiguration.load()
+    providers: dict[str, Any] = {
+        name: OpenAICompatibleProvider.from_definition(definition)
+        for name, definition in selected.providers.items()
+    }
     if key := os.environ.get("XAI_API_KEY"):
         providers["xai"] = XAIProvider(key)
     models = ModelManager(
@@ -91,6 +106,22 @@ def build_service() -> InferenceService:
     )
 
 
+def build_manager(
+    configuration: InferenceConfiguration,
+) -> InferenceManager:
+    from cognityx_storage import StorageClient
+
+    storage = StorageClient().for_shared_data()
+    return InferenceManager(
+        configuration.server_profiles,
+        configuration.manager,
+        jobs=JobRepository(
+            os.environ.get("COGNITYX_JOBS_DATABASE", "cognityx_jobs.sqlite3")
+        ),
+        state_repository=ManagerStateRepository(storage),
+    )
+
+
 def main(argv: list[str] | None = None) -> None:
     original_argv = list(argv) if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -98,6 +129,41 @@ def main(argv: list[str] | None = None) -> None:
     serve = subparsers.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--config", type=Path)
+
+    manager = subparsers.add_parser("manager")
+    manager_commands = manager.add_subparsers(
+        dest="manager_command", required=True
+    )
+    manager_serve = manager_commands.add_parser("serve")
+    manager_serve.add_argument("--config", type=Path)
+    manager_serve.add_argument("--host")
+    manager_serve.add_argument("--port", type=int)
+
+    server = subparsers.add_parser("server")
+    server_commands = server.add_subparsers(
+        dest="server_command", required=True
+    )
+    server_start = server_commands.add_parser("start")
+    server_start.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
+    server_start.add_argument("--profile", required=True)
+    server_stop = server_commands.add_parser("stop")
+    server_stop.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
+    server_status = server_commands.add_parser("status")
+    server_status.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
+    server_watch = server_commands.add_parser("watch")
+    server_watch.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
+    server_watch.add_argument("--after", type=int, default=0)
+
+    providers_parser = subparsers.add_parser("providers")
+    provider_commands = providers_parser.add_subparsers(
+        dest="providers_command", required=True
+    )
+    provider_test = provider_commands.add_parser("test")
+    provider_test.add_argument("--config", type=Path)
+    selection = provider_test.add_mutually_exclusive_group(required=True)
+    selection.add_argument("--provider", choices=("openai", "groq"))
+    selection.add_argument("--all", action="store_true")
 
     model = subparsers.add_parser("model")
     model_commands = model.add_subparsers(dest="model_command", required=True)
@@ -129,7 +195,9 @@ def main(argv: list[str] | None = None) -> None:
     infer.add_argument("--prompt", required=True)
     infer.add_argument("--backend", default="vllm")
     infer.add_argument("--profile", default="bf16")
-    infer.add_argument("--max-tokens", type=int, default=256)
+    infer.add_argument(
+        "--max-output-tokens", "--max-tokens", dest="max_output_tokens", type=int
+    )
     infer.add_argument("--required-context-length", type=int)
     infer.add_argument(
         "--no-stream",
@@ -147,7 +215,13 @@ def main(argv: list[str] | None = None) -> None:
     chat.add_argument("--top-p", type=float)
     chat.add_argument("--top-k", type=int)
     chat.add_argument("--min-p", type=float)
-    chat.add_argument("--max-tokens", type=int, default=512)
+    chat.add_argument(
+        "--max-output-tokens",
+        "--max-tokens",
+        dest="max_tokens",
+        type=int,
+        default=512,
+    )
     chat.add_argument("--stop", action="append", default=[])
     chat.add_argument("--seed", type=int)
     chat.add_argument("--log-probabilities", action="store_true")
@@ -206,6 +280,63 @@ def main(argv: list[str] | None = None) -> None:
     certified_show.add_argument("profile_id")
     _add_output_format(certified_show)
     args = parser.parse_args(original_argv)
+    if args.command == "manager":
+        configuration = InferenceConfiguration.load(args.config)
+        host = args.host or configuration.manager.host
+        port = args.port or configuration.manager.port
+        try:
+            import uvicorn
+        except ImportError as exc:
+            raise SystemExit(
+                "Install API dependencies with: uv sync --extra api"
+            ) from exc
+        uvicorn.run(
+            create_manager_app(build_manager(configuration)),
+            host=host,
+            port=port,
+        )
+        return
+    if args.command == "server":
+        client = CognityxInferenceClient(
+            DEFAULT_BASE_URL, manager_url=args.manager_url
+        )
+        try:
+            if args.server_command == "start":
+                value = client.server_start(args.profile)
+            elif args.server_command == "stop":
+                value = client.server_stop()
+            elif args.server_command == "status":
+                value = client.server_status()
+            else:
+                for event in client.stream_server_events(after=args.after):
+                    print(json.dumps(event, sort_keys=True), flush=True)
+                return
+        except (InferenceAPIError, RuntimeError, OSError) as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(2) from None
+        print(json.dumps(value, indent=2, sort_keys=True))
+        return
+    if args.command == "providers":
+        configuration = InferenceConfiguration.load(args.config)
+        names = ("openai", "groq") if args.all else (args.provider,)
+        results = []
+        for name in names:
+            definition = configuration.providers.get(str(name))
+            if definition is None:
+                results.append(
+                    {
+                        "provider": name,
+                        "model": None,
+                        "status": "failed",
+                        "error_category": "provider_not_configured",
+                    }
+                )
+            else:
+                results.append(test_provider(definition).to_dict())
+        print(json.dumps(results, indent=2, sort_keys=True))
+        if any(result.get("status") == "failed" for result in results):
+            raise SystemExit(1)
+        return
     if args.command not in {None, "serve"}:
         client = CognityxInferenceClient(
             args.base_url,
@@ -285,7 +416,7 @@ def main(argv: list[str] | None = None) -> None:
                         "prompt": args.prompt,
                         "backend": args.backend,
                         "profile": args.profile,
-                        "max_tokens": args.max_tokens,
+                        "max_output_tokens": args.max_output_tokens,
                         "required_context_length": args.required_context_length,
                         "discovery_policy": args.discovery_policy,
                     }
@@ -311,6 +442,7 @@ def main(argv: list[str] | None = None) -> None:
         kind = _output_kind(args)
         print(render(value, kind=kind, output_format=args.output_format))
         return
+    configuration = InferenceConfiguration.load(getattr(args, "config", None))
     host = getattr(args, "host", "127.0.0.1")
     port = getattr(args, "port", 8000)
     try:
@@ -323,7 +455,9 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(
             "Install API dependencies with: uv sync --extra api"
         ) from exc
-    uvicorn.run(create_app(build_service()), host=host, port=port)
+    uvicorn.run(
+        create_app(build_service(configuration)), host=host, port=port
+    )
 
 
 def _run_chat(args: Any, client: CognityxInferenceClient) -> None:

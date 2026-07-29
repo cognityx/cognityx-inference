@@ -57,6 +57,33 @@ The key idea is that load-time residency is defined by model, backend, and
 runtime identity. Sampling parameters are request-scoped and do not define the
 resident model identity.
 
+## Manager and worker processes
+
+The lightweight `InferenceManager` is a separate control process. It remains
+available while the heavyweight worker is stopped and manages one local worker
+in this release.
+
+```mermaid
+flowchart LR
+    Client[Cognityx client or CLI] --> ManagerAPI[Management API]
+    ManagerAPI --> InferenceManager
+    InferenceManager --> Jobs[cognityx-jobs events]
+    InferenceManager --> State[cognityx-storage state]
+    InferenceManager --> Worker[Local inference worker]
+    Client --> Worker
+```
+
+The manager persists only secret-free state: server/job identity, named
+profile, model/backend, state, PID/process group, worker URL, timestamps, and a
+categorical failure. It never returns the worker command, environment, or
+credentials. Startup is single-flight for a profile, so concurrent callers
+share one job. Stop first requests graceful process-group termination and then
+uses a bounded force fallback.
+
+The worker still uses the existing `InferenceService`, certified-profile
+repository, `ModelManager`, leases, and vLLM/Transformers backends. The manager
+does not duplicate those responsibilities.
+
 ## Discovery flow
 
 ```mermaid

@@ -31,10 +31,16 @@ from cognityx_inference.storage import (
     CertifiedProfileRepository,
     InferenceArtifactRepository,
 )
+from cognityx_inference.errors import TokenCountingUnavailable
+from cognityx_inference.token_budget import apply_token_budget
 
 
 class Provider(Protocol):
-    def infer(self, request: InferenceRequest) -> InferenceResponse: ...
+    def infer(
+        self,
+        request: InferenceRequest,
+        on_text: Callable[[str], None] | None = None,
+    ) -> InferenceResponse: ...
 
 
 class ModelNotLoadedError(LookupError):
@@ -79,13 +85,28 @@ class InferenceService:
         *,
         owner_id: str = "local",
     ) -> InferenceResponse:
+        dispatched_request = request
         if request.provider != "local":
             try:
                 provider = self.providers[request.provider]
             except KeyError as exc:
                 raise ValueError(f"Unknown provider: {request.provider}") from exc
             self._validate_capabilities(request, provider)
-            response = provider.infer(request)
+            context_profile = getattr(provider, "context_profile", lambda model: None)(
+                request.model
+            )
+            if context_profile is None:
+                raise TokenCountingUnavailable(
+                    f"Provider '{request.provider}' model '{request.model}' "
+                    "has no configured context capability profile."
+                )
+            dispatched_request, budget = apply_token_budget(
+                request,
+                context_profile,
+                lambda selected: provider.count_input_tokens(selected),
+            )
+            response = provider.infer(dispatched_request, on_text=on_text)
+            response = replace(response, token_budget=budget)
         else:
             canonical_model = resolve_local_model_reference(request.model).resolved
             if canonical_model != request.model:
@@ -96,8 +117,9 @@ class InferenceService:
                 except LookupError as exc:
                     raise ModelNotLoadedError(str(exc)) from exc
                 context_resolution = None
+                certified = self._profile_for_loaded_lease(lease)
             else:
-                runtime, context_resolution = self.prepare_runtime(
+                runtime, context_resolution, certified = self.prepare_runtime(
                     request.model,
                     request.backend,
                     request.profile,
@@ -109,7 +131,20 @@ class InferenceService:
                 lease = self.models.acquire(request.model, request.backend, runtime)
             with lease as backend:
                 self._validate_capabilities(request, backend)
-                response = backend.infer(request, on_text=on_text)
+                # Profiles written before token-budget capabilities were added
+                # remain valid for runtime selection. Only newer profiles with
+                # an explicit context policy enable automatic output budgeting.
+                if certified is not None and certified.context is not None:
+                    dispatched_request, budget = apply_token_budget(
+                        request,
+                        certified.context,
+                        lambda selected: backend.count_input_tokens(selected),
+                    )
+                else:
+                    budget = None
+                response = backend.infer(dispatched_request, on_text=on_text)
+                if budget is not None:
+                    response = replace(response, token_budget=budget)
             if context_resolution is not None:
                 response = replace(
                     response,
@@ -119,7 +154,7 @@ class InferenceService:
                     },
                 )
         if self.artifacts is not None:
-            self.artifacts.save_exchange(request, response)
+            self.artifacts.save_exchange(dispatched_request, response)
         return response
 
     def load_model(
@@ -135,7 +170,7 @@ class InferenceService:
     ) -> Any:
         """Resolve certified capacity, load the model, and keep it resident."""
         model = resolve_local_model_reference(model).resolved
-        resolved, context = self.prepare_runtime(
+        resolved, context, _ = self.prepare_runtime(
             model,
             backend,
             profile,
@@ -169,12 +204,12 @@ class InferenceService:
         required_context_length: int | None,
         discovery_policy: DiscoveryPolicy,
         owner_id: str = "local",
-    ) -> tuple[dict[str, Any], Any | None]:
+    ) -> tuple[dict[str, Any], Any | None, Any | None]:
         """Resolve context from model metadata and compatible certification."""
         kv_cache_was_requested = "kv_cache_precision" in runtime
         runtime["quantization"] = profile
         if self.certified_profiles is None:
-            return runtime, None
+            return runtime, None, None
         model_limit, revision = discover_model_context_limit(
             model,
             allow_download=bool(runtime.get("allow_download", False)),
@@ -190,7 +225,22 @@ class InferenceService:
             kv_cache_precision=str(runtime.get("kv_cache_precision", "auto")),
             tensor_parallelism=int(runtime.get("tensor_parallelism", 1)),
         )
-        certified = self.certified_profiles.find_compatible(compatibility)
+        requested_profile_id = runtime.get("certified_profile_id")
+        certified = None
+        if requested_profile_id:
+            getter = getattr(self.certified_profiles, "get_profile", None)
+            certified = getter(str(requested_profile_id)) if getter else None
+            if certified is None:
+                raise ValueError(
+                    f"Certified profile not found: {requested_profile_id}"
+                )
+            if certified.compatibility != compatibility:
+                raise ValueError(
+                    "The selected certified profile is not compatible with "
+                    "this model, backend, runtime, and hardware."
+                )
+        else:
+            certified = self.certified_profiles.find_compatible(compatibility)
         if (
             certified is None
             and not kv_cache_was_requested
@@ -229,7 +279,18 @@ class InferenceService:
             "gpu_memory_utilization", certified.gpu_memory_utilization or 0.9
         )
         runtime["certified_profile_id"] = certified.profile_id
-        return runtime, context
+        return runtime, context, certified
+
+    def _profile_for_loaded_lease(self, lease: Any) -> Any | None:
+        if self.certified_profiles is None:
+            return None
+        runtime = dict(lease.identity.runtime)
+        raw = runtime.get("certified_profile_id")
+        if raw is None:
+            return None
+        profile_id = raw.strip("'\"")
+        getter = getattr(self.certified_profiles, "get_profile", None)
+        return getter(profile_id) if getter else None
 
     @staticmethod
     def _validate_capabilities(request: InferenceRequest, adapter: Any) -> None:

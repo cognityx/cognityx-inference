@@ -1,0 +1,44 @@
+[manager]
+host = "127.0.0.1"
+port = 8000
+startup_timeout_seconds = 600
+stop_timeout_seconds = 30
+health_poll_seconds = 0.25
+
+# A named manager profile identifies one local model-serving worker.
+[server_profiles.qwen3-8b-int4]
+model = "Qwen/Qwen3-8B"
+backend = "vllm"
+load_profile = "int4"
+host = "127.0.0.1"
+port = 8100
+# certified_profile_id = "replace-with-a-saved-profile-id"
+
+[server_profiles.qwen3-8b-int4.runtime]
+kv_cache_precision = "fp8"
+
+[providers.openai]
+adapter = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+smoke_test_model = "gpt-4.1-mini"
+
+[providers.openai.models."gpt-4.1-mini".context]
+max_context_tokens = 1047576
+max_output_tokens_limit = 32768
+reserved_tokens = 256
+tokenizer = "openai/gpt-4.1-mini"
+allow_estimated_counting = true
+
+[providers.groq]
+adapter = "openai_compatible"
+base_url = "https://api.groq.com/openai/v1"
+api_key_env = "GROQ_API_KEY"
+smoke_test_model = "llama-3.1-8b-instant"
+
+[providers.groq.models."llama-3.1-8b-instant".context]
+max_context_tokens = 131072
+max_output_tokens_limit = 8192
+reserved_tokens = 256
+tokenizer = "meta-llama/Llama-3.1-8B-Instruct"
+allow_estimated_counting = true

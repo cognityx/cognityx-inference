@@ -1,5 +1,80 @@
 # Configuration
 
+## Manager, local server, and provider configuration
+
+Copy the checked-in secret-free example:
+
+```bash
+mkdir -p .cognityx
+cp configs/inference.toml.example .cognityx/inference.toml
+export COGNITYX_INFERENCE_CONFIG="$PWD/.cognityx/inference.toml"
+```
+
+The file contains:
+
+- `[manager]` for the lightweight management API;
+- `[server_profiles.<name>]` for one named local worker configuration;
+- `[providers.openai]` and `[providers.groq]` for endpoint metadata;
+- provider model context capabilities used for safe token budgeting.
+
+A local profile may select a specific saved certification:
+
+```toml
+[server_profiles.qwen3-8b-int4]
+model = "Qwen/Qwen3-8B"
+backend = "vllm"
+load_profile = "int4"
+certified_profile_id = "replace-with-a-saved-profile-id"
+host = "127.0.0.1"
+port = 8100
+
+[server_profiles.qwen3-8b-int4.runtime]
+kv_cache_precision = "fp8"
+```
+
+The selected profile must match the current model, backend, runtime, and
+hardware fingerprint. Otherwise startup fails rather than silently using
+incompatible evidence.
+
+Provider configuration stores only the environment-variable name:
+
+```toml
+[providers.openai]
+adapter = "openai_compatible"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+smoke_test_model = "configured-model-name"
+```
+
+Set actual credentials only in the process environment:
+
+```bash
+export OPENAI_API_KEY="..."
+export GROQ_API_KEY="..."
+```
+
+`.env` and local secret JSON/YAML paths are ignored. The application does not
+automatically read `.env`; use your shell or process supervisor to inject it.
+Missing credentials are reported by variable name without exposing any value.
+
+### Certified token capability
+
+Each newly discovered local profile, and each configured remote model, may
+provide:
+
+```toml
+[providers.example.models.example-model.context]
+max_context_tokens = 131072
+max_output_tokens_limit = 8192
+reserved_tokens = 256
+tokenizer = "tokenizer-or-model-identifier"
+allow_estimated_counting = false
+```
+
+Remote models require a configured capability. Estimated counting is used only
+when `allow_estimated_counting = true`, and response metadata labels it
+`conservative_estimate`.
+
 ## Boundary Evaluation Config
 
 The main boundary-evaluation configuration lives in:

@@ -1,6 +1,7 @@
 """Cognityx inference platform and hardware-boundary evaluation."""
 
 from cognityx_inference.capabilities import (
+    CertifiedContextProfile,
     CertifiedContextLimitExceeded,
     HardwareDiscoveryRequired,
     ModelContextLimitExceeded,
@@ -16,6 +17,7 @@ from cognityx_inference.contracts import (
     LoadPolicy,
     ModelCapabilities,
     TokenDetail,
+    TokenBudget,
     TokenUsage,
 )
 from cognityx_inference.lifecycle import (
@@ -25,18 +27,26 @@ from cognityx_inference.lifecycle import (
     ModelState,
     ResidentModelStatus,
 )
+from cognityx_inference.manager import InferenceManager, ServerState, ServerStatus
+from cognityx_inference.errors import ContextWindowExceeded
 from cognityx_inference.service import InferenceService
+
+InferenceClient = CognityxInferenceClient
 
 __all__ = [
     "FinishReason",
     "CognityxInferenceClient",
+    "InferenceClient",
     "CognityxChatSession",
     "ChatSettings",
     "CertifiedContextLimitExceeded",
+    "CertifiedContextProfile",
+    "ContextWindowExceeded",
     "DiscoveryPolicy",
     "InferenceRequest",
     "InferenceResponse",
     "InferenceService",
+    "InferenceManager",
     "InferenceTimings",
     "LoadPolicy",
     "HardwareDiscoveryRequired",
@@ -47,6 +57,9 @@ __all__ = [
     "ModelManager",
     "ModelState",
     "ResidentModelStatus",
+    "ServerState",
+    "ServerStatus",
+    "TokenBudget",
     "TokenDetail",
     "TokenUsage",
 ]

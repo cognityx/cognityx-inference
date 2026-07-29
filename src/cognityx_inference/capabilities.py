@@ -70,6 +70,28 @@ class RuntimeCompatibility:
 
 
 @dataclass(frozen=True, slots=True)
+class CertifiedContextProfile:
+    """Token-budget limits and counting policy for one model capability."""
+
+    max_context_tokens: int
+    max_output_tokens_limit: int | None = None
+    reserved_tokens: int = 256
+    tokenizer: str | None = None
+    allow_estimated_counting: bool = False
+
+    def __post_init__(self) -> None:
+        if self.max_context_tokens <= 0:
+            raise ValueError("max_context_tokens must be positive")
+        if (
+            self.max_output_tokens_limit is not None
+            and self.max_output_tokens_limit <= 0
+        ):
+            raise ValueError("max_output_tokens_limit must be positive")
+        if self.reserved_tokens < 0:
+            raise ValueError("reserved_tokens cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
 class CertifiedInferenceProfile:
     """A successful hardware-tested local inference configuration."""
 
@@ -84,6 +106,7 @@ class CertifiedInferenceProfile:
     maximum_time_to_first_token_seconds: float | None = None
     evidence_job_id: str | None = None
     evidence_summary_key: str | None = None
+    context: CertifiedContextProfile | None = None
     # Complete, machine-readable evidence for the selected successful trial.
     # These optional fields keep profiles written by earlier releases readable.
     certified_configuration: Mapping[str, Any] = field(default_factory=dict)
@@ -103,7 +126,16 @@ class CertifiedInferenceProfile:
     def from_dict(cls, value: Mapping[str, Any]) -> "CertifiedInferenceProfile":
         data = dict(value)
         data["compatibility"] = RuntimeCompatibility(**data["compatibility"])
+        context = data.get("context")
+        if isinstance(context, Mapping):
+            data["context"] = CertifiedContextProfile(**context)
         return cls(**data)
+
+    @property
+    def context_profile(self) -> CertifiedContextProfile:
+        return self.context or CertifiedContextProfile(
+            max_context_tokens=self.maximum_certified_context_length
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +254,12 @@ def certified_profile_from_benchmark_result(
         ),
         evidence_job_id=None,
         evidence_summary_key=None,
+        context=CertifiedContextProfile(
+            max_context_tokens=tested_context,
+            max_output_tokens_limit=generated_tokens,
+            reserved_tokens=0,
+            tokenizer=str(result.get("model")),
+        ),
         metadata={
             "source": "legacy_llm_benchmark",
             "benchmark_name": result.get("benchmark_name"),
