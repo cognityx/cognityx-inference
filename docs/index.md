@@ -1,8 +1,9 @@
 # Cognityx Inference
 
 `cognityx-inference` is the Cognityx inference platform and hardware-boundary
-evaluation system. It keeps the original `llm-benchmark` capability in the same
-repository, but the primary surface is now a reusable inference service with:
+evaluation system. It preserves the original `llm-benchmark` capability as a
+compatibility surface, but its primary surface is now a reusable inference
+service with:
 
 - a normalized inference contract for local and provider-backed models;
 - an OpenAI-compatible `/v1/chat/completions` API;

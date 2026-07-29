@@ -1,6 +1,7 @@
 site_name: Cognityx Inference
 site_description: Inference platform and hardware-boundary evaluation
 repo_name: cognityx-inference
+repo_url: https://github.com/cognityx/cognityx-inference
 docs_dir: docs
 theme:
   name: material
