@@ -44,12 +44,14 @@ def ensure_vllm_runtime(argv: list[str]) -> None:
     environment.setdefault("VLLM_USE_V2_MODEL_RUNNER", "0")
     environment.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
     source_root = str(project_root / "src")
+    resource_source_root = str(project_root.parent / "cognityx-resource" / "src")
     storage_source_root = str(project_root.parent / "cognityx-storage" / "src")
     jobs_source_root = str(project_root.parent / "cognityx-jobs" / "src")
     environment["PYTHONPATH"] = ":".join(
         item
         for item in (
             source_root,
+            resource_source_root,
             storage_source_root,
             jobs_source_root,
             environment.get("PYTHONPATH"),
