@@ -22,7 +22,7 @@ The file contains:
 Normal configuration contains only a path and JSON entry names:
 
 ```toml
-secrets_file = "/mnt/d/MyDev/llmapps/secrets.json"
+secrets_file = "/secure/location/provider-secrets.json"
 
 [providers.openai]
 adapter = "openai_compatible"
@@ -229,3 +229,45 @@ NVIDIA counters provide dedicated memory, utilization, temperature and power;
 an optional Windows bridge adds Windows-host CPU/RAM and shared GPU memory.
 The final trial/profile stores average and peak measurements. Unsupported or
 unavailable fields are `null`, never estimated.
+
+## Commercial provider configuration
+
+Start from `configs/inference.toml.example`. Provider sections select an adapter,
+credential names, default/smoke-test model, and optional model profiles:
+
+```toml
+secrets_file = "/secure/location/provider-secrets.json"
+
+[providers.groq]
+enabled = true
+adapter = "openai_compatible"
+base_url = "https://api.groq.com/openai/v1"
+api_key_env = "GROQ_API_KEY"
+api_key_secret = "GROQ_API_KEY"
+default_model = "llama-3.1-8b-instant"
+default_profile = "groq-default"
+```
+
+Environment variables override the JSON secrets file. Lower-case legacy aliases
+such as `groq_api_key` are accepted for migration, but uppercase names are the
+documented format. Missing values produce `not_configured`, not a startup
+failure or network call.
+
+Model profiles can declare exact context and parameter policy as `unverified`,
+`discovered`, `tested`, `certified`, or `deprecated`. Discovery confirms
+provider availability; it does not certify a context limit. See
+[Inference providers](providers/index.md).
+
+Purpose routing is ordered and configuration-driven:
+
+```toml
+[[routing.primary_validation.preferred]]
+provider = "groq"
+profile = "groq-default"
+
+[routing.sensitive_data]
+allowed_providers = ["local"]
+```
+
+An explicit caller override is honored. Sensitive routes never fall back to an
+unapproved provider.

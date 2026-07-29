@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -53,7 +53,7 @@ def test_provider_maps_common_parameters_and_filters_extensions() -> None:
     assert payload["frequency_penalty"] == 0.1
     assert "max_output_tokens" not in payload
 
-    with pytest.raises(ValueError, match="unsupported extension"):
+    with pytest.raises(ValueError, match="does not support explicit parameter"):
         provider._payload(
             InferenceRequest(
                 model="model",
@@ -103,16 +103,11 @@ allow_estimated_counting = true
 
     assert configuration.manager.port == 9010
     assert configuration.secrets_file == str(secrets)
-    assert (
-        configuration.server_profiles["local"].certified_profile_id
-        == "profile-1"
-    )
+    assert configuration.server_profiles["local"].certified_profile_id == "profile-1"
     groq = configuration.providers["groq"]
     assert groq.api_key_env == "GROQ_API_KEY"
     assert groq.api_key_secret == "groq_api_key"
-    assert groq.model_capabilities[
-        "configured-model"
-    ].max_output_tokens_limit == 1024
+    assert groq.model_capabilities["configured-model"].max_output_tokens_limit == 1024
 
 
 def test_credential_resolver_prefers_environment_and_never_returns_document(

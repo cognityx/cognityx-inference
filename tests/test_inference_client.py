@@ -52,9 +52,7 @@ class FakeClient(CognityxInferenceClient):
 def test_ask_policy_approves_waits_and_retries_loaded_model() -> None:
     client = FakeClient()
 
-    response = client.infer(
-        InferenceRequest(model="model-a", prompt="hello")
-    )
+    response = client.infer(InferenceRequest(model="model-a", prompt="hello"))
 
     assert response["choices"][0]["message"]["content"] == "answer"
     assert any(path.endswith("/discoveries/job-1") for _, path, _ in client.calls)
@@ -87,7 +85,11 @@ def test_certified_profile_client_paths() -> None:
 
         def _request(self, method, path, payload=None):
             self.paths.append((method, path))
-            return [] if path.startswith("/v1/cognityx/certified-profiles?") else {"profile_id": "p-1"}
+            return (
+                []
+                if path.startswith("/v1/cognityx/certified-profiles?")
+                else {"profile_id": "p-1"}
+            )
 
     client = Client()
     assert client.list_certified_profiles(model="org/model", profile="int4") == []
@@ -95,6 +97,61 @@ def test_certified_profile_client_paths() -> None:
     assert client.paths == [
         ("GET", "/v1/cognityx/certified-profiles?model=org%2Fmodel&profile=int4"),
         ("GET", "/v1/cognityx/certified-profiles/p-1"),
+    ]
+
+
+def test_provider_management_client_paths() -> None:
+    class Client(CognityxInferenceClient):
+        def __init__(self):
+            super().__init__("http://example")
+            self.calls = []
+
+        def _request(self, method, path, payload=None):
+            self.calls.append((method, path, payload))
+            if path in {
+                "/v1/cognityx/providers",
+                "/v1/cognityx/providers/status",
+            }:
+                return {"data": []}
+            return {"status": "passed"}
+
+    client = Client()
+    assert client.list_providers() == []
+    assert client.provider_status() == []
+    client.provider_models("github_models", refresh=True)
+    client.provider_capabilities("openrouter", "openai/gpt-4.1-mini")
+    client.test_provider(
+        "groq",
+        model="llama-3.1-8b-instant",
+        structured_output=True,
+        timeout_seconds=12,
+    )
+
+    assert client.calls == [
+        ("GET", "/v1/cognityx/providers", None),
+        ("GET", "/v1/cognityx/providers/status", None),
+        (
+            "GET",
+            "/v1/cognityx/providers/github_models/models?refresh=true",
+            None,
+        ),
+        (
+            "GET",
+            (
+                "/v1/cognityx/providers/openrouter/capabilities"
+                "?model=openai%2Fgpt-4.1-mini"
+            ),
+            None,
+        ),
+        (
+            "POST",
+            "/v1/cognityx/providers/groq/test",
+            {
+                "model": "llama-3.1-8b-instant",
+                "structured_output": True,
+                "timeout_seconds": 12,
+            },
+        ),
     ]
 
 
@@ -107,7 +164,12 @@ def test_client_can_switch_base_url_and_diagnose_current_server() -> None:
             if path == "/v1/models":
                 return {"data": []}
             if path == "/v1/cognityx/models/status":
-                return [{"identity": {"model": "model-a", "backend": "vllm"}, "state": "ready"}]
+                return [
+                    {
+                        "identity": {"model": "model-a", "backend": "vllm"},
+                        "state": "ready",
+                    }
+                ]
             if path == "/v1/cognityx/tokens/count":
                 return {"input_tokens": 1}
             raise AssertionError(path)
@@ -131,7 +193,12 @@ def test_diagnostic_identifies_old_server_without_token_counter() -> None:
             if path == "/v1/models":
                 return {"data": []}
             if path == "/v1/cognityx/models/status":
-                return [{"identity": {"model": "model-a", "backend": "vllm"}, "state": "ready"}]
+                return [
+                    {
+                        "identity": {"model": "model-a", "backend": "vllm"},
+                        "state": "ready",
+                    }
+                ]
             if path == "/v1/cognityx/tokens/count":
                 raise InferenceAPIError(404, {"detail": "Not Found"})
             raise AssertionError(path)
@@ -256,9 +323,7 @@ def test_interrupted_discovery_has_actionable_error() -> None:
 def test_transient_sse_and_status_disconnects_are_retried() -> None:
     client = FakeClient()
     client.on_discovery_event = lambda event: None
-    client.stream_discovery = lambda job_id, after=0: (
-        _ for _ in ()
-    )
+    client.stream_discovery = lambda job_id, after=0: (_ for _ in ())
     original_request = client._request
     status_attempts = 0
 
@@ -307,9 +372,7 @@ def test_stream_chat_preloads_model_and_yields_sse_chunks(monkeypatch) -> None:
         requests.append(json.loads(request.data))
         return Response()
 
-    monkeypatch.setattr(
-        "cognityx_inference.client.urllib_request.urlopen", urlopen
-    )
+    monkeypatch.setattr("cognityx_inference.client.urllib_request.urlopen", urlopen)
 
     chunks = list(
         client.stream_chat(
@@ -342,9 +405,7 @@ def test_stream_chat_surfaces_server_error_event(monkeypatch) -> None:
             pass
 
         def __iter__(self):
-            return iter(
-                [b'data: {"error":{"message":"generation failed"}}\n']
-            )
+            return iter([b'data: {"error":{"message":"generation failed"}}\n'])
 
     monkeypatch.setattr(
         "cognityx_inference.client.urllib_request.urlopen",

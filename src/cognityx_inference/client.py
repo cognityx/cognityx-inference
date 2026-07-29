@@ -6,11 +6,10 @@ import json
 import os
 import time
 from dataclasses import replace
-from typing import Iterator
-from typing import Any, Mapping
-from urllib.error import HTTPError, URLError
+from typing import Any, Iterator, Mapping
 from urllib import request as urllib_request
-from urllib.parse import urlencode, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote, urlencode, urlparse
 
 from cognityx_inference.contracts import DiscoveryPolicy, InferenceRequest
 
@@ -63,9 +62,7 @@ class CognityxInferenceClient:
         self.client_backend = backend
         self.server_profile = profile
         self.auto_start = auto_start
-        self.manager_url = self._normalise_base_url(
-            manager_url or selected_url
-        )
+        self.manager_url = self._normalise_base_url(manager_url or selected_url)
         self.startup_timeout_seconds = startup_timeout_seconds
         self.on_server_event = on_server_event
         if auto_start and backend not in {None, "local"}:
@@ -99,9 +96,15 @@ class CognityxInferenceClient:
         result: dict[str, Any] = {"base_url": self.base_url, "reachable": False}
         try:
             models = self._request("GET", "/v1/models")
-            result.update(reachable=True, openai_models_endpoint="available", models=models.get("data", []))
+            result.update(
+                reachable=True,
+                openai_models_endpoint="available",
+                models=models.get("data", []),
+            )
         except InferenceAPIError as exc:
-            result.update(error="unexpected_http_response", detail=_diagnostic_detail(exc))
+            result.update(
+                error="unexpected_http_response", detail=_diagnostic_detail(exc)
+            )
             return result
         except (URLError, OSError, TimeoutError) as exc:
             result.update(error="connection_failed", detail=str(exc))
@@ -122,7 +125,9 @@ class CognityxInferenceClient:
             return result
         try:
             self.count_input_tokens(
-                model=token_model, backend=backend, profile=profile,
+                model=token_model,
+                backend=backend,
+                profile=profile,
                 messages=[{"role": "user", "content": "diagnostic"}],
             )
             result["token_count_endpoint"] = "available"
@@ -135,22 +140,16 @@ class CognityxInferenceClient:
         if self.auto_start and request.provider == "local":
             worker_url = self.ensure_server_ready()
             managed = self._worker_client(worker_url)
-            return managed.infer(
-                replace(request, load_policy="require_loaded")
-            )
+            return managed.infer(replace(request, load_policy="require_loaded"))
         policy = (
             request.discovery_policy
             if request.discovery_policy is not DiscoveryPolicy.REQUIRE_EXISTING
             else self.discovery_policy
         )
         payload = self._inference_payload(request, policy)
-        return self._with_discovery(
-            "/v1/chat/completions", payload, policy
-        )
+        return self._with_discovery("/v1/chat/completions", payload, policy)
 
-    def stream_infer(
-        self, request: InferenceRequest
-    ) -> Iterator[dict[str, Any]]:
+    def stream_infer(self, request: InferenceRequest) -> Iterator[dict[str, Any]]:
         """Load a local model if needed, then yield OpenAI-compatible SSE chunks."""
         policy = (
             request.discovery_policy
@@ -184,9 +183,7 @@ class CognityxInferenceClient:
             )
         else:
             request = replace(request, stream=True)
-        payload = self._inference_payload(
-            request, request.discovery_policy
-        )
+        payload = self._inference_payload(request, request.discovery_policy)
         yield from self._stream_request("/v1/chat/completions", payload)
 
     @staticmethod
@@ -226,6 +223,8 @@ class CognityxInferenceClient:
                     "first_token": request.first_token_timeout_seconds,
                     "no_token_progress": request.no_token_progress_timeout_seconds,
                 },
+                "execution_context": dict(request.execution_context),
+                "request_metadata": dict(request.request_metadata),
                 "extensions": dict(request.extensions),
             },
         }
@@ -323,6 +322,57 @@ class CognityxInferenceClient:
     def model_status(self) -> list[dict[str, Any]]:
         return self._request("GET", "/v1/cognityx/models/status")
 
+    def list_providers(self) -> list[dict[str, Any]]:
+        value = self._request("GET", "/v1/cognityx/providers")
+        return list(value.get("data", ()))
+
+    def provider_status(self) -> list[dict[str, Any]]:
+        value = self._request("GET", "/v1/cognityx/providers/status")
+        return list(value.get("data", ()))
+
+    def provider_models(
+        self,
+        provider: str,
+        *,
+        refresh: bool = False,
+    ) -> dict[str, Any]:
+        query = "?refresh=true" if refresh else ""
+        return self._request(
+            "GET",
+            f"/v1/cognityx/providers/{quote(provider, safe='')}/models{query}",
+        )
+
+    def provider_capabilities(
+        self,
+        provider: str,
+        model: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            (
+                f"/v1/cognityx/providers/{quote(provider, safe='')}/capabilities"
+                f"?model={quote(model, safe='')}"
+            ),
+        )
+
+    def test_provider(
+        self,
+        provider: str,
+        *,
+        model: str | None = None,
+        structured_output: bool = False,
+        timeout_seconds: float = 30,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/v1/cognityx/providers/{quote(provider, safe='')}/test",
+            {
+                "model": model,
+                "structured_output": structured_output,
+                "timeout_seconds": timeout_seconds,
+            },
+        )
+
     def count_input_tokens(
         self,
         *,
@@ -368,18 +418,12 @@ class CognityxInferenceClient:
         )
 
     def server_stop(self) -> dict[str, Any]:
-        return self._manager_request(
-            "POST", "/management/v1/server/stop", {}
-        )
+        return self._manager_request("POST", "/management/v1/server/stop", {})
 
     def server_status(self) -> dict[str, Any]:
-        return self._manager_request(
-            "GET", "/management/v1/server/status"
-        )
+        return self._manager_request("GET", "/management/v1/server/status")
 
-    def stream_server_events(
-        self, *, after: int = 0
-    ) -> Iterator[dict[str, Any]]:
+    def stream_server_events(self, *, after: int = 0) -> Iterator[dict[str, Any]]:
         headers = {"Accept": "text/event-stream"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -429,8 +473,7 @@ class CognityxInferenceClient:
                         return str(current["worker_url"])
                     if state == "FAILED":
                         raise RuntimeError(
-                            f"Local inference server failed: "
-                            f"{current_error(event)}"
+                            f"Local inference server failed: {current_error(event)}"
                         )
                     if state == "STOPPED":
                         raise RuntimeError(
@@ -443,13 +486,11 @@ class CognityxInferenceClient:
                 return str(status["worker_url"])
             if status.get("state") == "FAILED":
                 raise RuntimeError(
-                    "Local inference server failed: "
-                    f"{current_error(status)}"
+                    f"Local inference server failed: {current_error(status)}"
                 )
             if time.monotonic() >= deadline:
                 raise TimeoutError(
-                    f"Timed out waiting for local server profile "
-                    f"{self.server_profile}."
+                    f"Timed out waiting for local server profile {self.server_profile}."
                 )
             time.sleep(min(self.discovery_poll_seconds, 1.0))
 
@@ -474,11 +515,7 @@ class CognityxInferenceClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         outgoing = urllib_request.Request(
             f"{self.manager_url}{path}",
-            data=(
-                json.dumps(payload).encode("utf-8")
-                if payload is not None
-                else None
-            ),
+            data=(json.dumps(payload).encode("utf-8") if payload is not None else None),
             headers=headers,
             method=method,
         )
@@ -503,7 +540,9 @@ class CognityxInferenceClient:
     def discovery_status(self, job_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/cognityx/discoveries/{job_id}")
 
-    def list_discoveries(self, *, include_history: bool = False) -> list[dict[str, Any]]:
+    def list_discoveries(
+        self, *, include_history: bool = False
+    ) -> list[dict[str, Any]]:
         suffix = "?all=true" if include_history else ""
         return self._request("GET", f"/v1/cognityx/discoveries{suffix}")
 
@@ -531,13 +570,30 @@ class CognityxInferenceClient:
     def get_certified_profile(self, profile_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/cognityx/certified-profiles/{profile_id}")
 
-    def start_discovery(self, model: str, backend: str = "vllm", profile: str = "bf16", runtime: Mapping[str, Any] | None = None) -> dict[str, Any]:
-        return self._request("POST", "/v1/cognityx/discoveries", {"model": model, "backend": backend, "profile": profile, "runtime": dict(runtime or {})})
+    def start_discovery(
+        self,
+        model: str,
+        backend: str = "vllm",
+        profile: str = "bf16",
+        runtime: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/v1/cognityx/discoveries",
+            {
+                "model": model,
+                "backend": backend,
+                "profile": profile,
+                "runtime": dict(runtime or {}),
+            },
+        )
 
     def cancel_discovery(self, job_id: str) -> dict[str, Any]:
         return self._request("POST", f"/v1/cognityx/discoveries/{job_id}/cancel", {})
 
-    def stream_discovery(self, job_id: str, *, after: int = 0) -> Iterator[dict[str, Any]]:
+    def stream_discovery(
+        self, job_id: str, *, after: int = 0
+    ) -> Iterator[dict[str, Any]]:
         headers = {"Accept": "text/event-stream"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -545,7 +601,9 @@ class CognityxInferenceClient:
             f"{self.base_url}/v1/cognityx/discoveries/{job_id}/events?after={after}",
             headers=headers,
         )
-        with urllib_request.urlopen(req, timeout=self.discovery_wait_timeout_seconds) as response:
+        with urllib_request.urlopen(
+            req, timeout=self.discovery_wait_timeout_seconds
+        ) as response:
             event: dict[str, Any] = {}
             for raw in response:
                 line = raw.decode("utf-8").strip()
@@ -584,9 +642,7 @@ class CognityxInferenceClient:
                     event = json.loads(data)
                     if "error" in event:
                         raise RuntimeError(
-                            event["error"].get(
-                                "message", "Inference stream failed."
-                            )
+                            event["error"].get("message", "Inference stream failed.")
                         )
                     yield event
         except HTTPError as exc:
@@ -611,7 +667,10 @@ class CognityxInferenceClient:
             return self._request("POST", path, payload)
         except InferenceAPIError as exc:
             detail = _error_detail(exc.payload)
-            if exc.status != 428 or detail.get("error") != "hardware_discovery_required":
+            if (
+                exc.status != 428
+                or detail.get("error") != "hardware_discovery_required"
+            ):
                 raise
             if policy is DiscoveryPolicy.REQUIRE_EXISTING:
                 raise
@@ -677,7 +736,8 @@ class CognityxInferenceClient:
                         cursor = max(cursor, int(event.get("sequence", cursor)))
                         self.on_discovery_event(event)
                         terminal = self._terminal_discovery_state(
-                            job_id, event.get("event", "").removeprefix("discovery_"),
+                            job_id,
+                            event.get("event", "").removeprefix("discovery_"),
                             event.get("error"),
                         )
                         if terminal:
@@ -712,9 +772,7 @@ class CognityxInferenceClient:
             time.sleep(self.discovery_poll_seconds)
 
     @staticmethod
-    def _terminal_discovery_state(
-        job_id: str, state: str, error: Any = None
-    ) -> bool:
+    def _terminal_discovery_state(job_id: str, state: str, error: Any = None) -> bool:
         if state == "completed":
             return True
         if state == "failed":
@@ -727,9 +785,7 @@ class CognityxInferenceClient:
             )
         return False
 
-    def _request(
-        self, method: str, path: str, payload: Any | None = None
-    ) -> Any:
+    def _request(self, method: str, path: str, payload: Any | None = None) -> Any:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"

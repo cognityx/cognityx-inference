@@ -2,31 +2,35 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
 import queue
 import threading
 import time
+from dataclasses import asdict
 from typing import Any
 
-from cognityx_inference.capabilities import HardwareDiscoveryRequired
 from cognityx_inference.auth import EnvironmentPrincipalResolver, PrincipalResolver
 from cognityx_inference.backends.legacy import discover_model_context_limit
 from cognityx_inference.capabilities import (
     CertifiedContextLimitExceeded,
+    HardwareDiscoveryRequired,
     ModelContextLimitExceeded,
-)
-from cognityx_inference.errors import (
-    ContextWindowExceeded,
-    ModelMetadataUnavailableError,
-    TokenCountingUnavailable,
 )
 from cognityx_inference.contracts import (
     DiscoveryPolicy,
     InferenceRequest,
     LoadPolicy,
 )
+from cognityx_inference.errors import (
+    ContextWindowExceeded,
+    ModelMetadataUnavailableError,
+    ProviderCredentialMissing,
+    ProviderRequestError,
+    TokenCountingUnavailable,
+    UnsupportedProviderParameter,
+)
 from cognityx_inference.lifecycle import ModelIdentity
+from cognityx_inference.providers.diagnostics import test_provider
 from cognityx_inference.service import InferenceService, ModelNotLoadedError
 
 
@@ -90,6 +94,98 @@ def create_app(
             )
         return {"object": "list", "data": data}
 
+    @app.get("/v1/cognityx/providers")
+    @app.get("/v1/cognityx/providers/status")
+    def provider_statuses() -> dict[str, Any]:
+        registry = service.provider_registry
+        if registry is None:
+            raise HTTPException(
+                status_code=503, detail="Provider registry unavailable."
+            )
+        return {
+            "object": "list",
+            "data": [item.to_dict() for item in registry.list_statuses()],
+        }
+
+    @app.get("/v1/cognityx/providers/{provider}/models")
+    def provider_models(provider: str, refresh: bool = False) -> dict[str, Any]:
+        registry = service.provider_registry
+        if registry is None:
+            raise HTTPException(
+                status_code=503, detail="Provider registry unavailable."
+            )
+        if provider == "local":
+            return {
+                "provider": "local",
+                "models": [item.identity.model for item in service.models.statuses()],
+                "cached": False,
+            }
+        try:
+            return registry.discover_models(provider, refresh=refresh).to_dict()
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "not_configured", "message": str(exc)},
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    @app.get("/v1/cognityx/providers/{provider}/capabilities")
+    def provider_capabilities(provider: str, model: str) -> dict[str, Any]:
+        registry = service.provider_registry
+        if registry is None:
+            raise HTTPException(
+                status_code=503, detail="Provider registry unavailable."
+            )
+        profile = registry.profile(provider, model)
+        return profile.to_dict()
+
+    @app.post("/v1/cognityx/providers/{provider}/test")
+    def provider_test(
+        provider: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        registry = service.provider_registry
+        if registry is None:
+            raise HTTPException(
+                status_code=503, detail="Provider registry unavailable."
+            )
+        try:
+            definition = registry.definitions[provider]
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Unknown provider.") from exc
+        if provider == "local":
+            return {
+                "provider": "local",
+                "status": (
+                    "passed"
+                    if any(
+                        item.state.value == "ready"
+                        for item in service.models.statuses()
+                    )
+                    else "skipped"
+                ),
+                "reason": (
+                    None
+                    if any(
+                        item.state.value == "ready"
+                        for item in service.models.statuses()
+                    )
+                    else "worker_not_ready"
+                ),
+            }
+        selected = payload or {}
+        result = test_provider(
+            definition,
+            credential_resolver=registry.resolver,
+            model=selected.get("model"),
+            structured_output=bool(selected.get("structured_output", False)),
+            timeout_seconds=float(selected.get("timeout_seconds", 30)),
+        )
+        if result.status == "passed" and result.tested_at:
+            registry.mark_success(provider, result.tested_at)
+        return result.to_dict()
+
     @app.post("/v1/chat/completions")
     def chat_completions(payload: dict[str, Any], request: Request) -> Any:
         extension = payload.get("cognityx") or {}
@@ -113,9 +209,7 @@ def create_app(
                 discovery_policy=DiscoveryPolicy(
                     extension.get("discovery_policy", "require_existing")
                 ),
-                required_context_length=extension.get(
-                    "required_context_length"
-                ),
+                required_context_length=extension.get("required_context_length"),
                 temperature=payload.get("temperature"),
                 top_p=payload.get("top_p"),
                 top_k=extension.get("top_k"),
@@ -138,6 +232,8 @@ def create_app(
                 timeout_seconds=timeouts.get("request"),
                 first_token_timeout_seconds=timeouts.get("first_token"),
                 no_token_progress_timeout_seconds=timeouts.get("no_token_progress"),
+                execution_context=extension.get("execution_context") or {},
+                request_metadata=extension.get("request_metadata") or {},
                 extensions=extension.get("extensions") or {},
             )
             if normalized.stream:
@@ -162,6 +258,32 @@ def create_app(
             ) from exc
         except ModelMetadataUnavailableError as exc:
             raise _model_metadata_http_exception(exc) from exc
+        except ProviderCredentialMissing as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "not_configured",
+                    "provider": exc.provider,
+                },
+            ) from exc
+        except UnsupportedProviderParameter as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "unsupported_parameter",
+                    "provider": exc.provider,
+                    "parameters": list(exc.parameters),
+                },
+            ) from exc
+        except ProviderRequestError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": exc.category,
+                    "provider": exc.provider,
+                    "provider_status": exc.status,
+                },
+            ) from exc
         except (KeyError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -202,9 +324,7 @@ def create_app(
                 str(payload.get("profile", "bf16")),
                 payload.get("runtime") or {},
                 payload.get("required_context_length"),
-                DiscoveryPolicy(
-                    payload.get("discovery_policy", "require_existing")
-                ),
+                DiscoveryPolicy(payload.get("discovery_policy", "require_existing")),
                 owner_id=owner_id(request),
             )
         except HardwareDiscoveryRequired as exc:
@@ -242,7 +362,10 @@ def create_app(
             )
             return {"input_tokens": service.count_input_tokens(request)}
         except ModelNotLoadedError as exc:
-            raise HTTPException(status_code=409, detail={"error": "model_not_loaded", "message": str(exc)}) from exc
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "model_not_loaded", "message": str(exc)},
+            ) from exc
         except (KeyError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -255,7 +378,9 @@ def create_app(
     ) -> list[dict[str, Any]]:
         repository = service.certified_profiles
         if repository is None:
-            raise HTTPException(status_code=503, detail="Certified profiles are unavailable.")
+            raise HTTPException(
+                status_code=503, detail="Certified profiles are unavailable."
+            )
         return [
             item.to_dict()
             for item in repository.list_profiles(
@@ -270,7 +395,9 @@ def create_app(
     def certified_profile(profile_id: str) -> dict[str, Any]:
         repository = service.certified_profiles
         if repository is None:
-            raise HTTPException(status_code=503, detail="Certified profiles are unavailable.")
+            raise HTTPException(
+                status_code=503, detail="Certified profiles are unavailable."
+            )
         result = repository.get_profile(profile_id)
         if result is None:
             raise HTTPException(status_code=404, detail="Certified profile not found.")
@@ -279,11 +406,7 @@ def create_app(
     @app.post("/v1/cognityx/models/unload")
     def unload(payload: dict[str, Any]) -> dict[str, Any]:
         if not payload.get("runtime"):
-            return {
-                "unloaded": service.models.unload_active(
-                    str(payload["model"])
-                )
-            }
+            return {"unloaded": service.models.unload_active(str(payload["model"]))}
         identity = ModelIdentity.create(
             str(payload["model"]),
             str(payload["backend"]),
@@ -318,9 +441,7 @@ def create_app(
         return status
 
     @app.get("/v1/cognityx/discoveries")
-    def list_discoveries(
-        request: Request, all: bool = False
-    ) -> list[dict[str, Any]]:
+    def list_discoveries(request: Request, all: bool = False) -> list[dict[str, Any]]:
         coordinator = service.discovery
         if coordinator is None or not hasattr(coordinator, "list"):
             raise HTTPException(status_code=503, detail="Discovery is unavailable.")
@@ -336,8 +457,12 @@ def create_app(
         profile = str(payload.get("profile", "bf16"))
         model_limit, _ = discover_model_context_limit(model)
         job_id = coordinator.start(
-            model=model, backend=backend, profile=profile, owner_id=owner_id(request),
-            model_context_limit=model_limit, runtime=payload.get("runtime") or {},
+            model=model,
+            backend=backend,
+            profile=profile,
+            owner_id=owner_id(request),
+            model_context_limit=model_limit,
+            runtime=payload.get("runtime") or {},
         )
         return {"job_id": job_id, "state": "queued"}
 
@@ -347,14 +472,19 @@ def create_app(
         if coordinator is None or not coordinator.cancel(
             job_id, owner_id=owner_id(request)
         ):
-            raise HTTPException(status_code=404, detail="Discovery job not found or already finished.")
+            raise HTTPException(
+                status_code=404, detail="Discovery job not found or already finished."
+            )
         return {"job_id": job_id, "cancel_requested": True}
 
     @app.get("/v1/cognityx/discoveries/{job_id}/events")
     def discovery_events(job_id: str, request: Request, after: int = 0) -> Any:
         coordinator = service.discovery
         principal = owner_id(request)
-        if coordinator is None or coordinator.status(job_id, owner_id=principal) is None:
+        if (
+            coordinator is None
+            or coordinator.status(job_id, owner_id=principal) is None
+        ):
             raise HTTPException(status_code=404, detail="Discovery job not found.")
 
         def stream() -> Any:
@@ -369,6 +499,7 @@ def create_app(
                     break
                 yield ": heartbeat\n\n"
                 time.sleep(1)
+
         return StreamingResponse(stream(), media_type="text/event-stream")
 
     return app
@@ -385,9 +516,7 @@ def _stream_chat(
 
     def run() -> None:
         try:
-            response = service.infer(
-                request, on_text=on_text, owner_id=owner_id
-            )
+            response = service.infer(request, on_text=on_text, owner_id=owner_id)
             chunks.put(("response", response))
         except Exception as exc:
             chunks.put(("error", exc))

@@ -31,7 +31,6 @@ from cognityx_inference.storage import (
     CertifiedProfileRepository,
     InferenceArtifactRepository,
 )
-from cognityx_inference.errors import TokenCountingUnavailable
 from cognityx_inference.token_budget import apply_token_budget
 
 
@@ -70,6 +69,7 @@ class InferenceService:
         certified_profiles: CertifiedProfileRepository | None = None,
         inventory: Callable[[], Mapping[str, Any]] | None = None,
         discovery: DiscoveryStarter | None = None,
+        provider_registry: Any | None = None,
     ) -> None:
         self.models = models
         self.providers = dict(providers or {})
@@ -77,6 +77,7 @@ class InferenceService:
         self.certified_profiles = certified_profiles
         self.inventory = inventory or (lambda: {})
         self.discovery = discovery
+        self.provider_registry = provider_registry
 
     def infer(
         self,
@@ -96,17 +97,25 @@ class InferenceService:
                 request.model
             )
             if context_profile is None:
-                raise TokenCountingUnavailable(
-                    f"Provider '{request.provider}' model '{request.model}' "
-                    "has no configured context capability profile."
+                budget = None
+            else:
+                dispatched_request, budget = apply_token_budget(
+                    request,
+                    context_profile,
+                    lambda selected: provider.count_input_tokens(selected),
                 )
-            dispatched_request, budget = apply_token_budget(
-                request,
-                context_profile,
-                lambda selected: provider.count_input_tokens(selected),
-            )
             response = provider.infer(dispatched_request, on_text=on_text)
-            response = replace(response, token_budget=budget)
+            if budget is not None:
+                response = replace(response, token_budget=budget)
+            else:
+                response = replace(
+                    response,
+                    warnings=(
+                        *response.warnings,
+                        "Provider model context profile is unverified; "
+                        "automatic token budgeting was unavailable.",
+                    ),
+                )
         else:
             canonical_model = resolve_local_model_reference(request.model).resolved
             if canonical_model != request.model:
@@ -231,9 +240,7 @@ class InferenceService:
             getter = getattr(self.certified_profiles, "get_profile", None)
             certified = getter(str(requested_profile_id)) if getter else None
             if certified is None:
-                raise ValueError(
-                    f"Certified profile not found: {requested_profile_id}"
-                )
+                raise ValueError(f"Certified profile not found: {requested_profile_id}")
             if certified.compatibility != compatibility:
                 raise ValueError(
                     "The selected certified profile is not compatible with "
@@ -302,8 +309,7 @@ class InferenceService:
             "min_p": request.min_p is not None,
             "seed": request.seed is not None,
             "log_probabilities": (
-                request.log_probabilities
-                or request.top_log_probabilities is not None
+                request.log_probabilities or request.top_log_probabilities is not None
             ),
             "reasoning": bool(request.reasoning),
         }

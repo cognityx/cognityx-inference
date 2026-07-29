@@ -25,9 +25,7 @@ class ProviderCredentialMissing(RuntimeError):
         sources = f"environment variable {environment_name}"
         if secret_name:
             sources += f" or configured secret entry {secret_name}"
-        super().__init__(
-            f"Provider '{provider}' requires {sources}."
-        )
+        super().__init__(f"Provider '{provider}' requires {sources}.")
         self.provider = provider
         self.environment_name = environment_name
         self.secret_name = secret_name
@@ -44,3 +42,15 @@ class ProviderRequestError(RuntimeError):
         self.provider = provider
         self.category = category
         self.status = status
+
+
+class UnsupportedProviderParameter(ValueError):
+    """A caller explicitly supplied a parameter rejected by the provider."""
+
+    def __init__(self, provider: str, parameters: list[str]) -> None:
+        joined = ", ".join(sorted(parameters))
+        super().__init__(
+            f"Provider '{provider}' does not support explicit parameter(s): {joined}."
+        )
+        self.provider = provider
+        self.parameters = tuple(sorted(parameters))

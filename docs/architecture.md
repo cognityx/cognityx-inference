@@ -142,3 +142,30 @@ flowchart LR
 
 That path still covers interactive prompts, `/benchmark`, long-context corpora,
 diagnostics, comparison, and saved benchmark JSON.
+
+## Provider architecture
+
+```mermaid
+flowchart LR
+    Client[Cognityx client / OpenAI client] --> API[OpenAI-compatible API]
+    API --> Service[InferenceService]
+    Service --> Registry[ProviderRegistry]
+    Service --> Router[Purpose RoutingPolicy]
+    Registry --> Local[Local model lifecycle]
+    Registry --> Compat[OpenAI-compatible adapter]
+    Registry --> Gemini[Gemini native adapter]
+    Registry --> Anthropic[Anthropic native adapter]
+    Registry --> GitHub[GitHub Models adapter]
+```
+
+Provider definitions and model profiles are configuration data. The registry
+owns provider state, exact model discovery with a TTL cache, capabilities, and
+safe status. Adapters translate transport; they do not decide routing. Parameter
+policies reject known unsupported combinations before a commercial request.
+The service retains the common request/response contract and represents
+unavailable provider information as unavailable rather than estimated.
+
+The local provider remains special only for lifecycle and machine telemetry.
+Commercial providers have no load/unload operation and expose only
+provider-reported usage and latency. This preserves the existing local model
+manager, leases, boundary certification, and `cognityx-storage` paths.
