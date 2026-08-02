@@ -31,3 +31,4 @@ secrets.json
 # Generated long-context artifacts (the registry documentation is tracked)
 data/contexts/*/chunks.jsonl
 data/contexts/*/manifest.json
+cognityx_jobs.sqlite3
