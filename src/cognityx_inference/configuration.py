@@ -22,6 +22,7 @@ from cognityx_inference.routing import (
     RoutingPolicy,
 )
 from cognityx_inference.security import CredentialResolver
+from cognityx_inference.tracking import TrackingConfiguration
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +75,7 @@ class InferenceConfiguration:
     providers: Mapping[str, ProviderDefinition] = field(default_factory=dict)
     secrets_file: str | None = None
     routing: RoutingPolicy = field(default_factory=RoutingPolicy)
+    tracking: TrackingConfiguration = field(default_factory=TrackingConfiguration)
     source: str | None = None
 
     @classmethod
@@ -118,6 +120,7 @@ class InferenceConfiguration:
             providers=providers,
             secrets_file=_secrets_file(document, selected),
             routing=_routing(document.get("routing") or {}),
+            tracking=TrackingConfiguration(**dict(document.get("tracking") or {})),
             source=str(selected),
         )
 

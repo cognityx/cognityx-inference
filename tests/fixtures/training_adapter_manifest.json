@@ -1,0 +1,50 @@
+{
+  "adapter": {
+    "alpha": 16,
+    "dropout": 0.05,
+    "format": "peft",
+    "rank": 8,
+    "target_modules": [
+      "q_proj",
+      "v_proj"
+    ],
+    "type": "lora"
+  },
+  "adapter_id": "adapter-fixture",
+  "adapter_version": "1",
+  "base_model": {
+    "chat_template_checksum": "template-sha",
+    "name": "Qwen/Qwen3-8B",
+    "requested_revision": "main",
+    "resolved_revision": "commit-1",
+    "tokenizer_revision": "commit-1"
+  },
+  "bundle_checksum": "bbf239c99f0ef3b6320c1fce53228dda247c2dbbc8b7a97d3ca04223093cac9c",
+  "created_at": "2026-08-10T00:00:00+00:00",
+  "dataset": {
+    "dataset_id": "demo",
+    "dataset_variant_id": "dvar-clean",
+    "dataset_version": "3",
+    "manifest_checksum": "dataset-manifest-sha",
+    "manifest_uri": "storage://local-main/datasets/demo/3/manifest.json",
+    "recipe": "knowledge-unit-qa",
+    "records_checksum": "dataset-records-sha"
+  },
+  "experiment_id": "exp-demo",
+  "files": [
+    {
+      "path": "adapter_config.json",
+      "sha256": "a6dff92fb4f2f2fdbf87d23a5e6a575dbd0f3ae1a44ac85579dc5eaf7e543efb",
+      "size_bytes": 21
+    },
+    {
+      "path": "adapter_model.safetensors",
+      "sha256": "1318f6b89916a45c8a676fe6585e0208b5128690e140e3c11a950f057a328682",
+      "size_bytes": 15
+    }
+  ],
+  "schema_version": "cognityx.training.adapter/v1",
+  "status": "candidate",
+  "training_run_id": "trun-fixture",
+  "training_variant_id": "tvar-fixture"
+}

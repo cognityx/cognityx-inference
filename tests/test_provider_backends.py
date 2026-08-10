@@ -79,6 +79,12 @@ secrets_file = "secrets.json"
 [manager]
 port = 9010
 
+[tracking]
+backend = "mlflow"
+tracking_uri = "http://127.0.0.1:5000"
+experiment_name = "shared-research"
+failure_policy = "error"
+
 [server_profiles.local]
 model = "org/model"
 certified_profile_id = "profile-1"
@@ -104,6 +110,9 @@ allow_estimated_counting = true
     assert configuration.manager.port == 9010
     assert configuration.secrets_file == str(secrets)
     assert configuration.server_profiles["local"].certified_profile_id == "profile-1"
+    assert configuration.tracking.backend == "mlflow"
+    assert configuration.tracking.experiment_name == "shared-research"
+    assert configuration.tracking.failure_policy == "error"
     groq = configuration.providers["groq"]
     assert groq.api_key_env == "GROQ_API_KEY"
     assert groq.api_key_secret == "groq_api_key"

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from llm_benchmark.llm import GenerationSettings
 from llm_benchmark.loading_decision import ModelLoadOptions
-from llm_benchmark.vllm_engine import VLLMEngineError, VLLMLLM
+from llm_benchmark.vllm_engine import VLLMLLM, VLLMEngineError
 
 
 class FakeLLM:
@@ -26,9 +26,7 @@ class FakeTokenizer:
         self.result = result
         self.kwargs: dict[str, object] = {}
 
-    def apply_chat_template(
-        self, _messages: object, **kwargs: object
-    ) -> object:
+    def apply_chat_template(self, _messages: object, **kwargs: object) -> object:
         self.kwargs = kwargs
         return self.result
 
@@ -44,23 +42,32 @@ class FakeSamplingParams:
 
 class FakeCoreEngine:
     def __init__(self) -> None:
+        self.added_requests: list[tuple[tuple[object, ...], dict[str, object]]] = []
         metrics = SimpleNamespace(
             first_token_latency=0.1, first_token_ts=1.0, last_token_ts=2.0
         )
         self.outputs = [
             SimpleNamespace(
-                request_id="0", finished=False, metrics=metrics,
-                outputs=[SimpleNamespace(text="Hello ", token_ids=[1], finish_reason=None)],
+                request_id="0",
+                finished=False,
+                metrics=metrics,
+                outputs=[
+                    SimpleNamespace(text="Hello ", token_ids=[1], finish_reason=None)
+                ],
             ),
             SimpleNamespace(
-                request_id="0", finished=True, metrics=metrics,
+                request_id="0",
+                finished=True,
+                metrics=metrics,
                 num_cached_tokens=1,
-                outputs=[SimpleNamespace(text="world", token_ids=[2], finish_reason="stop")],
+                outputs=[
+                    SimpleNamespace(text="world", token_ids=[2], finish_reason="stop")
+                ],
             ),
         ]
 
-    def add_request(self, *_args: object, **_kwargs: object) -> None:
-        return None
+    def add_request(self, *args: object, **kwargs: object) -> None:
+        self.added_requests.append((args, kwargs))
 
     def has_unfinished_requests(self) -> bool:
         return bool(self.outputs)
@@ -77,8 +84,14 @@ class VLLMConfigurationTests(unittest.TestCase):
         fake_module = SimpleNamespace(__version__="test", LLM=FakeLLM)
         with (
             patch.dict(sys.modules, {"vllm": fake_module}),
-            patch("llm_benchmark.vllm_engine.AutoConfig.from_pretrained", return_value=object()),
-            patch("llm_benchmark.vllm_engine.extract_architecture_metadata", return_value={"model_type": "qwen3"}),
+            patch(
+                "llm_benchmark.vllm_engine.AutoConfig.from_pretrained",
+                return_value=object(),
+            ),
+            patch(
+                "llm_benchmark.vllm_engine.extract_architecture_metadata",
+                return_value={"model_type": "qwen3"},
+            ),
         ):
             return VLLMLLM(
                 "Qwen/Qwen3-32B",
@@ -165,13 +178,20 @@ class VLLMConfigurationTests(unittest.TestCase):
                 return_value={"allocated_gb": 0.0, "reserved_gb": 0.0},
             ),
         ):
-            result = engine.generate("hello", on_text=chunks.append)
+            marker = object()
+            result = engine.generate(
+                "hello", on_text=chunks.append, lora_request=marker
+            )
 
         self.assertEqual(chunks, ["Hello ", "world"])
         self.assertEqual(result["result"]["raw_output"], "Hello world")
         self.assertEqual(result["metrics"]["generated_tokens"], 2)
         self.assertEqual(result["metrics"]["vllm:prefix_cache_queries"], 2)
         self.assertEqual(result["metrics"]["vllm:prefix_cache_hits"], 1)
+        self.assertIs(
+            engine.engine.llm_engine.added_requests[0][1]["lora_request"],
+            marker,
+        )
 
         engine.engine.request_counter = count()
         engine.engine.llm_engine = FakeCoreEngine()

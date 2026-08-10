@@ -16,6 +16,22 @@ The file contains:
 - `[server_profiles.<name>]` for one named local worker configuration;
 - `[providers.openai]` and `[providers.groq]` for endpoint metadata;
 - provider model context capabilities used for safe token budgeting.
+- optional `[tracking]` settings that index completed Storage research
+  publications in MLflow.
+
+Tracking is disabled unless selected explicitly:
+
+```toml
+[tracking]
+backend = "none" # or "mlflow"
+experiment_name = "cognityx-research"
+failure_policy = "warn" # or "error"
+# tracking_uri = "http://127.0.0.1:5000"
+# parent_run_id = "optional-default-parent-run"
+```
+
+Storage remains authoritative. The default `warn` policy preserves a valid
+Storage publication if MLflow is unavailable.
 
 ### Local secrets file
 

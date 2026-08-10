@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, replace
+import hashlib
 import json
 import time
 from typing import Any, Callable
@@ -17,6 +18,7 @@ from cognityx_inference.contracts import (
     TokenUsage,
 )
 from cognityx_inference.errors import ModelMetadataUnavailableError
+from cognityx_inference.errors import AdapterError
 from cognityx_inference.token_budget import serialized_request
 from llm_benchmark.llm import GenerationSettings, LocalLLM
 from llm_benchmark.loading_decision import ModelLoadOptions
@@ -97,12 +99,14 @@ class TransformersBackend:
         self,
         request: InferenceRequest,
         on_text: Callable[[str], None] | None = None,
+        *,
+        adapter: Any | None = None,
     ) -> InferenceResponse:
         self.load()
         assert self.engine is not None
         self.engine.settings = _settings(request)
         started = time.monotonic()
-        result = self.engine.generate(_prompt(request), on_text=on_text)
+        result = self._generate(request, on_text=on_text, adapter=adapter)
         elapsed = time.monotonic() - started
         metrics = result.get("metrics", {})
         output = result.get("result", {})
@@ -143,6 +147,21 @@ class TransformersBackend:
             extensions={"legacy_result": result},
         )
 
+    def _generate(
+        self,
+        request: InferenceRequest,
+        *,
+        on_text: Callable[[str], None] | None,
+        adapter: Any | None,
+    ) -> dict[str, Any]:
+        if adapter is not None:
+            raise AdapterError(
+                "adapter_not_supported",
+                "The Transformers backend does not support adapter selection",
+            )
+        assert self.engine is not None
+        return self.engine.generate(_prompt(request), on_text=on_text)
+
     def unload(self) -> None:
         if self.engine is not None:
             self.engine.unload_model()
@@ -155,6 +174,7 @@ class TransformersBackend:
         return discover_model_context_limit(
             self.model_name,
             allow_download=bool(self.runtime.get("allow_download", False)),
+            revision=self.runtime.get("model_revision"),
         )[0]
 
     def count_input_tokens(self, request: InferenceRequest) -> int | None:
@@ -208,9 +228,28 @@ class TransformersBackend:
             except (AttributeError, TypeError, ValueError):
                 return None
 
+    def runtime_identity(self) -> dict[str, Any]:
+        self.load()
+        assert self.engine is not None
+        tokenizer = getattr(self.engine, "tokenizer", None)
+        template = getattr(tokenizer, "chat_template", None)
+        return {
+            "name": self.model_name,
+            "requested_revision": self.runtime.get("model_revision"),
+            "resolved_revision": getattr(self.engine, "model_revision", None),
+            "tokenizer_revision": getattr(tokenizer, "_commit_hash", None),
+            "chat_template_checksum": (
+                hashlib.sha256(template.encode("utf-8")).hexdigest()
+                if isinstance(template, str)
+                else None
+            ),
+        }
+
 
 class VLLMBackend(TransformersBackend):
     """Expose the existing persistent vLLM engine."""
+
+    capabilities = replace(TransformersBackend.capabilities, adapters=True)
 
     def load(self) -> None:
         if self.engine is not None:
@@ -236,6 +275,9 @@ class VLLMBackend(TransformersBackend):
             enable_prefix_caching=bool(
                 self.runtime.get("enable_prefix_caching", True)
             ),
+            revision=self.runtime.get("model_revision"),
+            tokenizer_revision=self.runtime.get("tokenizer_revision"),
+            enable_lora=True,
         )
         self.load_seconds = time.monotonic() - started
 
@@ -243,21 +285,51 @@ class VLLMBackend(TransformersBackend):
         self,
         request: InferenceRequest,
         on_text: Callable[[str], None] | None = None,
+        *,
+        adapter: Any | None = None,
     ) -> InferenceResponse:
-        response = super().infer(request, on_text)
+        response = super().infer(request, on_text, adapter=adapter)
         return replace(response, backend="vllm")
+
+    def _generate(
+        self,
+        request: InferenceRequest,
+        *,
+        on_text: Callable[[str], None] | None,
+        adapter: Any | None,
+    ) -> dict[str, Any]:
+        assert isinstance(self.engine, VLLMLLM)
+        lora_request = None
+        if adapter is not None:
+            try:
+                from vllm.lora.request import LoRARequest
+            except ImportError as exc:
+                raise AdapterError(
+                    "adapter_not_supported", "The vLLM LoRA API is unavailable"
+                ) from exc
+            lora_request = LoRARequest(
+                adapter.adapter_id,
+                adapter.lora_int_id,
+                str(adapter.local_path),
+                base_model_name=self.model_name,
+            )
+        return self.engine.generate(
+            _prompt(request), on_text=on_text, lora_request=lora_request
+        )
 
 
 def discover_model_context_limit(
     model: str,
     *,
     allow_download: bool = False,
+    revision: str | None = None,
 ) -> tuple[int | None, str | None]:
     """Read model-declared context and revision without loading weights."""
     try:
         config = AutoConfig.from_pretrained(
             model,
             local_files_only=not allow_download,
+            revision=revision,
         )
     except OSError as exc:
         raise ModelMetadataUnavailableError(str(exc)) from exc

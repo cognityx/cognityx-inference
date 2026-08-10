@@ -10,6 +10,8 @@ service with:
 - a Cognityx client and CLI for load, infer, unload, discovery, watch, and cancel;
 - certified hardware-boundary profiles saved through `cognityx-storage`;
 - detailed local telemetry and persisted trial artifacts;
+- verified Training-adapter execution and reproducible base/adapter research
+  pairs whose predictions remain authoritative in Cognityx Storage;
 - a durable background-job direction for discovery and future ingestion,
   dataset-preparation, and evaluation workloads.
 
@@ -36,6 +38,9 @@ service with:
 - [Interactive chat](chat.md)
   Conversation history, certification-aware compression, session telemetry and
   saved chats.
+- [Training adapters and paired research runs](adapter-handoff.md)
+  Where Inference sits between Training, frozen DataForge questions, Storage,
+  optional MLflow indexing, and later Evaluator scoring.
 - [HTTP API](http-api.md)
   OpenAI-compatible requests plus Cognityx control endpoints.
 - [Boundary Evaluation](boundary-evaluation.md)
@@ -65,6 +70,8 @@ The repository already supports:
 - persistence of inference artifacts, discovery manifests, trials, summaries,
   and certified profiles through `cognityx-storage`;
 - compatibility preservation for the original interactive benchmark path.
+- one verified candidate adapter per vLLM request, plus immutable base/adapter
+  run and pair publications without correctness scoring.
 
 The discovery job flow is available now for practical use, while broader
 execution unification between the explicit boundary-evaluation planner and every

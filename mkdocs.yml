@@ -15,6 +15,7 @@ nav:
   - Platform: platform.md
   - CLI and Python client: cli.md
   - Interactive chat: chat.md
+  - Training adapters and research pairs: adapter-handoff.md
   - HTTP API: http-api.md
   - Discovery jobs: jobs.md
   - Boundary evaluation: boundary-evaluation.md

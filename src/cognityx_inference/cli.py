@@ -12,6 +12,7 @@ from typing import Any
 
 from cognityx_jobs import JobRepository
 
+from cognityx_inference.adapters import AdapterRepository
 from cognityx_inference.api import create_app
 from cognityx_inference.backends import TransformersBackend, VLLMBackend
 from cognityx_inference.chat import (
@@ -35,6 +36,11 @@ from cognityx_inference.providers import (
 from cognityx_inference.providers.diagnostics import test_provider
 from cognityx_inference.providers.factory import build_provider_adapters
 from cognityx_inference.providers.registry import ProviderRegistry
+from cognityx_inference.research import (
+    EvaluationSetRepository,
+    InferencePairRunner,
+    ResearchPublisher,
+)
 from cognityx_inference.service import InferenceService
 from cognityx_inference.storage import (
     BoundaryArtifactRepository,
@@ -44,6 +50,7 @@ from cognityx_inference.storage import (
     ManagerStateRepository,
 )
 from cognityx_inference.telemetry import ResourceMonitor, read_windows_bridge
+from cognityx_inference.tracking import build_tracker
 from cognityx_inference.vllm_runtime import VLLMRuntimeError, ensure_vllm_runtime
 from llm_benchmark.reporting import get_system_metadata
 
@@ -100,9 +107,10 @@ def build_service(
             status.state.value == "ready" for status in models.statuses()
         ),
     )
-    from cognityx_storage import StorageClient
+    from cognityx_storage import StorageClient, StorageRuntime
 
     storage = StorageClient().for_shared_data()
+    storage_runtime = StorageRuntime.load()
     profiles = CertifiedProfileRepository(storage)
     inventory = get_system_metadata
     discovery = BoundaryDiscoveryCoordinator(
@@ -120,7 +128,7 @@ def build_service(
             os.environ.get("COGNITYX_JOBS_DATABASE", "cognityx_jobs.sqlite3")
         ),
     )
-    return InferenceService(
+    service = InferenceService(
         models,
         providers,
         InferenceArtifactRepository(storage),
@@ -128,7 +136,15 @@ def build_service(
         inventory,
         discovery,
         provider_registry,
+        AdapterRepository(storage_runtime),
     )
+    service.research_runner = InferencePairRunner(
+        service,
+        EvaluationSetRepository(storage_runtime),
+        ResearchPublisher(storage_runtime.for_role("artifact")),
+        build_tracker(selected.tracking),
+    )
+    return service
 
 
 def build_manager(
@@ -418,6 +434,7 @@ def main(argv: list[str] | None = None) -> None:
     infer = subparsers.add_parser("infer")
     infer.add_argument("--base-url", default=DEFAULT_BASE_URL)
     infer.add_argument("--model", required=True)
+    infer.add_argument("--model-revision")
     infer.add_argument("--prompt", required=True)
     infer.add_argument("--backend", default="vllm")
     infer.add_argument("--profile", default="bf16")
@@ -425,6 +442,12 @@ def main(argv: list[str] | None = None) -> None:
         "--max-output-tokens", "--max-tokens", dest="max_output_tokens", type=int
     )
     infer.add_argument("--required-context-length", type=int)
+    infer.add_argument("--adapter-manifest")
+    infer.add_argument(
+        "--adapter-purpose",
+        choices=("evaluation",),
+        default="evaluation",
+    )
     infer.add_argument(
         "--no-stream",
         action="store_false",
@@ -472,6 +495,33 @@ def main(argv: list[str] | None = None) -> None:
         choices=("ask", "auto", "require_existing"),
         default="ask",
     )
+    research = subparsers.add_parser(
+        "research", help="Execute immutable research-grade inference runs."
+    )
+    research_commands = research.add_subparsers(dest="research_command", required=True)
+    pair = research_commands.add_parser("pair")
+    pair.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    pair.add_argument("--evaluation-manifest", required=True)
+    pair.add_argument("--adapter-manifest", required=True)
+    pair.add_argument("--model", required=True)
+    pair.add_argument("--model-revision")
+    pair.add_argument("--backend", default="vllm")
+    pair.add_argument("--profile", default="bf16")
+    pair.add_argument("--experiment-id", required=True)
+    pair.add_argument("--comparison-id")
+    pair.add_argument("--arm-id")
+    pair.add_argument("--parent-run-id")
+    pair.add_argument("--research-package-id")
+    pair.add_argument("--training-variant-id")
+    pair.add_argument("--training-run-id")
+    pair.add_argument("--seed", type=int, default=0)
+    pair.add_argument("--temperature", type=float, default=0.0)
+    pair.add_argument("--top-p", type=float, default=1.0)
+    pair.add_argument("--top-k", type=int)
+    pair.add_argument("--max-output-tokens", type=int, default=128)
+    pair.add_argument("--stop", action="append", default=[])
+    pair.add_argument("--required-context-length", type=int)
+    _add_output_format(pair, default="json")
     discovery = subparsers.add_parser("discovery")
     discovery_commands = discovery.add_subparsers(
         dest="discovery_command", required=True
@@ -679,6 +729,33 @@ def main(argv: list[str] | None = None) -> None:
             elif args.command == "chat":
                 _run_chat(args, client)
                 return
+            elif args.command == "research":
+                value = client.run_research_pair(
+                    {
+                        "evaluation_manifest_uri": args.evaluation_manifest,
+                        "adapter_manifest_uri": args.adapter_manifest,
+                        "model": args.model,
+                        "model_revision": args.model_revision,
+                        "backend": args.backend,
+                        "profile": args.profile,
+                        "temperature": args.temperature,
+                        "top_p": args.top_p,
+                        "top_k": args.top_k,
+                        "max_output_tokens": args.max_output_tokens,
+                        "stop": args.stop,
+                        "required_context_length": args.required_context_length,
+                        "research_context": {
+                            "experiment_id": args.experiment_id,
+                            "comparison_id": args.comparison_id,
+                            "arm_id": args.arm_id,
+                            "seed": args.seed,
+                            "parent_run_id": args.parent_run_id,
+                            "research_package_id": args.research_package_id,
+                            "training_variant_id": args.training_variant_id,
+                            "training_run_id": args.training_run_id,
+                        },
+                    }
+                )
             elif args.command == "certified-profiles":
                 if args.certified_command == "list":
                     value = client.list_certified_profiles(
@@ -713,12 +790,17 @@ def main(argv: list[str] | None = None) -> None:
                 else:
                     parameters = {
                         "model": args.model,
+                        "model_revision": args.model_revision,
                         "prompt": args.prompt,
                         "backend": args.backend,
                         "profile": args.profile,
                         "max_output_tokens": args.max_output_tokens,
                         "required_context_length": args.required_context_length,
                         "discovery_policy": args.discovery_policy,
+                        "adapter_manifest_uri": args.adapter_manifest,
+                        "adapter_purpose": (
+                            args.adapter_purpose if args.adapter_manifest else None
+                        ),
                     }
                     if args.stream:
                         for chunk in client.stream_chat(**parameters):

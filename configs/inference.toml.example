@@ -8,6 +8,15 @@ startup_timeout_seconds = 600
 stop_timeout_seconds = 30
 health_poll_seconds = 0.25
 
+# Storage publications are authoritative. Select mlflow only when the optional
+# tracking dependency and a tracking service are available.
+[tracking]
+backend = "none"
+experiment_name = "cognityx-research"
+failure_policy = "warn"
+# tracking_uri = "http://127.0.0.1:5000"
+# parent_run_id = "existing-parent-run-id"
+
 # A named manager profile identifies one local model-serving worker.
 [server_profiles.qwen3-8b-int4]
 model = "Qwen/Qwen3-8B"

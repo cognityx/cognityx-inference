@@ -41,6 +41,9 @@ Cognityx-specific routing and runtime fields are carried under `cognityx`:
     "provider": "local",
     "backend": "vllm",
     "profile": "int4",
+    "model_revision": "resolved-base-commit",
+    "adapter_manifest_uri": "storage://local-main/models/adapters/example/1/adapter-manifest.json",
+    "adapter_purpose": "evaluation",
     "load_policy": "require_loaded",
     "discovery_policy": "require_existing",
     "required_context_length": 8192,
@@ -70,6 +73,8 @@ Important behavior:
 - local OpenAI-compatible requests use `require_loaded`; they do not trigger
   unexpected model loading
 - unsupported fields are reported as unavailable, not invented
+- adapter selection is local-vLLM-only, accepts one verified Training manifest,
+  and never falls back silently to base inference
 
 ### Success Response
 
@@ -124,6 +129,16 @@ The complete serialized request is counted, including system messages,
 conversation history, tools, tool choice, and structured-response schema.
 Manual `max_output_tokens` wins over the automatic default but is rejected,
 not clamped, if it exceeds the certified context.
+
+## Research pair endpoint
+
+`POST /v1/cognityx/research/pairs` accepts one frozen DataForge evaluation
+manifest, one base model, one Training adapter manifest, fixed decoding values,
+and a `research_context` object. It returns the immutable
+`cognityx.inference.pair/v1` manifest only after both run publications and pair
+fingerprint validation succeed. See the
+[adapter handoff guide](adapter-handoff.md) for the full request vocabulary and
+Storage layout.
 
 ## Management API
 

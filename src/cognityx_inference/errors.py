@@ -1,5 +1,39 @@
 """Inference platform exceptions without heavyweight runtime imports."""
 
+from __future__ import annotations
+
+from typing import Any, Mapping
+
+
+class InferenceContractError(RuntimeError):
+    """Machine-readable validation or execution failure."""
+
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = dict(details or {})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "error": self.code,
+            "message": str(self),
+            "details": self.details,
+        }
+
+
+class AdapterError(InferenceContractError):
+    """A Training adapter cannot be safely used for inference."""
+
+
+class ResearchRunError(InferenceContractError):
+    """A frozen research execution cannot be completed or published."""
+
 
 class ModelMetadataUnavailableError(OSError):
     """Model configuration is absent from the selected local cache."""

@@ -7,7 +7,11 @@ from cognityx_inference.client import (
     CognityxInferenceClient,
     InferenceAPIError,
 )
-from cognityx_inference.contracts import DiscoveryPolicy, InferenceRequest
+from cognityx_inference.contracts import (
+    AdapterPurpose,
+    DiscoveryPolicy,
+    InferenceRequest,
+)
 
 
 class FakeClient(CognityxInferenceClient):
@@ -67,6 +71,44 @@ def test_inference_payload_carries_top_log_probabilities() -> None:
         DiscoveryPolicy.REQUIRE_EXISTING,
     )
     assert payload["top_logprobs"] == 5
+
+
+def test_inference_payload_carries_additive_adapter_contract() -> None:
+    payload = CognityxInferenceClient._inference_payload(
+        InferenceRequest(
+            model="model-a",
+            model_revision="commit-1",
+            prompt="hello",
+            adapter_manifest_uri="storage://local-main/models/adapter/manifest.json",
+            adapter_purpose=AdapterPurpose.EVALUATION,
+        ),
+        DiscoveryPolicy.REQUIRE_EXISTING,
+    )
+    extension = payload["cognityx"]
+    assert extension["model_revision"] == "commit-1"
+    assert extension["adapter_manifest_uri"].startswith("storage://")
+    assert extension["adapter_purpose"] == "evaluation"
+
+
+def test_research_pair_uses_dedicated_endpoint() -> None:
+    class Client(CognityxInferenceClient):
+        def __init__(self):
+            super().__init__("http://example")
+            self.call = None
+
+        def _request(self, method, path, payload=None):
+            self.call = (method, path, payload)
+            return {"pair_validation": "passed"}
+
+    client = Client()
+    result = client.run_research_pair({"experiment_id": "exp-1"})
+
+    assert result["pair_validation"] == "passed"
+    assert client.call == (
+        "POST",
+        "/v1/cognityx/research/pairs",
+        {"experiment_id": "exp-1"},
+    )
 
 
 def test_empty_base_url_uses_environment_then_local_default(monkeypatch) -> None:
