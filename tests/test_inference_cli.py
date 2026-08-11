@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import stat
 
-from cognityx_inference.cli import main
+import pytest
+
+from cognityx_inference.cli import build_service, main
+from cognityx_inference.discovery import DiscoveryConfig
 
 
 class FakeClient:
@@ -20,6 +23,60 @@ class FakeClient:
 
     def chat(self, **kwargs):
         return {"choices": [{"message": {"content": "complete"}}]}
+
+
+def test_installed_service_uses_built_in_discovery_defaults(monkeypatch) -> None:
+    """Starting an installed wheel must not depend on source-only examples."""
+
+    class SelectedConfiguration:
+        providers = {}
+        tracking = {}
+
+        @staticmethod
+        def credential_resolver():
+            return object()
+
+    class StorageClient:
+        @staticmethod
+        def for_shared_data():
+            return object()
+
+    class StopAfterDiscoveryConfig(Exception):
+        pass
+
+    captured = {}
+
+    def capture_discovery(*args, config, **kwargs):
+        captured["config"] = config
+        raise StopAfterDiscoveryConfig
+
+    def reject_source_example(*args, **kwargs):
+        raise AssertionError("The service tried to read a source-checkout example")
+
+    monkeypatch.setattr(
+        "cognityx_inference.cli.build_provider_adapters", lambda *args: {}
+    )
+    monkeypatch.setattr("cognityx_inference.cli.ModelManager", lambda *args: object())
+    monkeypatch.setattr(
+        "cognityx_inference.cli.ProviderRegistry", lambda *args, **kwargs: object()
+    )
+    monkeypatch.setattr("cognityx_storage.StorageClient", StorageClient)
+    monkeypatch.setattr(
+        "cognityx_inference.cli.CertifiedProfileRepository", lambda *args: object()
+    )
+    monkeypatch.setattr(
+        "cognityx_inference.cli.BoundaryArtifactRepository", lambda *args: object()
+    )
+    monkeypatch.setattr("cognityx_inference.cli.JobRepository", lambda *args: object())
+    monkeypatch.setattr(
+        "cognityx_inference.cli.BoundaryDiscoveryCoordinator", capture_discovery
+    )
+    monkeypatch.setattr(DiscoveryConfig, "from_toml", reject_source_example)
+
+    with pytest.raises(StopAfterDiscoveryConfig):
+        build_service(SelectedConfiguration())
+
+    assert captured["config"] == DiscoveryConfig()
 
 
 def test_infer_streams_text_by_default(monkeypatch, capsys) -> None:
