@@ -146,6 +146,12 @@ A paired run (`cognityx.inference.pair/v1`) executes:
 3. a comparison of all result-changing runtime fingerprint fields;
 4. a terminal pair manifest only when validation passes.
 
+An experiment orchestrator may supply `inference_pair_id` as one safe path
+segment. That makes the pair and its two arm IDs stable. A retry returns
+matching immutable manifests instead of repeating model execution. Reusing the
+same ID with changed inputs fails as an idempotency conflict. Existing callers
+that omit the field continue to receive generated IDs.
+
 The fingerprint records measured or resolved values only: base and tokenizer
 identity, chat-template checksum, backend and version, load/runtime settings,
 vLLM engine details, quantization and data type, context and KV-cache settings,

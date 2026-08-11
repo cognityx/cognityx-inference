@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ INFERENCE_PAIR_SCHEMA = "cognityx.inference.pair/v1"
 EVALUATION_ROLES = frozenset(
     {"exact_recall", "paraphrase_evaluation", "heldout_knowledge_unit"}
 )
+_SAFE_CALLER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 def _utc_now() -> str:
@@ -214,6 +216,14 @@ class InferencePairRequest:
     stop: tuple[str, ...] = ()
     required_context_length: int | None = None
     runtime: Mapping[str, Any] = field(default_factory=dict)
+    inference_pair_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.inference_pair_id
+            and _SAFE_CALLER_ID.fullmatch(self.inference_pair_id) is None
+        ):
+            raise ValueError("inference_pair_id must be one safe Storage path segment")
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "InferencePairRequest":
@@ -236,6 +246,7 @@ class InferencePairRequest:
             stop=tuple(value.get("stop") or ()),
             required_context_length=value.get("required_context_length"),
             runtime=dict(value.get("runtime") or {}),
+            inference_pair_id=value.get("inference_pair_id"),
         )
 
 
@@ -293,6 +304,18 @@ class ResearchPublisher:
             )
         return manifest
 
+    def load_pair(self, pair_id: str) -> dict[str, Any] | None:
+        return self._load_manifest(f"inference/research/pairs/{pair_id}/manifest.json")
+
+    def load_run(self, run_id: str) -> dict[str, Any] | None:
+        return self._load_manifest(f"inference/research/runs/{run_id}/manifest.json")
+
+    def _load_manifest(self, key: str) -> dict[str, Any] | None:
+        if not self.store.exists(key):
+            return None
+        manifest = self.verify_manifest(key)
+        return {**manifest, "manifest_uri": self.store.uri(key)}
+
     def _put_bytes(self, key: str, content: bytes, *, media_type: str) -> None:
         if self.store.exists(key):
             with self.store.open(key) as source:
@@ -329,7 +352,16 @@ class InferencePairRunner:
     def run(
         self, request: InferencePairRequest, *, owner_id: str = "local"
     ) -> dict[str, Any]:
-        pair_id = str(uuid.uuid4())
+        pair_id = request.inference_pair_id or str(uuid.uuid4())
+        request_checksum = _dataforge_checksum(asdict(request))
+        existing = self.publisher.load_pair(pair_id)
+        if existing is not None:
+            if existing.get("request_checksum") != request_checksum:
+                raise ResearchRunError(
+                    "inference_pair_idempotency_conflict",
+                    "Existing inference pair does not match this request",
+                )
+            return existing
         started_at = _utc_now()
         evaluation: EvaluationSet | None = None
         try:
@@ -366,6 +398,7 @@ class InferencePairRunner:
                     "adapter_run": self._run_reference(adapter),
                     "adapter_manifest_uri": request.adapter_manifest_uri,
                     "research_context": asdict(request.context),
+                    "request_checksum": request_checksum,
                 }
             )
             diagnostic = self._track_pair(request, pair, evaluation)
@@ -406,7 +439,20 @@ class InferencePairRunner:
         *,
         owner_id: str,
     ) -> dict[str, Any]:
-        run_id = str(uuid.uuid4())
+        run_id = f"irun-{_dataforge_checksum([pair_id, mode])[:24]}"
+        request_checksum = _dataforge_checksum(asdict(request))
+        existing = self.publisher.load_run(run_id)
+        if existing is not None:
+            if (
+                existing.get("request_checksum") != request_checksum
+                or existing.get("mode") != mode
+                or existing.get("inference_pair_id") != pair_id
+            ):
+                raise ResearchRunError(
+                    "inference_run_idempotency_conflict",
+                    "Existing inference run does not match this request arm",
+                )
+            return existing
         started_at = _utc_now()
         rows: list[dict[str, Any]] = []
         fingerprint: Mapping[str, Any] | None = None
@@ -463,6 +509,7 @@ class InferencePairRunner:
                 "record_count": len(rows),
                 "aggregate_metrics": self._aggregate(rows),
                 "research_context": asdict(request.context),
+                "request_checksum": request_checksum,
             },
             tuple(rows),
         )

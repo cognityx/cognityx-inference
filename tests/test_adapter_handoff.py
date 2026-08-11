@@ -418,11 +418,19 @@ def test_pair_preserves_order_lineage_manifests_and_shared_tracking(tmp_path) ->
             training_variant_id="tvar-fixture",
             training_run_id="trun-fixture",
         ),
+        inference_pair_id="pair-experiment-step-1",
     )
 
     pair = runner.run(request)
 
+    repeated = runner.run(request)
+
     assert pair["pair_validation"] == "passed"
+    assert repeated["inference_pair_id"] == pair["inference_pair_id"]
+    assert repeated["manifest_checksum"] == pair["manifest_checksum"]
+    with pytest.raises(ResearchRunError) as conflict:
+        runner.run(replace(request, max_output_tokens=513))
+    assert conflict.value.code == "inference_pair_idempotency_conflict"
     assert FakeAdapterBackend.prompts == ["First?", "Second?", "First?", "Second?"]
     assert FakeAdapterBackend.selections == [
         None,
