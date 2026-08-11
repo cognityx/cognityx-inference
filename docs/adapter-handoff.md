@@ -171,6 +171,11 @@ artifacts/inference/research/
 
 ## Optional MLflow index
 
+The existing Inference tracking configuration and tracker imports now delegate
+their NoOp, MLflow, parent-run, Storage-reference and failure-policy mechanics
+to `cognityx-observability`. Inference still owns the base, adapter and pair
+tags it prepares. Prediction and adapter bytes remain only in Storage.
+
 Tracking is off by default. Enable the optional dependency and configure the
 same experiment name used by Training:
 
