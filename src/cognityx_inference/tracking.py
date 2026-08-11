@@ -6,6 +6,13 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
+from cognityx_observability import (
+    ArtifactReference,
+    MLflowExporter,
+    ObservationContext,
+    ObservationSession,
+)
+
 from cognityx_inference.errors import ResearchRunError
 
 
@@ -54,10 +61,16 @@ class NoOpTracker:
 
 
 class MLflowTracker:
-    """Index Storage references in MLflow without duplicating artifacts."""
+    """Compatibility tracker delegating MLflow mechanics to Observability."""
 
-    def __init__(self, configuration: TrackingConfiguration) -> None:
+    def __init__(
+        self,
+        configuration: TrackingConfiguration,
+        *,
+        mlflow_module: Any | None = None,
+    ) -> None:
         self.configuration = configuration
+        self.mlflow_module = mlflow_module
 
     def record(
         self,
@@ -68,35 +81,53 @@ class MLflowTracker:
         references: Mapping[str, str],
         parent_run_id: str | None = None,
     ) -> None:
-        try:
-            import mlflow
-        except ImportError as exc:
-            raise RuntimeError(
-                "MLflow tracking requires cognityx-inference[tracking]"
-            ) from exc
-        if self.configuration.tracking_uri:
-            mlflow.set_tracking_uri(self.configuration.tracking_uri)
-        mlflow.set_experiment(self.configuration.experiment_name)
         selected_parent = parent_run_id or self.configuration.parent_run_id
-        normalized_tags = {
-            str(key): str(value) for key, value in tags.items() if value is not None
-        }
-        if selected_parent:
-            normalized_tags["mlflow.parentRunId"] = selected_parent
-        # Storage URIs and checksums are searchable tags. Prediction files and
-        # adapters are intentionally not uploaded as duplicate MLflow artifacts.
-        normalized_tags.update(
-            {
-                f"cognityx.storage.{key}": str(value)
-                for key, value in references.items()
-                if value
-            }
+        run_id = tags.get("cognityx.inference_run_id") or tags.get(
+            "cognityx.inference_pair_id"
         )
-        with mlflow.start_run(run_name=name, tags=normalized_tags):
-            if metrics:
-                mlflow.log_metrics(
-                    {str(key): float(value) for key, value in metrics.items()}
-                )
+        idempotency_key = next(
+            (
+                str(references[key])
+                for key in ("pair_manifest_uri", "run_manifest_uri")
+                if references.get(key)
+            ),
+            None,
+        )
+        session = ObservationSession(
+            ObservationContext(
+                component=str(tags.get("cognityx.component") or "inference"),
+                operation="publish_research_result",
+                run_id=str(run_id) if run_id else None,
+                parent_run_id=selected_parent,
+                idempotency_key=idempotency_key,
+                attributes={
+                    str(key): value for key, value in tags.items() if value is not None
+                },
+            ),
+            MLflowExporter(
+                tracking_uri=self.configuration.tracking_uri,
+                experiment_name=self.configuration.experiment_name,
+                run_name=name,
+                mlflow_module=self.mlflow_module,
+            ),
+            failure_policy="error",
+        )
+        session.start()
+        session.metrics(metrics)
+        session.artifacts(
+            ArtifactReference(
+                name=str(key),
+                uri=str(value),
+                checksum=(
+                    str(references.get(str(key).removesuffix("_uri") + "_checksum"))
+                    if references.get(str(key).removesuffix("_uri") + "_checksum")
+                    else None
+                ),
+            )
+            for key, value in references.items()
+            if key.endswith("_uri") and value
+        )
+        session.finish(attributes={"storage_publication_authoritative": True})
 
 
 class SafeTracker:

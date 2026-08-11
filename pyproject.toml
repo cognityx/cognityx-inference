@@ -19,6 +19,7 @@ dependencies = [
     "torchaudio>=2.11.0",
     "torchvision>=0.28.0",
     "transformers>=5.14.1",
+    "cognityx-observability",
     "cognityx-storage",
     "cognityx-jobs",
 ]
@@ -42,6 +43,7 @@ llm-benchmark = "llm_benchmark.app:main"
 
 [dependency-groups]
 dev = [
+    "httpx2>=2.0",
     "mkdocs-material>=9.7.7",
     "mkdocstrings-python>=2.0.5",
     "mypy>=1.17",
@@ -53,6 +55,7 @@ dev = [
 testpaths = ["tests"]
 
 [tool.uv.sources]
+cognityx-observability = { git = "https://github.com/cognityx/cognityx-observability.git", rev = "b02ec3c103d0b3fd22b7c33888155b763d6baa9f" }
 cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git", rev = "9afe3ed85a16c993363ae75ffaef053f236319cf" }
 cognityx-jobs = { git = "https://github.com/cognityx/cognityx-jobs.git" }
 

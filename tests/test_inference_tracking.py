@@ -58,17 +58,21 @@ def test_mlflow_receives_tags_metrics_and_storage_references_only(monkeypatch) -
     calls: dict = {}
 
     class Run:
-        def __enter__(self):
-            return self
+        info = SimpleNamespace(run_id="external-run")
 
-        def __exit__(self, *args):
-            return None
+    def set_tags(values):
+        calls.setdefault("tags", {}).update(values)
 
     fake = SimpleNamespace(
         set_tracking_uri=lambda value: calls.setdefault("tracking_uri", value),
         set_experiment=lambda value: calls.setdefault("experiment", value),
         start_run=lambda **value: (calls.setdefault("run", value), Run())[1],
-        log_metrics=lambda value: calls.setdefault("metrics", value),
+        log_metric=lambda name, value, **kwargs: calls.setdefault("metrics", []).append(
+            (name, value, kwargs.get("step"))
+        ),
+        set_tag=lambda name, value: calls.setdefault("tags", {}).update({name: value}),
+        set_tags=set_tags,
+        end_run=lambda **value: calls.setdefault("end", value),
     )
     monkeypatch.setitem(sys.modules, "mlflow", fake)
     tracker = MLflowTracker(
@@ -83,8 +87,10 @@ def test_mlflow_receives_tags_metrics_and_storage_references_only(monkeypatch) -
 
     assert calls["experiment"] == "shared-experiment"
     assert calls["run"]["tags"]["mlflow.parentRunId"] == "parent-1"
-    assert calls["run"]["tags"]["cognityx.storage.predictions_uri"].startswith(
+    assert calls["run"]["tags"]["cognityx.experiment_id"] == "exp-1"
+    assert calls["tags"]["cognityx.storage.predictions_uri.uri"].startswith(
         "storage://"
     )
-    assert calls["metrics"] == {"request_count": 2.0}
+    assert calls["metrics"] == [("request_count", 2.0, None)]
+    assert calls["end"] == {"status": "FINISHED"}
     assert not hasattr(fake, "log_artifact")
