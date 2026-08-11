@@ -55,7 +55,7 @@ dev = [
 testpaths = ["tests"]
 
 [tool.uv.sources]
-cognityx-observability = { git = "https://github.com/cognityx/cognityx-observability.git", rev = "d872acd6b5945c4fd93fc33125edb230a5854b50" }
+cognityx-observability = { git = "https://github.com/cognityx/cognityx-observability.git", rev = "b02ec3c103d0b3fd22b7c33888155b763d6baa9f" }
 cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git", rev = "9afe3ed85a16c993363ae75ffaef053f236319cf" }
 cognityx-jobs = { git = "https://github.com/cognityx/cognityx-jobs.git" }
 
