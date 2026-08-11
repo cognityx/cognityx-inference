@@ -37,6 +37,12 @@ class DiscoveryPolicy(StrEnum):
     REQUIRE_EXISTING = "require_existing"
 
 
+class AdapterPurpose(StrEnum):
+    """Allowed use of a candidate Training adapter."""
+
+    EVALUATION = "evaluation"
+
+
 @dataclass(frozen=True, slots=True)
 class TokenDetail:
     """One generated token and optional provider-reported measurements."""
@@ -102,6 +108,7 @@ class ModelCapabilities:
     structured_output: bool = False
     vision: bool = False
     local_telemetry: bool = False
+    adapters: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +116,7 @@ class InferenceRequest:
     """A normalized chat or text generation request."""
 
     model: str
+    model_revision: str | None = None
     messages: tuple[JSON, ...] = ()
     prompt: str | None = None
     tools: tuple[JSON, ...] = ()
@@ -118,6 +126,8 @@ class InferenceRequest:
     provider: str = "local"
     backend: str = "vllm"
     profile: str = "bf16"
+    adapter_manifest_uri: str | None = None
+    adapter_purpose: AdapterPurpose | None = None
     load_policy: LoadPolicy = LoadPolicy.AUTO
     discovery_policy: DiscoveryPolicy = DiscoveryPolicy.REQUIRE_EXISTING
     required_context_length: int | None = None
@@ -151,10 +161,23 @@ class InferenceRequest:
                 "discovery_policy",
                 DiscoveryPolicy(self.discovery_policy),
             )
+        if isinstance(self.adapter_purpose, str):
+            object.__setattr__(
+                self, "adapter_purpose", AdapterPurpose(self.adapter_purpose)
+            )
         if not self.model.strip():
             raise ValueError("model cannot be empty")
         if not self.client_type.strip():
             raise ValueError("client_type cannot be empty")
+        if (
+            self.adapter_manifest_uri
+            and self.adapter_purpose is not AdapterPurpose.EVALUATION
+        ):
+            raise ValueError(
+                "adapter_manifest_uri requires adapter_purpose='evaluation'"
+            )
+        if self.adapter_purpose is not None and not self.adapter_manifest_uri:
+            raise ValueError("adapter_purpose requires adapter_manifest_uri")
         if not self.messages and self.prompt is None:
             raise ValueError("messages or prompt must be supplied")
         if self.messages and self.prompt is not None:

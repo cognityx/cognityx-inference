@@ -9,6 +9,7 @@ from cognityx_inference.capabilities import (
 from cognityx_inference.client import CognityxInferenceClient
 from cognityx_inference.chat import ChatSettings, CognityxChatSession
 from cognityx_inference.contracts import (
+    AdapterPurpose,
     DiscoveryPolicy,
     FinishReason,
     InferenceRequest,
@@ -20,6 +21,7 @@ from cognityx_inference.contracts import (
     TokenBudget,
     TokenUsage,
 )
+from cognityx_inference.research import InferencePairRequest, ResearchContext
 from cognityx_inference.lifecycle import (
     ModelIdentity,
     ModelLease,
@@ -34,6 +36,7 @@ from cognityx_inference.service import InferenceService
 InferenceClient = CognityxInferenceClient
 
 __all__ = [
+    "AdapterPurpose",
     "FinishReason",
     "CognityxInferenceClient",
     "InferenceClient",
@@ -45,6 +48,7 @@ __all__ = [
     "DiscoveryPolicy",
     "InferenceRequest",
     "InferenceResponse",
+    "InferencePairRequest",
     "InferenceService",
     "InferenceManager",
     "InferenceTimings",
@@ -57,6 +61,7 @@ __all__ = [
     "ModelManager",
     "ModelState",
     "ResidentModelStatus",
+    "ResearchContext",
     "ServerState",
     "ServerStatus",
     "TokenBudget",

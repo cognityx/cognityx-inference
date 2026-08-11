@@ -47,6 +47,68 @@ def test_infer_no_stream_preserves_json_response(monkeypatch, capsys) -> None:
     assert '"content": "complete"' in capsys.readouterr().out
 
 
+def test_infer_forwards_adapter_options(monkeypatch, capsys) -> None:
+    captured = {}
+
+    class Client(FakeClient):
+        def chat(self, **kwargs):
+            captured.update(kwargs)
+            return super().chat(**kwargs)
+
+    monkeypatch.setattr("cognityx_inference.cli.CognityxInferenceClient", Client)
+
+    main(
+        [
+            "infer",
+            "--model",
+            "model-a",
+            "--model-revision",
+            "commit-1",
+            "--prompt",
+            "hello",
+            "--adapter-manifest",
+            "storage://local-main/models/adapter/manifest.json",
+            "--no-stream",
+        ]
+    )
+
+    assert captured["model_revision"] == "commit-1"
+    assert captured["adapter_purpose"] == "evaluation"
+    assert captured["adapter_manifest_uri"].startswith("storage://")
+    assert '"content": "complete"' in capsys.readouterr().out
+
+
+def test_research_pair_cli_forwards_frozen_context(monkeypatch, capsys) -> None:
+    captured = {}
+
+    class Client(FakeClient):
+        def run_research_pair(self, payload):
+            captured.update(payload)
+            return {"pair_validation": "passed"}
+
+    monkeypatch.setattr("cognityx_inference.cli.CognityxInferenceClient", Client)
+    main(
+        [
+            "research",
+            "pair",
+            "--evaluation-manifest",
+            "storage://local-main/datasets/evaluation/manifest.json",
+            "--adapter-manifest",
+            "storage://local-main/models/adapter/manifest.json",
+            "--model",
+            "Qwen/Qwen3-8B",
+            "--experiment-id",
+            "exp-1",
+            "--seed",
+            "7",
+        ]
+    )
+
+    assert captured["research_context"]["experiment_id"] == "exp-1"
+    assert captured["research_context"]["seed"] == 7
+    assert json.loads(capsys.readouterr().out)["pair_validation"] == "passed"
+
+
 def test_provider_setup_creates_only_an_empty_private_template(
     tmp_path, capsys
 ) -> None:

@@ -31,6 +31,9 @@ api = [
 telemetry = [
     "psutil>=6.1",
 ]
+tracking = [
+    "mlflow>=2.20",
+]
 
 [project.scripts]
 cognityx-inference = "cognityx_inference.cli:main"
@@ -50,7 +53,7 @@ dev = [
 testpaths = ["tests"]
 
 [tool.uv.sources]
-cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git" }
+cognityx-storage = { git = "https://github.com/cognityx/cognityx-storage.git", rev = "9afe3ed85a16c993363ae75ffaef053f236319cf" }
 cognityx-jobs = { git = "https://github.com/cognityx/cognityx-jobs.git" }
 
 [build-system]
@@ -65,6 +68,7 @@ line-length = 88
 target-version = "py312"
 include = [
     "src/cognityx_inference/api.py",
+    "src/cognityx_inference/adapters.py",
     "src/cognityx_inference/cli.py",
     "src/cognityx_inference/client.py",
     "src/cognityx_inference/configuration.py",
@@ -73,6 +77,8 @@ include = [
     "src/cognityx_inference/security.py",
     "src/cognityx_inference/service.py",
     "src/cognityx_inference/routing.py",
+    "src/cognityx_inference/research.py",
+    "src/cognityx_inference/tracking.py",
     "src/cognityx_inference/providers/*.py",
     "tests/test_inference_cli.py",
     "tests/test_inference_client.py",
@@ -86,18 +92,21 @@ ignore = ["E402", "E501"]
 [tool.mypy]
 python_version = "3.12"
 files = [
+    "src/cognityx_inference/adapters.py",
     "src/cognityx_inference/configuration.py",
     "src/cognityx_inference/contracts.py",
     "src/cognityx_inference/errors.py",
     "src/cognityx_inference/security.py",
     "src/cognityx_inference/routing.py",
+    "src/cognityx_inference/research.py",
+    "src/cognityx_inference/tracking.py",
     "src/cognityx_inference/providers",
 ]
 exclude = [
     "^src/llm_benchmark/",
     "^tests/",
     "^src/cognityx_inference/(backends|evaluation)/",
-    "^src/cognityx_inference/(?!configuration\\.py$|contracts\\.py$|errors\\.py$|security\\.py$|routing\\.py$)[^/]+\\.py$",
+    "^src/cognityx_inference/(?!adapters\\.py$|configuration\\.py$|contracts\\.py$|errors\\.py$|research\\.py$|routing\\.py$|security\\.py$|tracking\\.py$)[^/]+\\.py$",
 ]
 follow_imports = "skip"
 ignore_missing_imports = true

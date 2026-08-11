@@ -38,6 +38,9 @@ class VLLMLLM:
         max_model_len: int,
         gpu_memory_utilization: float = 0.90,
         enable_prefix_caching: bool = True,
+        revision: str | None = None,
+        tokenizer_revision: str | None = None,
+        enable_lora: bool = False,
     ) -> None:
         if load_profile not in {"bf16", "fp16", "int4"}:
             raise VLLMEngineError(
@@ -69,14 +72,15 @@ class VLLMLLM:
         self.vllm_version = vllm.__version__
 
         config = AutoConfig.from_pretrained(
-            model_name, local_files_only=not load_options.allow_download
+            model_name,
+            local_files_only=not load_options.allow_download,
+            revision=revision,
         )
         self.model_revision = getattr(config, "_commit_hash", None)
         architecture = extract_architecture_metadata(config, None)
         declared_context_limit = architecture.get("max_position_embeddings")
-        if (
-            isinstance(declared_context_limit, (int, float))
-            and max_model_len > int(declared_context_limit)
+        if isinstance(declared_context_limit, (int, float)) and max_model_len > int(
+            declared_context_limit
         ):
             raise VLLMEngineError(
                 f"--vllm-max-model-len {max_model_len} exceeds the model's "
@@ -93,6 +97,9 @@ class VLLMLLM:
             "gpu_memory_utilization": gpu_memory_utilization,
             "enforce_eager": True,
             "enable_prefix_caching": enable_prefix_caching,
+            "revision": revision,
+            "tokenizer_revision": tokenizer_revision,
+            "enable_lora": enable_lora,
         }
         if load_profile == "int4":
             kwargs.update(
@@ -103,9 +110,7 @@ class VLLMLLM:
             self.engine = LLM(**kwargs)
         except Exception as exc:
             cache_hint = (
-                " while initializing FP8 KV cache"
-                if kv_cache_dtype == "fp8"
-                else ""
+                " while initializing FP8 KV cache" if kv_cache_dtype == "fp8" else ""
             )
             raise VLLMEngineError(
                 f"vLLM failed to load {model_name!r}{cache_hint}: "
@@ -132,7 +137,9 @@ class VLLMLLM:
         }
         self.quantization_resolution = {
             "engine": "vllm",
-            "quantization_source": "runtime_bitsandbytes" if quantized else "explicit_dtype",
+            "quantization_source": "runtime_bitsandbytes"
+            if quantized
+            else "explicit_dtype",
             "inflight_quantization": quantized,
         }
         self.loading_diagnostics = {
@@ -226,6 +233,7 @@ class VLLMLLM:
         on_text: Callable[[str], None] | None = None,
         run_type: str = "interactive",
         benchmark_name: str | None = None,
+        lora_request: Any | None = None,
     ) -> dict[str, Any]:
         """Generate with vLLM and normalize output to the shared result schema."""
         from vllm import SamplingParams
@@ -254,7 +262,11 @@ class VLLMLLM:
         gpu_before = get_gpu_status()
         started = time.perf_counter()
         self.engine.llm_engine.add_request(
-            request_id, engine_input, sampling, priority=0
+            request_id,
+            engine_input,
+            sampling,
+            lora_request=lora_request,
+            priority=0,
         )
         output_parts: list[str] = []
         generated_ids: list[int] = []
@@ -283,9 +295,7 @@ class VLLMLLM:
             ) from exc
         elapsed = time.perf_counter() - started
         if request is None or not request.finished:
-            raise VLLMEngineError(
-                "vLLM stopped without returning a completed request."
-            )
+            raise VLLMEngineError("vLLM stopped without returning a completed request.")
         completion = request.outputs[0]
         raw_output = "".join(output_parts).strip()
         generated_tokens = len(generated_ids)
@@ -312,8 +322,12 @@ class VLLMLLM:
         generation_truncated = finish_reason == "length"
         thinking, answer = self.split_thinking_and_answer(raw_output)
         quality = build_quality_indicators(
-            self.tokenizer, thinking, answer, raw_output,
-            finish_reason, generation_truncated,
+            self.tokenizer,
+            thinking,
+            answer,
+            raw_output,
+            finish_reason,
+            generation_truncated,
         )
         gpu_after = get_gpu_status()
         performance = calculate_performance_metrics(
@@ -330,15 +344,19 @@ class VLLMLLM:
             "engine": "vllm",
             "model_revision": self.model_revision,
             "kv_cache_precision": self.kv_cache_dtype,
-            "gpu_memory_utilization": self.model_runtime.get(
-                "gpu_memory_utilization"
-            ),
+            "gpu_memory_utilization": self.model_runtime.get("gpu_memory_utilization"),
             "requested_load_profile": self.requested_load_profile,
             "effective_load_profile": self.effective_load_profile,
-            **{key: self.load_profile_metadata[key] for key in (
-                "quantization_enabled", "quantization_bits", "quantization_method",
-                "compute_dtype", "storage_dtype",
-            )},
+            **{
+                key: self.load_profile_metadata[key]
+                for key in (
+                    "quantization_enabled",
+                    "quantization_bits",
+                    "quantization_method",
+                    "compute_dtype",
+                    "storage_dtype",
+                )
+            },
             "quantization_resolution": self.quantization_resolution,
             "run_type": run_type,
             "benchmark_name": benchmark_name,
@@ -349,16 +367,24 @@ class VLLMLLM:
             "model_runtime": self.model_runtime,
             "quality_indicators": quality,
             "performance": performance,
-            "result": {"raw_output": raw_output, "thinking": thinking, "answer": answer},
+            "result": {
+                "raw_output": raw_output,
+                "thinking": thinking,
+                "answer": answer,
+            },
             "metrics": {
-                "time_to_first_token_seconds": round(first_streamed_output_seconds, 3) if first_streamed_output_seconds is not None else None,
+                "time_to_first_token_seconds": round(first_streamed_output_seconds, 3)
+                if first_streamed_output_seconds is not None
+                else None,
                 "prompt_tokens": len(prompt_ids),
                 "generated_tokens": generated_tokens,
                 "total_tokens": len(prompt_ids) + generated_tokens,
                 "total_context_length_tokens": self.context_length_tokens,
                 "generation_seconds": round(elapsed, 3),
                 "engine_reported_decode_seconds": round(measured_generation, 3),
-                "tokens_per_second": round(generated_tokens / elapsed, 2) if elapsed else None,
+                "tokens_per_second": round(generated_tokens / elapsed, 2)
+                if elapsed
+                else None,
                 "vllm:prefix_cache_queries": self.prefix_cache_queries,
                 "vllm:prefix_cache_hits": self.prefix_cache_hits,
                 "peak_vram_gb": None,

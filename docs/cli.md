@@ -76,6 +76,13 @@ uv run cognityx-inference infer \
   --discovery-policy ask
 ```
 
+For an explicitly experimental Training adapter, add
+`--adapter-manifest storage://.../adapter-manifest.json` and
+`--adapter-purpose evaluation`. For a frozen base-versus-adapter batch, use
+`cognityx-inference research pair`. The complete contract and the RTX 5090
+copy-paste smoke workflow are in
+[Training adapters and paired research runs](adapter-handoff.md).
+
 ## CLI Overview
 
 The main operational CLI is `cognityx-inference`.

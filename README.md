@@ -5,6 +5,12 @@ hardware/configuration boundary evaluator. It evolved from the original
 `llm-benchmark` project without discarding its persistent Transformers and vLLM
 engines, diagnostics, interactive commands, or saved-result structure.
 
+It also accepts immutable candidate-adapter manifests from Cognityx Training,
+applies one verified LoRA adapter through the resident vLLM base, and publishes
+reproducible base/adapter research pairs. See the
+[adapter handoff guide](docs/adapter-handoff.md) for the application map,
+ownership boundaries, and copy-paste GPU smoke workflow.
+
 The platform adds normalized inference contracts, an OpenAI-compatible API and
 client, explicit local-model lifecycle leases, configuration-driven local and
 commercial provider adapters, logical-key persistence through

@@ -211,6 +211,13 @@ class CognityxInferenceClient:
                 "provider": request.provider,
                 "backend": request.backend,
                 "profile": request.profile,
+                "model_revision": request.model_revision,
+                "adapter_manifest_uri": request.adapter_manifest_uri,
+                "adapter_purpose": (
+                    request.adapter_purpose.value
+                    if request.adapter_purpose is not None
+                    else None
+                ),
                 "max_output_tokens": request.max_output_tokens,
                 "load_policy": request.load_policy.value,
                 "discovery_policy": policy.value,
@@ -229,6 +236,10 @@ class CognityxInferenceClient:
             },
         }
         return {key: value for key, value in payload.items() if value is not None}
+
+    def run_research_pair(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Execute and publish one frozen base/adapter research pair."""
+        return self._request("POST", "/v1/cognityx/research/pairs", dict(payload))
 
     def chat(
         self,

@@ -19,6 +19,8 @@ flowchart LR
     Service --> Manager[ModelManager]
     Manager --> LocalBackends[vLLM or Transformers backend]
     Service --> Storage[Artifact repositories]
+    Storage --> Adapter[Verified Training adapter]
+    Adapter --> LocalBackends
     Service --> Discovery[BoundaryDiscoveryCoordinator]
     Discovery --> Storage
     Discovery --> Manager
@@ -27,6 +29,13 @@ flowchart LR
 `InferenceService` is the orchestration center. It decides whether a request
 goes to a provider adapter or a locally managed model, and it centralizes
 artifact persistence plus context/certification resolution.
+
+For research adapters, Storage first resolves the public Training manifest and
+verifies every immutable file. The service compares that manifest with the
+actual resident base identity before the backend sees it. vLLM then applies one
+adapter to a request without treating it as another full resident model. The
+[adapter handoff guide](adapter-handoff.md) describes paired publication and
+the boundary with DataForge, Training, MLflow, and Evaluator.
 
 ## Local lifecycle flow
 

@@ -23,6 +23,7 @@ from cognityx_inference.contracts import (
 )
 from cognityx_inference.errors import (
     ContextWindowExceeded,
+    InferenceContractError,
     ModelMetadataUnavailableError,
     ProviderCredentialMissing,
     ProviderRequestError,
@@ -31,6 +32,7 @@ from cognityx_inference.errors import (
 )
 from cognityx_inference.lifecycle import ModelIdentity
 from cognityx_inference.providers.diagnostics import test_provider
+from cognityx_inference.research import InferencePairRequest
 from cognityx_inference.service import InferenceService, ModelNotLoadedError
 
 
@@ -193,6 +195,7 @@ def create_app(
         try:
             normalized = InferenceRequest(
                 model=str(payload["model"]),
+                model_revision=extension.get("model_revision"),
                 messages=tuple(payload.get("messages") or ()),
                 tools=tuple(payload.get("tools") or ()),
                 tool_choice=payload.get("tool_choice"),
@@ -201,6 +204,8 @@ def create_app(
                 provider=str(extension.get("provider", "local")),
                 backend=str(extension.get("backend", "vllm")),
                 profile=str(extension.get("profile", "bf16")),
+                adapter_manifest_uri=extension.get("adapter_manifest_uri"),
+                adapter_purpose=extension.get("adapter_purpose"),
                 load_policy=(
                     LoadPolicy(extension.get("load_policy", "auto"))
                     if extension
@@ -284,6 +289,8 @@ def create_app(
                     "provider_status": exc.status,
                 },
             ) from exc
+        except InferenceContractError as exc:
+            raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
         except (KeyError, ValueError, RuntimeError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {
@@ -313,6 +320,22 @@ def create_app(
             },
             "cognityx": response.to_dict(),
         }
+
+    @app.post("/v1/cognityx/research/pairs")
+    def research_pair(payload: dict[str, Any], request: Request) -> dict[str, Any]:
+        runner = service.research_runner
+        if runner is None:
+            raise HTTPException(
+                status_code=503, detail="Research execution is unavailable."
+            )
+        try:
+            return runner.run(
+                InferencePairRequest.from_dict(payload), owner_id=owner_id(request)
+            )
+        except InferenceContractError as exc:
+            raise HTTPException(status_code=422, detail=exc.to_dict()) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/v1/cognityx/models/load")
     def load(payload: dict[str, Any], request: Request) -> dict[str, Any]:

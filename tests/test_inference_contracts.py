@@ -27,6 +27,23 @@ def test_request_accepts_common_and_extension_parameters() -> None:
     assert request.client_type == "openai"
 
 
+def test_adapter_request_requires_explicit_evaluation_purpose() -> None:
+    with pytest.raises(ValueError, match="adapter_purpose='evaluation'"):
+        InferenceRequest(
+            model="model-a",
+            prompt="hello",
+            adapter_manifest_uri="storage://local-main/models/adapter/manifest.json",
+        )
+
+    request = InferenceRequest(
+        model="model-a",
+        prompt="hello",
+        adapter_manifest_uri="storage://local-main/models/adapter/manifest.json",
+        adapter_purpose="evaluation",
+    )
+    assert request.adapter_purpose.value == "evaluation"
+
+
 def test_request_requires_exactly_one_input_shape() -> None:
     with pytest.raises(ValueError, match="messages or prompt"):
         InferenceRequest(model="model-a")
