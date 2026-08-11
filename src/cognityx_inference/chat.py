@@ -30,6 +30,7 @@ class ChatSettings:
     log_probabilities: bool = False
     top_log_probabilities: int | None = None
     reasoning: bool = False
+    thinking: str = "disabled"
     timeout_seconds: float | None = None
     first_token_timeout_seconds: float | None = None
     no_token_progress_timeout_seconds: float | None = None
@@ -42,6 +43,7 @@ class ChatSettings:
             "seed": self.seed, "log_probabilities": self.log_probabilities,
             "top_log_probabilities": self.top_log_probabilities,
             "reasoning": {"enabled": True} if self.reasoning else {},
+            "thinking": self.thinking,
             "timeout_seconds": self.timeout_seconds,
             "first_token_timeout_seconds": self.first_token_timeout_seconds,
             "no_token_progress_timeout_seconds": self.no_token_progress_timeout_seconds,

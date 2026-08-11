@@ -21,7 +21,7 @@ from cognityx_inference.capabilities import (
     hardware_fingerprint,
     new_profile_id,
 )
-from cognityx_inference.contracts import InferenceRequest, LoadPolicy
+from cognityx_inference.contracts import InferenceRequest, LoadPolicy, ThinkingMode
 from cognityx_inference.lifecycle import ModelIdentity, ModelManager
 from cognityx_inference.service import _backend_version
 from cognityx_inference.storage import (
@@ -518,7 +518,11 @@ class BoundaryDiscoveryCoordinator:
             load_policy=LoadPolicy.REQUIRE_LOADED, max_tokens=int(candidate["generation_length"]),
             temperature=self.config.temperature, top_p=self.config.top_p,
             top_k=self.config.top_k, min_p=self.config.min_p, seed=self.config.seed,
-            reasoning={"enabled": True} if self.config.enable_thinking else {},
+            thinking=(
+                ThinkingMode.ENABLED
+                if self.config.enable_thinking
+                else ThinkingMode.DISABLED
+            ),
         )
 
     def _workload_evidence(self) -> dict[str, Any]:

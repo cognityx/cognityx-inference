@@ -225,6 +225,7 @@ class CognityxInferenceClient:
                 "top_k": request.top_k,
                 "min_p": request.min_p,
                 "reasoning": dict(request.reasoning),
+                "thinking": request.thinking.value,
                 "timeouts": {
                     "request": request.timeout_seconds,
                     "first_token": request.first_token_timeout_seconds,

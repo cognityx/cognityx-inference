@@ -49,6 +49,7 @@ Cognityx-specific routing and runtime fields are carried under `cognityx`:
     "required_context_length": 8192,
     "top_k": 20,
     "min_p": 0.05,
+    "thinking": "disabled",
     "reasoning": {},
     "timeouts": {
       "request": 300,
@@ -75,6 +76,9 @@ Important behavior:
 - unsupported fields are reported as unavailable, not invented
 - adapter selection is local-vLLM-only, accepts one verified Training manifest,
   and never falls back silently to base inference
+- `thinking` is `disabled` by default; `enabled` requires a real model/backend
+  capability and is applied before generation through the model's native prompt
+  mechanism
 
 ### Success Response
 
@@ -139,6 +143,11 @@ and a `research_context` object. It returns the immutable
 fingerprint validation succeed. See the
 [adapter handoff guide](adapter-handoff.md) for the full request vocabulary and
 Storage layout.
+
+Research-pair requests use `thinking="disabled"` and
+`max_output_tokens=512` when those fields are omitted. The resolved thinking
+behavior is part of the base/adapter runtime fingerprint, while the certified
+context budget still limits the combined input and output allocation.
 
 ## Management API
 

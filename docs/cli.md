@@ -72,9 +72,17 @@ uv run cognityx-inference infer \
   --backend vllm \
   --profile int4 \
   --prompt "Explain KV cache precision." \
+  --no-thinking \
   --max-output-tokens 256 \
   --discovery-policy ask
 ```
+
+Thinking is disabled when neither flag is supplied. Add `--thinking` only when
+the selected model and backend expose a real native control. Qwen3 uses its
+tokenizer chat-template switch rather than an output-text rewrite. The normal
+`infer`, interactive `chat`, and `research pair` commands all accept
+`--thinking` and `--no-thinking`; a research pair defaults to no thinking and a
+512-token output allowance.
 
 For an explicitly experimental Training adapter, add
 `--adapter-manifest storage://.../adapter-manifest.json` and

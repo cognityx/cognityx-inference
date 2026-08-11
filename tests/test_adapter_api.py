@@ -58,6 +58,24 @@ def test_existing_no_adapter_http_request_remains_compatible() -> None:
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "OK"
     assert service.request.adapter_manifest_uri is None
+    assert service.request.thinking.value == "disabled"
+
+
+def test_http_propagates_explicit_thinking() -> None:
+    service = FakeService()
+    client = TestClient(create_app(service))
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "model-a",
+            "messages": [{"role": "user", "content": "hello"}],
+            "cognityx": {"thinking": "enabled"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.request.thinking.value == "enabled"
 
 
 def test_http_adapter_fields_and_research_pair_are_additive() -> None:

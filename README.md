@@ -11,6 +11,10 @@ reproducible base/adapter research pairs. See the
 [adapter handoff guide](docs/adapter-handoff.md) for the application map,
 ownership boundaries, and copy-paste GPU smoke workflow.
 
+Model-native thinking is an explicit request setting and is disabled by default.
+For Qwen3 it is controlled upstream through the tokenizer chat template, and the
+resolved behavior is retained in reproducibility evidence.
+
 The platform adds normalized inference contracts, an OpenAI-compatible API and
 client, explicit local-model lifecycle leases, configuration-driven local and
 commercial provider adapters, logical-key persistence through

@@ -473,6 +473,13 @@ def test_pair_rejects_runtime_mismatch_and_publishes_failure(tmp_path) -> None:
         response = original(request, *args, **kwargs)
         if request.adapter_manifest_uri:
             changed = dict(response.extensions["runtime_fingerprint"])
+            decoding = dict(changed["decoding"])
+            decoding["thinking"] = {
+                "requested": "enabled",
+                "effective": "enabled",
+                "mechanism": "chat_template_kwarg:enable_thinking",
+            }
+            changed["decoding"] = decoding
             changed["sha256"] = "different"
             response = replace(
                 response,

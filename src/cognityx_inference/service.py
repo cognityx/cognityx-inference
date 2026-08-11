@@ -31,6 +31,8 @@ from cognityx_inference.contracts import (
     InferenceRequest,
     InferenceResponse,
     LoadPolicy,
+    ThinkingMode,
+    ThinkingResolution,
 )
 from cognityx_inference.errors import AdapterError
 from cognityx_inference.lifecycle import ModelManager
@@ -110,6 +112,7 @@ class InferenceService:
             except KeyError as exc:
                 raise ValueError(f"Unknown provider: {request.provider}") from exc
             self._validate_capabilities(request, provider)
+            thinking_resolution = self._resolve_thinking(request, provider)
             context_profile = getattr(provider, "context_profile", lambda model: None)(
                 request.model
             )
@@ -133,6 +136,13 @@ class InferenceService:
                         "automatic token budgeting was unavailable.",
                     ),
                 )
+            response = replace(
+                response,
+                extensions={
+                    **response.extensions,
+                    "thinking": thinking_resolution.to_dict(),
+                },
+            )
         else:
             selected_adapter = self._resolve_adapter(request)
             canonical_model = resolve_local_model_reference(request.model).resolved
@@ -163,6 +173,7 @@ class InferenceService:
             with lease as backend:
                 self._validate_capabilities(request, backend)
                 runtime_identity = self._runtime_identity(backend)
+                thinking_resolution = self._resolve_thinking(request, backend)
                 self._validate_requested_revision(request, runtime_identity)
                 compatibility = (
                     self.adapter_repository.compatibility(
@@ -198,8 +209,12 @@ class InferenceService:
                     extensions={
                         **response.extensions,
                         "runtime_fingerprint": _runtime_fingerprint(
-                            backend, dispatched_request, runtime_identity
+                            backend,
+                            dispatched_request,
+                            runtime_identity,
+                            thinking_resolution,
                         ),
+                        "thinking": thinking_resolution.to_dict(),
                         **(
                             {
                                 "adapter": selected_adapter.public_identity(),
@@ -240,6 +255,24 @@ class InferenceService:
         if resolver is None:
             return {"name": getattr(backend, "model_name", None)}
         return dict(resolver())
+
+    @staticmethod
+    def _resolve_thinking(
+        request: InferenceRequest, backend: Any
+    ) -> ThinkingResolution:
+        resolver = getattr(backend, "resolve_thinking", None)
+        if resolver is not None:
+            return resolver(request.thinking)
+        if request.thinking is ThinkingMode.ENABLED:
+            raise ValueError(
+                "Explicitly requested thinking is unsupported by "
+                f"{request.client_type}/{request.backend}"
+            )
+        return ThinkingResolution(
+            requested=request.thinking,
+            effective=ThinkingMode.DISABLED,
+            mechanism="ordinary_generation:no_thinking_capability",
+        )
 
     @staticmethod
     def _validate_requested_revision(
@@ -403,6 +436,7 @@ class InferenceService:
                 request.log_probabilities or request.top_log_probabilities is not None
             ),
             "reasoning": bool(request.reasoning),
+            "thinking": request.thinking is ThinkingMode.ENABLED,
             "adapters": request.adapter_manifest_uri is not None,
         }
         unsupported = [
@@ -436,6 +470,7 @@ def _runtime_fingerprint(
     backend: Any,
     request: InferenceRequest,
     identity: Mapping[str, Any],
+    thinking: ThinkingResolution,
 ) -> dict[str, Any]:
     """Describe the runtime inputs that must match across a paired run."""
     runtime = dict(getattr(backend, "runtime", {}) or {})
@@ -460,6 +495,7 @@ def _runtime_fingerprint(
             "stop": list(request.stop),
             "seed": request.seed,
             "reasoning": dict(request.reasoning),
+            "thinking": thinking.to_dict(),
             "effective_generation": effective_generation,
         },
         "input_behavior": {

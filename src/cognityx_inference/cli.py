@@ -83,6 +83,25 @@ def _add_output_format(
     )
 
 
+def _add_thinking_control(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--thinking",
+        dest="thinking",
+        action="store_const",
+        const="enabled",
+        help="Enable model-native thinking when the selected model supports it.",
+    )
+    group.add_argument(
+        "--no-thinking",
+        dest="thinking",
+        action="store_const",
+        const="disabled",
+        help="Disable model-native thinking (the default).",
+    )
+    parser.set_defaults(thinking="disabled")
+
+
 def build_service(
     configuration: InferenceConfiguration | None = None,
 ) -> InferenceService:
@@ -454,6 +473,7 @@ def main(argv: list[str] | None = None) -> None:
         dest="stream",
         help="Wait for completion and print the full JSON response.",
     )
+    _add_thinking_control(infer)
     chat = subparsers.add_parser(
         "chat", help="Interactive conversation-aware local chat."
     )
@@ -478,6 +498,7 @@ def main(argv: list[str] | None = None) -> None:
     chat.add_argument("--log-probabilities", action="store_true")
     chat.add_argument("--top-log-probabilities", type=int)
     chat.add_argument("--reasoning", action="store_true")
+    _add_thinking_control(chat)
     chat.add_argument("--timeout", type=float)
     chat.add_argument("--first-token-timeout", type=float)
     chat.add_argument("--no-token-progress-timeout", type=float)
@@ -518,7 +539,8 @@ def main(argv: list[str] | None = None) -> None:
     pair.add_argument("--temperature", type=float, default=0.0)
     pair.add_argument("--top-p", type=float, default=1.0)
     pair.add_argument("--top-k", type=int)
-    pair.add_argument("--max-output-tokens", type=int, default=128)
+    pair.add_argument("--max-output-tokens", type=int, default=512)
+    _add_thinking_control(pair)
     pair.add_argument("--stop", action="append", default=[])
     pair.add_argument("--required-context-length", type=int)
     _add_output_format(pair, default="json")
@@ -742,6 +764,7 @@ def main(argv: list[str] | None = None) -> None:
                         "top_p": args.top_p,
                         "top_k": args.top_k,
                         "max_output_tokens": args.max_output_tokens,
+                        "thinking": args.thinking,
                         "stop": args.stop,
                         "required_context_length": args.required_context_length,
                         "research_context": {
@@ -795,6 +818,7 @@ def main(argv: list[str] | None = None) -> None:
                         "backend": args.backend,
                         "profile": args.profile,
                         "max_output_tokens": args.max_output_tokens,
+                        "thinking": args.thinking,
                         "required_context_length": args.required_context_length,
                         "discovery_policy": args.discovery_policy,
                         "adapter_manifest_uri": args.adapter_manifest,
@@ -859,6 +883,7 @@ def _run_chat(args: Any, client: CognityxInferenceClient) -> None:
             log_probabilities=args.log_probabilities,
             top_log_probabilities=args.top_log_probabilities,
             reasoning=args.reasoning,
+            thinking=args.thinking,
             timeout_seconds=args.timeout,
             first_token_timeout_seconds=args.first_token_timeout,
             no_token_progress_timeout_seconds=args.no_token_progress_timeout,
