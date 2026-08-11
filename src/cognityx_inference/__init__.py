@@ -20,6 +20,8 @@ from cognityx_inference.contracts import (
     TokenDetail,
     TokenBudget,
     TokenUsage,
+    ThinkingMode,
+    ThinkingResolution,
 )
 from cognityx_inference.research import InferencePairRequest, ResearchContext
 from cognityx_inference.lifecycle import (
@@ -67,4 +69,6 @@ __all__ = [
     "TokenBudget",
     "TokenDetail",
     "TokenUsage",
+    "ThinkingMode",
+    "ThinkingResolution",
 ]

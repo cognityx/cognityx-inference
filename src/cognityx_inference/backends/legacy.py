@@ -15,6 +15,8 @@ from cognityx_inference.contracts import (
     InferenceResponse,
     InferenceTimings,
     ModelCapabilities,
+    ThinkingMode,
+    ThinkingResolution,
     TokenUsage,
 )
 from cognityx_inference.errors import ModelMetadataUnavailableError
@@ -39,6 +41,7 @@ def _settings(request: InferenceRequest) -> GenerationSettings:
     defaults = GenerationSettings()
     values: dict[str, Any] = {}
     mapping = {
+        "enable_thinking": request.thinking is ThinkingMode.ENABLED,
         "temperature": request.temperature,
         "top_p": request.top_p,
         "top_k": request.top_k,
@@ -67,6 +70,7 @@ class TransformersBackend:
         top_k=True,
         seed=True,
         local_telemetry=True,
+        thinking=True,
     )
 
     def __init__(
@@ -195,6 +199,7 @@ class TransformersBackend:
                 tools=list(request.tools) or None,
                 tokenize=True,
                 add_generation_prompt=True,
+                enable_thinking=request.thinking is ThinkingMode.ENABLED,
             )
             base = len(token_ids)
             metadata = {
@@ -227,6 +232,32 @@ class TransformersBackend:
                 )
             except (AttributeError, TypeError, ValueError):
                 return None
+
+    def resolve_thinking(self, requested: ThinkingMode) -> ThinkingResolution:
+        """Resolve model-native thinking from the active chat template."""
+        self.load()
+        assert self.engine is not None
+        processor = getattr(self.engine, "processor", None)
+        tokenizer = getattr(self.engine, "tokenizer", None)
+        template = getattr(processor, "chat_template", None) or getattr(
+            tokenizer, "chat_template", None
+        )
+        if isinstance(template, str) and "enable_thinking" in template:
+            return ThinkingResolution(
+                requested=requested,
+                effective=requested,
+                mechanism="chat_template_kwarg:enable_thinking",
+            )
+        if requested is ThinkingMode.ENABLED:
+            raise ValueError(
+                f"Model {self.model_name!r} does not expose a native thinking toggle "
+                "through its active chat template"
+            )
+        return ThinkingResolution(
+            requested=requested,
+            effective=ThinkingMode.DISABLED,
+            mechanism="ordinary_generation:no_thinking_capability",
+        )
 
     def runtime_identity(self) -> dict[str, Any]:
         self.load()

@@ -57,6 +57,61 @@ def _model_metadata_http_exception(exc: ModelMetadataUnavailableError) -> Any:
     )
 
 
+def _request_from_chat_payload(payload: dict[str, Any]) -> InferenceRequest:
+    """Normalize the OpenAI-compatible HTTP body into the public contract."""
+    extension = payload.get("cognityx") or {}
+    timeouts = extension.get("timeouts") or {}
+    return InferenceRequest(
+        model=str(payload["model"]),
+        model_revision=extension.get("model_revision"),
+        messages=tuple(payload.get("messages") or ()),
+        tools=tuple(payload.get("tools") or ()),
+        tool_choice=payload.get("tool_choice"),
+        response_format=payload.get("response_format"),
+        client_type=str(extension.get("client_type", "openai")),
+        provider=str(extension.get("provider", "local")),
+        backend=str(extension.get("backend", "vllm")),
+        profile=str(extension.get("profile", "bf16")),
+        adapter_manifest_uri=extension.get("adapter_manifest_uri"),
+        adapter_purpose=extension.get("adapter_purpose"),
+        load_policy=(
+            LoadPolicy(extension.get("load_policy", "auto"))
+            if extension
+            else LoadPolicy.REQUIRE_LOADED
+        ),
+        discovery_policy=DiscoveryPolicy(
+            extension.get("discovery_policy", "require_existing")
+        ),
+        required_context_length=extension.get("required_context_length"),
+        temperature=payload.get("temperature"),
+        top_p=payload.get("top_p"),
+        top_k=extension.get("top_k"),
+        min_p=extension.get("min_p"),
+        max_output_tokens=(
+            extension.get("max_output_tokens")
+            if extension.get("max_output_tokens") is not None
+            else payload.get("max_completion_tokens", payload.get("max_tokens"))
+        ),
+        stop=tuple(
+            [payload["stop"]]
+            if isinstance(payload.get("stop"), str)
+            else payload.get("stop") or ()
+        ),
+        seed=payload.get("seed"),
+        log_probabilities=bool(payload.get("logprobs", False)),
+        top_log_probabilities=payload.get("top_logprobs"),
+        reasoning=extension.get("reasoning") or {},
+        thinking=extension.get("thinking", "disabled"),
+        stream=bool(payload.get("stream", False)),
+        timeout_seconds=timeouts.get("request"),
+        first_token_timeout_seconds=timeouts.get("first_token"),
+        no_token_progress_timeout_seconds=timeouts.get("no_token_progress"),
+        execution_context=extension.get("execution_context") or {},
+        request_metadata=extension.get("request_metadata") or {},
+        extensions=extension.get("extensions") or {},
+    )
+
+
 def create_app(
     service: InferenceService,
     principal_resolver: PrincipalResolver | None = None,
@@ -190,57 +245,8 @@ def create_app(
 
     @app.post("/v1/chat/completions")
     def chat_completions(payload: dict[str, Any], request: Request) -> Any:
-        extension = payload.get("cognityx") or {}
-        timeouts = extension.get("timeouts") or {}
         try:
-            normalized = InferenceRequest(
-                model=str(payload["model"]),
-                model_revision=extension.get("model_revision"),
-                messages=tuple(payload.get("messages") or ()),
-                tools=tuple(payload.get("tools") or ()),
-                tool_choice=payload.get("tool_choice"),
-                response_format=payload.get("response_format"),
-                client_type=str(extension.get("client_type", "openai")),
-                provider=str(extension.get("provider", "local")),
-                backend=str(extension.get("backend", "vllm")),
-                profile=str(extension.get("profile", "bf16")),
-                adapter_manifest_uri=extension.get("adapter_manifest_uri"),
-                adapter_purpose=extension.get("adapter_purpose"),
-                load_policy=(
-                    LoadPolicy(extension.get("load_policy", "auto"))
-                    if extension
-                    else LoadPolicy.REQUIRE_LOADED
-                ),
-                discovery_policy=DiscoveryPolicy(
-                    extension.get("discovery_policy", "require_existing")
-                ),
-                required_context_length=extension.get("required_context_length"),
-                temperature=payload.get("temperature"),
-                top_p=payload.get("top_p"),
-                top_k=extension.get("top_k"),
-                min_p=extension.get("min_p"),
-                max_output_tokens=(
-                    extension.get("max_output_tokens")
-                    if extension.get("max_output_tokens") is not None
-                    else payload.get("max_completion_tokens", payload.get("max_tokens"))
-                ),
-                stop=tuple(
-                    [payload["stop"]]
-                    if isinstance(payload.get("stop"), str)
-                    else payload.get("stop") or ()
-                ),
-                seed=payload.get("seed"),
-                log_probabilities=bool(payload.get("logprobs", False)),
-                top_log_probabilities=payload.get("top_logprobs"),
-                reasoning=extension.get("reasoning") or {},
-                stream=bool(payload.get("stream", False)),
-                timeout_seconds=timeouts.get("request"),
-                first_token_timeout_seconds=timeouts.get("first_token"),
-                no_token_progress_timeout_seconds=timeouts.get("no_token_progress"),
-                execution_context=extension.get("execution_context") or {},
-                request_metadata=extension.get("request_metadata") or {},
-                extensions=extension.get("extensions") or {},
-            )
+            normalized = _request_from_chat_payload(payload)
             if normalized.stream:
                 return StreamingResponse(
                     _stream_chat(service, normalized, owner_id(request)),

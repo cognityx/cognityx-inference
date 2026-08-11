@@ -43,6 +43,30 @@ class AdapterPurpose(StrEnum):
     EVALUATION = "evaluation"
 
 
+class ThinkingMode(StrEnum):
+    """Whether a supporting model may use its native thinking behavior."""
+
+    DISABLED = "disabled"
+    ENABLED = "enabled"
+
+
+@dataclass(frozen=True, slots=True)
+class ThinkingResolution:
+    """Requested and effective thinking behavior for one inference request."""
+
+    requested: ThinkingMode
+    effective: ThinkingMode
+    mechanism: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return the stable public representation used in evidence."""
+        return {
+            "requested": self.requested.value,
+            "effective": self.effective.value,
+            "mechanism": self.mechanism,
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class TokenDetail:
     """One generated token and optional provider-reported measurements."""
@@ -109,6 +133,7 @@ class ModelCapabilities:
     vision: bool = False
     local_telemetry: bool = False
     adapters: bool = False
+    thinking: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +168,7 @@ class InferenceRequest:
     seed: int | None = None
     log_probabilities: bool = False
     top_log_probabilities: int | None = None
+    thinking: ThinkingMode = ThinkingMode.DISABLED
     reasoning: JSON = field(default_factory=dict)
     stream: bool = False
     timeout_seconds: float | None = None
@@ -165,6 +191,8 @@ class InferenceRequest:
             object.__setattr__(
                 self, "adapter_purpose", AdapterPurpose(self.adapter_purpose)
             )
+        if isinstance(self.thinking, str):
+            object.__setattr__(self, "thinking", ThinkingMode(self.thinking))
         if not self.model.strip():
             raise ValueError("model cannot be empty")
         if not self.client_type.strip():

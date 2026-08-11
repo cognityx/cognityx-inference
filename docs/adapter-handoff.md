@@ -101,6 +101,37 @@ The same fields are available as `adapter_manifest_uri` and
 `adapter_purpose="evaluation"` in `InferenceRequest`, the Python client, and the
 `cognityx` object in `POST /v1/chat/completions`.
 
+## Thinking and controlled generation
+
+Some models can spend generated tokens reasoning before they give a final
+answer. Cognityx calls this behavior thinking. It is disabled by default so a
+short factual evaluation does not accidentally spend its whole output allowance
+inside a reasoning section. Use `--thinking` or `thinking="enabled"` when an
+experiment deliberately studies that behavior; `--no-thinking` is the explicit
+disabled form.
+
+For the current Qwen3 tokenizer, Cognityx passes the model-native
+`enable_thinking` value into the active chat template. Disabled Qwen3 prompts
+contain the template's empty `<think>...</think>` transition before the answer;
+enabled prompts leave the model free to produce the reasoning section. Cognityx
+does not remove reasoning text after generation and does not pretend an
+unsupported backend has this control. Explicitly enabling thinking on an
+unsupported backend or model fails before generation.
+
+The response and runtime fingerprint record the requested mode, effective mode,
+and result-changing mechanism. Both arms of a research pair receive one shared
+thinking setting, and pair validation rejects different effective fingerprints.
+Prediction rows retain this evidence together with `finish_reason`. In
+particular, `finish_reason="length"` means the candidate exhausted its output
+allowance; a later Evaluator can classify that output as truncated without
+Inference attempting a correctness score.
+
+The general inference API keeps its existing configurable output behavior. The
+controlled research-pair default is 512 output tokens. Existing certified
+context budgeting still verifies that input tokens, the requested output, and
+the safety reserve fit the certified context; this change does not increase the
+certified 40,960-token Qwen3-8B boundary.
+
 ## Immutable run and pair records
 
 An Inference Run (`cognityx.inference.run/v1`) is one batch over a frozen input.
@@ -196,7 +227,8 @@ uv run cognityx-inference research pair \
   --seed 0 \
   --temperature 0 \
   --top-p 1 \
-  --max-output-tokens 64 \
+  --no-thinking \
+  --max-output-tokens 512 \
   --format json
 
 uv run cognityx-inference infer \

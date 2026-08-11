@@ -15,6 +15,7 @@ from cognityx_inference.contracts import (
     InferenceRequest,
     InferenceResponse,
     LoadPolicy,
+    ThinkingMode,
 )
 from cognityx_inference.errors import ResearchRunError
 from cognityx_inference.tracking import NoOpTracker, SafeTracker
@@ -208,7 +209,8 @@ class InferencePairRequest:
     temperature: float | None = 0.0
     top_p: float | None = 1.0
     top_k: int | None = None
-    max_output_tokens: int = 128
+    max_output_tokens: int = 512
+    thinking: ThinkingMode = ThinkingMode.DISABLED
     stop: tuple[str, ...] = ()
     required_context_length: int | None = None
     runtime: Mapping[str, Any] = field(default_factory=dict)
@@ -229,7 +231,8 @@ class InferencePairRequest:
             temperature=value.get("temperature", 0.0),
             top_p=value.get("top_p", 1.0),
             top_k=value.get("top_k"),
-            max_output_tokens=int(value.get("max_output_tokens", 128)),
+            max_output_tokens=int(value.get("max_output_tokens", 512)),
+            thinking=ThinkingMode(value.get("thinking", "disabled")),
             stop=tuple(value.get("stop") or ()),
             required_context_length=value.get("required_context_length"),
             runtime=dict(value.get("runtime") or {}),
@@ -496,6 +499,7 @@ class InferencePairRunner:
             top_p=request.top_p,
             top_k=request.top_k,
             max_output_tokens=request.max_output_tokens,
+            thinking=request.thinking,
             stop=request.stop,
             seed=request.context.seed,
             required_context_length=request.required_context_length,
@@ -537,6 +541,7 @@ class InferencePairRunner:
             "input_tokens": response.usage.prompt_tokens,
             "output_tokens": response.usage.completion_tokens,
             "finish_reason": response.finish_reason.value,
+            "thinking": dict(response.extensions.get("thinking") or {}),
             "latency_seconds": response.timings.latency_seconds,
             "time_to_first_token_seconds": (
                 response.timings.time_to_first_token_seconds
