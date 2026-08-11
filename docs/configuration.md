@@ -139,6 +139,12 @@ The main boundary-evaluation configuration lives in:
 It is designed to mirror the way Cognityx training receives explicit candidate
 values per axis.
 
+The long-running Inference service does not read this source-checkout example
+when it starts. It uses the safe finite values built into `DiscoveryConfig`, so
+an installed wheel starts the same way even when the repository's `examples/`
+directory is not present. Pass the example explicitly to the boundary command
+when you want to run that particular search recipe.
+
 ## Example Structure
 
 ```toml

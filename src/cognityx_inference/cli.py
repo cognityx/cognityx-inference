@@ -137,12 +137,7 @@ def build_service(
         profiles,
         BoundaryArtifactRepository(storage),
         inventory,
-        config=DiscoveryConfig.from_toml(
-            Path(__file__).resolve().parents[2]
-            / "examples"
-            / "boundary"
-            / "config.toml"
-        ),
+        config=DiscoveryConfig(),
         jobs=JobRepository(
             os.environ.get("COGNITYX_JOBS_DATABASE", "cognityx_jobs.sqlite3")
         ),
