@@ -45,6 +45,23 @@ uv run cognityx-inference providers test --provider openai
 uv run cognityx-inference providers test --all
 ```
 
+Provider commands that already show a table accept `--human` as an explicit
+alias for that established presentation. Commands whose unchanged default is
+JSON use `--human` for a deterministic labelled view of the same safe result:
+
+```bash
+uv run cognityx-inference providers status --human
+uv run cognityx-inference providers models --provider openai --refresh --human
+uv run cognityx-inference providers capabilities \
+  --provider openai --model gpt-4.1-mini --human
+uv run cognityx-inference providers test --provider openai --human
+uv run cognityx-inference providers setup --human
+```
+
+`--human` and the existing `--json` selector are mutually exclusive and are
+rejected during argument parsing before configuration or provider construction.
+No additional provider call is made for presentation.
+
 An absent credential is reported as `not_configured`; Cognityx does not attempt
 the network. Provider errors are reduced to safe categories such as
 `authentication_failed`, `permission_denied`, `rate_limited`,

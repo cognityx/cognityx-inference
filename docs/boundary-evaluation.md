@@ -104,6 +104,7 @@ The boundary planning CLI shows the finite search plan:
 
 ```bash
 uv run cognityx-boundary --config examples/boundary/config.toml --plan
+uv run cognityx-boundary --config examples/boundary/config.toml --plan --human
 ```
 
 This is useful for reviewing the exact Cartesian combinations before starting a

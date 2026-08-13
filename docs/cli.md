@@ -118,6 +118,11 @@ Use `--manager-url http://127.0.0.1:8000` when the manager is not at its
 default URL. `server watch` prints durable startup events and can reconnect
 with `--after <sequence>`.
 
+`server status --human` renders the same finite manager response as labelled
+sections. `server watch --human` renders each event immediately while retaining
+its sequence and replay cursor; the unchanged default remains one compact JSON
+event per line.
+
 The earlier `cognityx-inference serve` command remains the direct worker mode.
 Use it when an external supervisor already owns the worker lifecycle.
 
@@ -419,6 +424,11 @@ uv run cognityx-inference certified-profiles show <profile-id> \
 uv run cognityx-inference discovery watch <job-id> \
   --format json
 ```
+
+The existing `--format table|detail|json` contract remains authoritative for
+model, discovery, and certified-profile commands. Those established human
+renderers are not replaced by the additive `--human` option used for
+configuration, manager status, and provider gaps.
 
 `discovery watch` otherwise shows one concise line per event with trial
 progress, context, generation length, KV-cache precision, elapsed time,

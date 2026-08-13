@@ -29,7 +29,7 @@ from cognityx_inference.errors import ProviderRequestError
 from cognityx_inference.lifecycle import ModelManager
 from cognityx_inference.manager import InferenceManager
 from cognityx_inference.manager_api import create_manager_app
-from cognityx_inference.presentation import render
+from cognityx_inference.presentation import render, render_human
 from cognityx_inference.providers import (
     XAIProvider,
 )
@@ -235,7 +235,7 @@ def _provider_setup(configuration: InferenceConfiguration, args: Any) -> None:
     if args.create_template:
         if not args.yes:
             result["reason"] = "Use --yes to confirm empty template creation."
-            print(json.dumps(result, indent=2, sort_keys=True))
+            _write_structured(result, human=args.human)
             raise SystemExit(2)
         if target.exists():
             result["reason"] = "Target already exists; it was not overwritten."
@@ -255,7 +255,28 @@ def _provider_setup(configuration: InferenceConfiguration, args: Any) -> None:
             except OSError:
                 pass
             result["created"] = True
-    print(json.dumps(result, indent=2, sort_keys=True))
+    _write_structured(result, human=args.human)
+
+
+def _add_json_or_human(parser: argparse.ArgumentParser) -> None:
+    presentation = parser.add_mutually_exclusive_group()
+    presentation.add_argument("--json", action="store_true")
+    presentation.add_argument("--human", action="store_true")
+
+
+def _write_structured(
+    value: Any,
+    *,
+    human: bool,
+    sort_keys: bool = True,
+    flush: bool = False,
+) -> None:
+    output = (
+        render_human(value)
+        if human
+        else json.dumps(value, indent=2, sort_keys=sort_keys)
+    )
+    print(output, flush=flush)
 
 
 def _test_local_provider(
@@ -361,6 +382,7 @@ def main(argv: list[str] | None = None) -> None:
     for name in ("show", "validate"):
         selected = config_commands.add_parser(name)
         selected.add_argument("--config", type=Path)
+        selected.add_argument("--human", action="store_true")
     serve = subparsers.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -382,9 +404,11 @@ def main(argv: list[str] | None = None) -> None:
     server_stop.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
     server_status = server_commands.add_parser("status")
     server_status.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
+    server_status.add_argument("--human", action="store_true")
     server_watch = server_commands.add_parser("watch")
     server_watch.add_argument("--manager-url", default=DEFAULT_MANAGER_URL)
     server_watch.add_argument("--after", type=int, default=0)
+    server_watch.add_argument("--human", action="store_true")
 
     providers_parser = subparsers.add_parser("providers")
     provider_commands = providers_parser.add_subparsers(
@@ -393,18 +417,18 @@ def main(argv: list[str] | None = None) -> None:
     for command in ("list", "status"):
         selected = provider_commands.add_parser(command)
         selected.add_argument("--config", type=Path)
-        selected.add_argument("--json", action="store_true")
+        _add_json_or_human(selected)
     provider_models = provider_commands.add_parser("models")
     provider_models.add_argument("--config", type=Path)
     provider_models.add_argument("--provider", required=True)
     provider_models.add_argument("--refresh", action="store_true")
     provider_models.add_argument("--timeout", type=float, default=20)
-    provider_models.add_argument("--json", action="store_true")
+    _add_json_or_human(provider_models)
     provider_capabilities = provider_commands.add_parser("capabilities")
     provider_capabilities.add_argument("--config", type=Path)
     provider_capabilities.add_argument("--provider", required=True)
     provider_capabilities.add_argument("--model", required=True)
-    provider_capabilities.add_argument("--json", action="store_true")
+    _add_json_or_human(provider_capabilities)
     provider_test = provider_commands.add_parser("test")
     provider_test.add_argument("--config", type=Path)
     selection = provider_test.add_mutually_exclusive_group(required=True)
@@ -414,7 +438,7 @@ def main(argv: list[str] | None = None) -> None:
     provider_test.add_argument("--stream", action="store_true")
     provider_test.add_argument("--structured-output", action="store_true")
     provider_test.add_argument("--timeout", type=float, default=30)
-    provider_test.add_argument("--json", action="store_true")
+    _add_json_or_human(provider_test)
     provider_test.add_argument("--verbose-safe", action="store_true")
     provider_test.add_argument("--start-local", action="store_true")
     provider_test.add_argument("--stop-local", action="store_true")
@@ -425,6 +449,7 @@ def main(argv: list[str] | None = None) -> None:
     provider_setup.add_argument("--provider", choices=PRIMARY_PROVIDERS[1:])
     provider_setup.add_argument("--create-template", action="store_true")
     provider_setup.add_argument("--yes", action="store_true")
+    provider_setup.add_argument("--human", action="store_true")
 
     model = subparsers.add_parser("model")
     model_commands = model.add_subparsers(dest="model_command", required=True)
@@ -609,9 +634,9 @@ def main(argv: list[str] | None = None) -> None:
                 "warnings": [],
                 "errors": [{"code": "configuration_invalid", "message": str(exc)}],
             }
-            print(json.dumps(report, indent=2, sort_keys=True))
+            _write_structured(report, human=args.human)
             raise SystemExit(2) from None
-        print(json.dumps(report, indent=2, sort_keys=True))
+        _write_structured(report, human=args.human)
         return
     if args.command == "manager":
         configuration = InferenceConfiguration.load(args.config)
@@ -640,12 +665,20 @@ def main(argv: list[str] | None = None) -> None:
                 value = client.server_status()
             else:
                 for event in client.stream_server_events(after=args.after):
-                    print(json.dumps(event, sort_keys=True), flush=True)
+                    output = (
+                        render_human(event)
+                        if args.human
+                        else json.dumps(event, sort_keys=True)
+                    )
+                    print(output, flush=True)
                 return
         except (InferenceAPIError, RuntimeError, OSError) as exc:
             print(str(exc), file=sys.stderr)
             raise SystemExit(2) from None
-        print(json.dumps(value, indent=2, sort_keys=True))
+        _write_structured(
+            value,
+            human=(args.server_command == "status" and args.human),
+        )
         return
     if args.command == "providers":
         configuration = InferenceConfiguration.load(args.config)
@@ -676,28 +709,25 @@ def main(argv: list[str] | None = None) -> None:
                     "status": "failed",
                     "error_category": _safe_provider_error(exc),
                 }
-                print(json.dumps(value, indent=2, sort_keys=True))
+                _write_structured(value, human=args.human)
                 raise SystemExit(1) from None
-            print(json.dumps(value, indent=2, sort_keys=True))
+            _write_structured(value, human=args.human)
             return
         if args.providers_command == "capabilities":
             try:
                 profile = registry.profile(args.provider, args.model)
             except LookupError as exc:
-                print(
-                    json.dumps(
-                        {
-                            "provider": args.provider,
-                            "model": args.model,
-                            "status": "not_configured",
-                            "error": str(exc),
-                        },
-                        indent=2,
-                        sort_keys=True,
-                    )
+                _write_structured(
+                    {
+                        "provider": args.provider,
+                        "model": args.model,
+                        "status": "not_configured",
+                        "error": str(exc),
+                    },
+                    human=args.human,
                 )
                 raise SystemExit(1) from None
-            print(json.dumps(profile.to_dict(), indent=2, sort_keys=True))
+            _write_structured(profile.to_dict(), human=args.human)
             return
         names = PRIMARY_PROVIDERS if args.all else (args.provider,)
         results = []
@@ -725,7 +755,7 @@ def main(argv: list[str] | None = None) -> None:
                         timeout_seconds=args.timeout,
                     ).to_dict()
                 )
-        print(json.dumps(results, indent=2, sort_keys=True))
+        _write_structured(results, human=args.human)
         if any(result.get("status") == "failed" for result in results):
             raise SystemExit(1)
         return
