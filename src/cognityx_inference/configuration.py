@@ -98,36 +98,36 @@ class InferenceConfiguration:
 def _from_document(
     document: Mapping[str, Any], selected: Path
 ) -> InferenceConfiguration:
-        manager = ManagerConfiguration(**dict(document.get("manager") or {}))
-        profiles = {
-            name: LocalServerProfile(
-                name=name,
-                model=str(value["model"]),
-                backend=str(value.get("backend", "vllm")),
-                load_profile=str(value.get("load_profile", "bf16")),
-                certified_profile_id=value.get("certified_profile_id"),
-                host=str(value.get("host", "127.0.0.1")),
-                port=int(value.get("port", 8100)),
-                runtime=dict(value.get("runtime") or {}),
-            )
-            for name, value in (document.get("server_profiles") or {}).items()
+    manager = ManagerConfiguration(**dict(document.get("manager") or {}))
+    profiles = {
+        name: LocalServerProfile(
+            name=name,
+            model=str(value["model"]),
+            backend=str(value.get("backend", "vllm")),
+            load_profile=str(value.get("load_profile", "bf16")),
+            certified_profile_id=value.get("certified_profile_id"),
+            host=str(value.get("host", "127.0.0.1")),
+            port=int(value.get("port", 8100)),
+            runtime=dict(value.get("runtime") or {}),
+        )
+        for name, value in (document.get("server_profiles") or {}).items()
+    }
+    providers = _default_providers()
+    providers.update(
+        {
+            name: _provider(name, value)
+            for name, value in (document.get("providers") or {}).items()
         }
-        providers = _default_providers()
-        providers.update(
-            {
-                name: _provider(name, value)
-                for name, value in (document.get("providers") or {}).items()
-            }
-        )
-        return InferenceConfiguration(
-            manager=manager,
-            server_profiles=profiles,
-            providers=providers,
-            secrets_file=_secrets_file(document, selected),
-            routing=_routing(document.get("routing") or {}),
-            tracking=TrackingConfiguration(**dict(document.get("tracking") or {})),
-            source=str(selected),
-        )
+    )
+    return InferenceConfiguration(
+        manager=manager,
+        server_profiles=profiles,
+        providers=providers,
+        secrets_file=_secrets_file(document, selected),
+        routing=_routing(document.get("routing") or {}),
+        tracking=TrackingConfiguration(**dict(document.get("tracking") or {})),
+        source=str(selected),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,8 +152,7 @@ class InferenceConfigResolution:
         }
         source = str(self.path) if self.path is not None else "built-in"
         override_sources = {
-            str(item["key"]): str(item["source"])
-            for item in self.overrides
+            str(item["key"]): str(item["source"]) for item in self.overrides
         }
         configuration_values.pop("source", None)
         field_sources = {
@@ -174,12 +173,14 @@ class InferenceConfigResolution:
                 "sha256": self.file_sha256,
             },
             "config_layers": (
-                [{
-                    "path": str(self.path),
-                    "selected_by": self.selected_by,
-                    "sha256": self.file_sha256,
-                    "changed_keys": list(self.changed_keys),
-                }]
+                [
+                    {
+                        "path": str(self.path),
+                        "selected_by": self.selected_by,
+                        "sha256": self.file_sha256,
+                        "changed_keys": list(self.changed_keys),
+                    }
+                ]
                 if self.path is not None
                 else []
             ),
@@ -202,16 +203,20 @@ def resolve_inference_configuration(
         secrets = os.environ.get("COGNITYX_SECRETS_FILE")
         configuration = InferenceConfiguration(
             providers=_default_providers(),
-            secrets_file=(str(Path(secrets).expanduser().resolve()) if secrets else None),
+            secrets_file=(
+                str(Path(secrets).expanduser().resolve()) if secrets else None
+            ),
         )
         overrides: tuple[Mapping[str, Any], ...] = (
-            ({
-                "key": "secrets_file",
-                "source": "COGNITYX_SECRETS_FILE",
-                "previous": None,
-                "effective": configuration.secrets_file,
-                "changed": True,
-            },)
+            (
+                {
+                    "key": "secrets_file",
+                    "source": "COGNITYX_SECRETS_FILE",
+                    "previous": None,
+                    "effective": configuration.secrets_file,
+                    "changed": True,
+                },
+            )
             if secrets
             else ()
         )
@@ -228,13 +233,15 @@ def resolve_inference_configuration(
     if environment_secret:
         effective_secret = str(Path(environment_secret).expanduser().resolve())
         if effective_secret != file_secret:
-            overrides = ({
-                "key": "secrets_file",
-                "source": "COGNITYX_SECRETS_FILE",
-                "previous": file_secret,
-                "effective": effective_secret,
-                "changed": True,
-            },)
+            overrides = (
+                {
+                    "key": "secrets_file",
+                    "source": "COGNITYX_SECRETS_FILE",
+                    "previous": file_secret,
+                    "effective": effective_secret,
+                    "changed": True,
+                },
+            )
     return InferenceConfigResolution(
         configuration=configuration,
         selected_by=selected_by,
@@ -284,16 +291,20 @@ def _changed_file_keys(
     selected["secrets_file"] = file_secret
     baseline_values = _flatten_values(baseline)
     selected_values = _flatten_values(selected)
-    return tuple(sorted(
-        key
-        for key in baseline_values.keys() | selected_values.keys()
-        if baseline_values.get(key) != selected_values.get(key)
-    ))
+    return tuple(
+        sorted(
+            key
+            for key in baseline_values.keys() | selected_values.keys()
+            if baseline_values.get(key) != selected_values.get(key)
+        )
+    )
 
 
 def _safe_plain(value: Any, key: str = "") -> Any:
     lowered = key.lower()
-    if any(marker in lowered for marker in ("password", "token", "credential", "api_key")):
+    if any(
+        marker in lowered for marker in ("password", "token", "credential", "api_key")
+    ):
         return "<redacted>" if value is not None else None
     if isinstance(value, Mapping):
         return {str(name): _safe_plain(item, str(name)) for name, item in value.items()}
@@ -318,18 +329,20 @@ def _redacted_uri(value: str) -> str:
         if parsed.username is not None or parsed.password is not None
         else parsed.netloc
     )
-    query = urlencode([
-        (
-            name,
-            "<redacted>"
-            if any(
-                marker in name.lower()
-                for marker in ("password", "token", "credential", "api_key")
+    query = urlencode(
+        [
+            (
+                name,
+                "<redacted>"
+                if any(
+                    marker in name.lower()
+                    for marker in ("password", "token", "credential", "api_key")
+                )
+                else item,
             )
-            else item,
-        )
-        for name, item in parse_qsl(parsed.query, keep_blank_values=True)
-    ])
+            for name, item in parse_qsl(parsed.query, keep_blank_values=True)
+        ]
+    )
     return urlunsplit((parsed.scheme, netloc, parsed.path, query, parsed.fragment))
 
 
