@@ -87,6 +87,71 @@ def test_infer_streams_text_by_default(monkeypatch, capsys) -> None:
     assert capsys.readouterr().out == "first second\n"
 
 
+def test_config_inspection_dispatches_before_runtime_setup(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    config = tmp_path / "inference.toml"
+    config.write_text(
+        'secrets_file="private.json"\n[manager]\nport=9001\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "cognityx_inference.cli.build_service",
+        lambda *_args, **_kwargs: pytest.fail("service was built"),
+    )
+    monkeypatch.setattr(
+        "cognityx_inference.cli.build_provider_adapters",
+        lambda *_args, **_kwargs: pytest.fail("provider adapter was built"),
+    )
+
+    main(["config", "show", "--config", str(config)])
+    shown = json.loads(capsys.readouterr().out)
+
+    assert shown["master_config"]["path"] == str(config.resolve())
+    assert shown["master_config"]["selected_by"] == "explicit"
+    assert shown["effective"]["secrets_file"]["contents_read"] is False
+    assert "manager.port" in shown["config_layers"][0]["changed_keys"]
+    assert shown["field_sources"]["manager.port"] == str(config.resolve())
+    assert shown["field_sources"]["manager.host"] == "built-in"
+    assert shown["valid"] is True
+
+    main(["config", "validate", "--config", str(config)])
+    validated = json.loads(capsys.readouterr().out)
+    assert validated["master_config"] == shown["master_config"]
+
+
+def test_config_validate_uses_project_discovery_and_redacts_secret_names(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    config = tmp_path / ".cognityx" / "inference.toml"
+    config.parent.mkdir()
+    config.write_text(
+        '[providers.demo]\nadapter="openai_compatible"\n'
+        'base_url="https://user:password@example.test/v1?access_token=uri-secret"\n'
+        'api_key_secret="never-show"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("COGNITYX_INFERENCE_CONFIG", raising=False)
+
+    main(["config", "validate"])
+    output = capsys.readouterr().out
+    shown = json.loads(output)
+
+    assert shown["master_config"]["selected_by"] == "project"
+    assert "never-show" not in output
+    assert "user:password" not in output
+    assert "uri-secret" not in output
+
+
+def test_missing_config_returns_nonzero_json(capsys) -> None:
+    with pytest.raises(SystemExit) as raised:
+        main(["config", "validate", "--config", "missing.toml"])
+
+    assert raised.value.code == 2
+    assert json.loads(capsys.readouterr().out)["valid"] is False
+
+
 def test_infer_no_stream_preserves_json_response(monkeypatch, capsys) -> None:
     monkeypatch.setattr("cognityx_inference.cli.CognityxInferenceClient", FakeClient)
 

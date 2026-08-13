@@ -1,5 +1,17 @@
 # Configuration
 
+## Static inspection
+
+Use `cognityx-inference config show [--config PATH]` to print deterministic,
+secret-safe JSON and `cognityx-inference config validate [--config PATH]` for
+the same selection with a nonzero exit on failure. These commands run before
+service, vLLM, web-server, provider, credential, manager, model, or Storage
+setup. They report explicit, environment, project, or built-in selection; the
+exact configuration-file SHA-256; file-provided fields; and effective values.
+
+`COGNITYX_SECRETS_FILE` is reported only as safe metadata. Its file contents and
+credential values are never read or printed by inspection.
+
 ## Manager, local server, and provider configuration
 
 Copy the checked-in secret-free example:

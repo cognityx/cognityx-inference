@@ -356,6 +356,11 @@ def main(argv: list[str] | None = None) -> None:
     original_argv = list(argv) if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command")
+    config = subparsers.add_parser("config")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    for name in ("show", "validate"):
+        selected = config_commands.add_parser(name)
+        selected.add_argument("--config", type=Path)
     serve = subparsers.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -581,6 +586,33 @@ def main(argv: list[str] | None = None) -> None:
     certified_show.add_argument("profile_id")
     _add_output_format(certified_show)
     args = parser.parse_args(original_argv)
+    if args.command == "config":
+        from cognityx_inference.configuration import resolve_inference_configuration
+
+        try:
+            report = resolve_inference_configuration(args.config).to_dict()
+        except (OSError, UnicodeError, ValueError) as exc:
+            report = {
+                "component": "inference",
+                "configuration_kind": "persistent-component",
+                "valid": False,
+                "master_config": {
+                    "kind": "file" if args.config else "built-in",
+                    "path": str(args.config.resolve()) if args.config else None,
+                    "selected_by": "explicit" if args.config else "built-in",
+                    "sha256": None,
+                },
+                "config_layers": [],
+                "field_sources": {},
+                "overrides": [],
+                "effective": {},
+                "warnings": [],
+                "errors": [{"code": "configuration_invalid", "message": str(exc)}],
+            }
+            print(json.dumps(report, indent=2, sort_keys=True))
+            raise SystemExit(2) from None
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return
     if args.command == "manager":
         configuration = InferenceConfiguration.load(args.config)
         host = args.host or configuration.manager.host
