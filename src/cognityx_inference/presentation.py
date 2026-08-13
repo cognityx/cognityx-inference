@@ -6,6 +6,107 @@ import json
 from typing import Any, Iterable, Mapping
 
 
+def render_human(value: Any) -> str:
+    """Render an already-safe structured payload without enriching it."""
+    return "\n".join(_human_render(value))
+
+
+def _human_render(value: Any, *, indent: int = 0) -> list[str]:
+    prefix = " " * indent
+    if isinstance(value, Mapping):
+        if not value:
+            return [f"{prefix}No fields."]
+        lines: list[str] = []
+        for key, item in value.items():
+            label = str(key).replace("_", " ").strip().capitalize()
+            if str(key) == "overrides" and isinstance(item, list):
+                lines.append(f"{prefix}{label}:")
+                if not item:
+                    lines.append(f"{prefix}  No records.")
+                for override in item:
+                    if isinstance(override, Mapping):
+                        lines.append(
+                            f"{prefix}  {_human_scalar(override.get('key'))}: "
+                            f"{_human_scalar(override.get('previous'))} -> "
+                            f"{_human_scalar(override.get('effective'))} "
+                            f"({_human_scalar(override.get('source'))})"
+                        )
+            elif isinstance(item, Mapping):
+                lines.append(f"{prefix}{label}:")
+                lines.extend(_human_render(item, indent=indent + 2))
+            elif isinstance(item, (list, tuple)):
+                lines.append(f"{prefix}{label}:")
+                lines.extend(_human_sequence(item, indent=indent + 2))
+            else:
+                lines.append(f"{prefix}{label}: {_human_scalar(item)}")
+        return lines
+    if isinstance(value, (list, tuple)):
+        return _human_sequence(value, indent=indent)
+    return [f"{prefix}{_human_scalar(value)}"]
+
+
+def _human_sequence(value: Iterable[Any], *, indent: int) -> list[str]:
+    items = list(value)
+    prefix = " " * indent
+    if not items:
+        return [f"{prefix}No records."]
+    if all(isinstance(item, Mapping) for item in items):
+        records = [item for item in items if isinstance(item, Mapping)]
+        columns: list[str] = []
+        for record in records:
+            for key in record:
+                if str(key) not in columns:
+                    columns.append(str(key))
+        if columns and all(
+            not isinstance(record.get(column), (Mapping, list, tuple))
+            for record in records
+            for column in columns
+        ):
+            headers = [
+                column.replace("_", " ").strip().capitalize() for column in columns
+            ]
+            rows = [
+                [_human_scalar(record.get(column)) for column in columns]
+                for record in records
+            ]
+            widths = [
+                max(len(headers[index]), *(len(row[index]) for row in rows))
+                for index in range(len(columns))
+            ]
+            header = "  ".join(
+                headers[index].ljust(widths[index]) for index in range(len(columns))
+            )
+            divider = "  ".join("-" * width for width in widths)
+            body = [
+                "  ".join(
+                    row[index].ljust(widths[index]) for index in range(len(columns))
+                )
+                for row in rows
+            ]
+            return [
+                f"{prefix}{header}",
+                f"{prefix}{divider}",
+                *(f"{prefix}{row}" for row in body),
+            ]
+    lines: list[str] = []
+    for index, item in enumerate(items, start=1):
+        if isinstance(item, Mapping):
+            lines.append(f"{prefix}Record {index}:")
+            lines.extend(_human_render(item, indent=indent + 2))
+        elif isinstance(item, (list, tuple)):
+            lines.append(f"{prefix}Record {index}:")
+            lines.extend(_human_sequence(item, indent=indent + 2))
+        else:
+            lines.append(f"{prefix}- {_human_scalar(item)}")
+    return lines
+
+
+def _human_scalar(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+
+
 def render(
     value: Any,
     *,
@@ -36,8 +137,15 @@ def _table(headers: list[str], rows: Iterable[Iterable[Any]]) -> str:
             widths[index] = max(widths[index], len(cell))
     line = "  ".join("-" * width for width in widths)
     header = "  ".join(name.ljust(widths[index]) for index, name in enumerate(headers))
-    body = ["  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row)) for row in values]
-    return "\n".join([header, line, *body]) if body else "\n".join([header, line, "(none)"])
+    body = [
+        "  ".join(cell.ljust(widths[index]) for index, cell in enumerate(row))
+        for row in values
+    ]
+    return (
+        "\n".join([header, line, *body])
+        if body
+        else "\n".join([header, line, "(none)"])
+    )
 
 
 def _text(value: Any) -> str:
@@ -60,7 +168,16 @@ def _get(value: Mapping[str, Any], *path: str) -> Any:
 def _model_status(value: Any) -> str:
     items = value if isinstance(value, list) else [value]
     return _table(
-        ["Model", "Backend", "State", "Context", "KV cache", "Profile", "Leases", "Load (s)"],
+        [
+            "Model",
+            "Backend",
+            "State",
+            "Context",
+            "KV cache",
+            "Profile",
+            "Leases",
+            "Load (s)",
+        ],
         [
             (
                 _get(item, "identity", "model"),
@@ -88,12 +205,26 @@ def _runtime(item: Mapping[str, Any], key: str) -> Any:
 def _discovery_list(value: Any) -> str:
     items = value if isinstance(value, list) else [value]
     return _table(
-        ["Job ID", "State", "Model", "Backend", "Profile", "Trials", "Certified profile", "Started"],
+        [
+            "Job ID",
+            "State",
+            "Model",
+            "Backend",
+            "Profile",
+            "Trials",
+            "Certified profile",
+            "Started",
+        ],
         [
             (
-                item.get("job_id"), item.get("state"), item.get("model"), item.get("backend"),
-                item.get("profile"), f"{len(item.get('trials') or [])}",
-                item.get("certified_profile_id"), item.get("started_at"),
+                item.get("job_id"),
+                item.get("state"),
+                item.get("model"),
+                item.get("backend"),
+                item.get("profile"),
+                f"{len(item.get('trials') or [])}",
+                item.get("certified_profile_id"),
+                item.get("started_at"),
             )
             for item in items
             if isinstance(item, Mapping)
@@ -104,14 +235,29 @@ def _discovery_list(value: Any) -> str:
 def _certified_profile_list(value: Any) -> str:
     items = value if isinstance(value, list) else [value]
     return _table(
-        ["Profile ID", "Model", "Backend", "Quant.", "KV cache", "Context", "Generation", "tok/s", "TTFT (s)", "Created"],
+        [
+            "Profile ID",
+            "Model",
+            "Backend",
+            "Quant.",
+            "KV cache",
+            "Context",
+            "Generation",
+            "tok/s",
+            "TTFT (s)",
+            "Created",
+        ],
         [
             (
-                item.get("profile_id"), _get(item, "compatibility", "model"),
-                _get(item, "compatibility", "backend"), _get(item, "compatibility", "profile"),
-                _get(item, "compatibility", "kv_cache_precision"), item.get("maximum_certified_context_length"),
+                item.get("profile_id"),
+                _get(item, "compatibility", "model"),
+                _get(item, "compatibility", "backend"),
+                _get(item, "compatibility", "profile"),
+                _get(item, "compatibility", "kv_cache_precision"),
+                item.get("maximum_certified_context_length"),
                 _get(item, "certified_configuration", "generation_length"),
-                item.get("minimum_observed_tokens_per_second"), item.get("maximum_time_to_first_token_seconds"),
+                item.get("minimum_observed_tokens_per_second"),
+                item.get("maximum_time_to_first_token_seconds"),
                 item.get("created_at"),
             )
             for item in items
@@ -163,7 +309,9 @@ def _certified_profile_show(value: Any) -> str:
                 f"GPU peak={_bytes(phase_gpu.get('dedicated_memory_used_bytes_peak'))}, "
                 f"power peak={_text(phase_gpu.get('power_watts_peak'))} W"
             )
-    lines.extend(["", "Use --format json for the complete certified_trial evidence record."])
+    lines.extend(
+        ["", "Use --format json for the complete certified_trial evidence record."]
+    )
     return "\n".join(lines)
 
 
@@ -201,4 +349,6 @@ def _discovery_event(value: Any) -> str:
 def _detail(value: Any) -> str:
     if not isinstance(value, Mapping):
         return _text(value)
-    return "\n".join(f"{key.replace('_', ' ').title()}: {_text(item)}" for key, item in value.items())
+    return "\n".join(
+        f"{key.replace('_', ' ').title()}: {_text(item)}" for key, item in value.items()
+    )

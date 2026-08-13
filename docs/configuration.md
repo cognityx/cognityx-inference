@@ -12,6 +12,17 @@ exact configuration-file SHA-256; file-provided fields; and effective values.
 `COGNITYX_SECRETS_FILE` is reported only as safe metadata. Its file contents and
 credential values are never read or printed by inspection.
 
+JSON remains the unchanged default. Add `--human` for labelled sections drawn
+from the same secret-safe report:
+
+```bash
+cognityx-inference config show --human
+cognityx-inference config validate --config .cognityx/inference.toml --human
+```
+
+Human rendering happens after static resolution. It does not start a service,
+manager, provider, model, or Storage runtime and does not read a secrets file.
+
 ## Manager, local server, and provider configuration
 
 Copy the checked-in secret-free example:
