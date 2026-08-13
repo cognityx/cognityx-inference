@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from enum import Enum
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Mapping
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from cognityx_inference.capabilities import CertifiedContextProfile
 from cognityx_inference.contracts import ModelCapabilities
@@ -85,14 +88,16 @@ class InferenceConfiguration:
         *,
         cwd: str | Path | None = None,
     ) -> "InferenceConfiguration":
-        selected = _select_path(path, cwd=cwd)
-        if selected is None:
-            return cls(
-                providers=_default_providers(),
-                secrets_file=os.environ.get("COGNITYX_SECRETS_FILE"),
-            )
-        with selected.open("rb") as source:
-            document = tomllib.load(source)
+        return resolve_inference_configuration(path, cwd=cwd).configuration
+
+    def credential_resolver(self) -> CredentialResolver:
+        """Build a lazy resolver without loading credential values."""
+        return CredentialResolver(self.secrets_file)
+
+
+def _from_document(
+    document: Mapping[str, Any], selected: Path
+) -> InferenceConfiguration:
         manager = ManagerConfiguration(**dict(document.get("manager") or {}))
         profiles = {
             name: LocalServerProfile(
@@ -114,7 +119,7 @@ class InferenceConfiguration:
                 for name, value in (document.get("providers") or {}).items()
             }
         )
-        return cls(
+        return InferenceConfiguration(
             manager=manager,
             server_profiles=profiles,
             providers=providers,
@@ -124,9 +129,208 @@ class InferenceConfiguration:
             source=str(selected),
         )
 
-    def credential_resolver(self) -> CredentialResolver:
-        """Build a lazy resolver without loading credential values."""
-        return CredentialResolver(self.secrets_file)
+
+@dataclass(frozen=True, slots=True)
+class InferenceConfigResolution:
+    """Static Inference selection used by both execution and CLI inspection."""
+
+    configuration: InferenceConfiguration
+    selected_by: str
+    path: Path | None
+    file_sha256: str | None
+    changed_keys: tuple[str, ...]
+    overrides: tuple[Mapping[str, Any], ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        configuration_values = asdict(self.configuration)
+        effective = _safe_plain(configuration_values)
+        effective.pop("source", None)
+        effective["secrets_file"] = {
+            "configured": self.configuration.secrets_file is not None,
+            "path": self.configuration.secrets_file,
+            "contents_read": False,
+        }
+        source = str(self.path) if self.path is not None else "built-in"
+        override_sources = {
+            str(item["key"]): str(item["source"])
+            for item in self.overrides
+        }
+        configuration_values.pop("source", None)
+        field_sources = {
+            key: override_sources.get(
+                key,
+                source if key in self.changed_keys else "built-in",
+            )
+            for key in _flatten_keys(configuration_values)
+        }
+        return {
+            "component": "inference",
+            "configuration_kind": "persistent-component",
+            "valid": True,
+            "master_config": {
+                "kind": "file" if self.path is not None else "built-in",
+                "path": str(self.path) if self.path is not None else None,
+                "selected_by": self.selected_by,
+                "sha256": self.file_sha256,
+            },
+            "config_layers": (
+                [{
+                    "path": str(self.path),
+                    "selected_by": self.selected_by,
+                    "sha256": self.file_sha256,
+                    "changed_keys": list(self.changed_keys),
+                }]
+                if self.path is not None
+                else []
+            ),
+            "field_sources": field_sources,
+            "overrides": [dict(item) for item in self.overrides],
+            "effective": effective,
+            "warnings": [],
+            "errors": [],
+        }
+
+
+def resolve_inference_configuration(
+    path: str | Path | None = None,
+    *,
+    cwd: str | Path | None = None,
+) -> InferenceConfigResolution:
+    """Load local Inference settings and provenance without runtime setup."""
+    selected, selected_by = _select_path_with_reason(path, cwd=cwd)
+    if selected is None:
+        secrets = os.environ.get("COGNITYX_SECRETS_FILE")
+        configuration = InferenceConfiguration(
+            providers=_default_providers(),
+            secrets_file=(str(Path(secrets).expanduser().resolve()) if secrets else None),
+        )
+        overrides: tuple[Mapping[str, Any], ...] = (
+            ({
+                "key": "secrets_file",
+                "source": "COGNITYX_SECRETS_FILE",
+                "previous": None,
+                "effective": configuration.secrets_file,
+                "changed": True,
+            },)
+            if secrets
+            else ()
+        )
+        return InferenceConfigResolution(
+            configuration, "built-in", None, None, (), overrides
+        )
+    selected = selected.resolve()
+    raw = selected.read_bytes()
+    document = tomllib.loads(raw.decode("utf-8"))
+    configuration = _from_document(document, selected)
+    file_secret = _configured_secret_path(document, selected)
+    environment_secret = os.environ.get("COGNITYX_SECRETS_FILE")
+    overrides = ()
+    if environment_secret:
+        effective_secret = str(Path(environment_secret).expanduser().resolve())
+        if effective_secret != file_secret:
+            overrides = ({
+                "key": "secrets_file",
+                "source": "COGNITYX_SECRETS_FILE",
+                "previous": file_secret,
+                "effective": effective_secret,
+                "changed": True,
+            },)
+    return InferenceConfigResolution(
+        configuration=configuration,
+        selected_by=selected_by,
+        path=selected,
+        file_sha256=sha256(raw).hexdigest(),
+        changed_keys=_changed_file_keys(configuration, file_secret=file_secret),
+        overrides=overrides,
+    )
+
+
+def _flatten_keys(value: Mapping[str, Any], prefix: str = "") -> tuple[str, ...]:
+    keys: list[str] = []
+    for name, item in value.items():
+        dotted = f"{prefix}.{name}" if prefix else str(name)
+        if isinstance(item, Mapping):
+            nested = _flatten_keys(item, dotted)
+            keys.extend(nested or (dotted,))
+        else:
+            keys.append(dotted)
+    return tuple(keys)
+
+
+def _flatten_values(value: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for name, item in value.items():
+        dotted = f"{prefix}.{name}" if prefix else str(name)
+        if isinstance(item, Mapping):
+            nested = _flatten_values(item, dotted)
+            if nested:
+                values.update(nested)
+            else:
+                values[dotted] = {}
+        else:
+            values[dotted] = item
+    return values
+
+
+def _changed_file_keys(
+    configuration: InferenceConfiguration,
+    *,
+    file_secret: str | None,
+) -> tuple[str, ...]:
+    baseline = asdict(InferenceConfiguration(providers=_default_providers()))
+    selected = asdict(configuration)
+    baseline.pop("source", None)
+    selected.pop("source", None)
+    selected["secrets_file"] = file_secret
+    baseline_values = _flatten_values(baseline)
+    selected_values = _flatten_values(selected)
+    return tuple(sorted(
+        key
+        for key in baseline_values.keys() | selected_values.keys()
+        if baseline_values.get(key) != selected_values.get(key)
+    ))
+
+
+def _safe_plain(value: Any, key: str = "") -> Any:
+    lowered = key.lower()
+    if any(marker in lowered for marker in ("password", "token", "credential", "api_key")):
+        return "<redacted>" if value is not None else None
+    if isinstance(value, Mapping):
+        return {str(name): _safe_plain(item, str(name)) for name, item in value.items()}
+    if isinstance(value, (tuple, list, set, frozenset)):
+        return [_safe_plain(item, key) for item in value]
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, str) and "://" in value:
+        return _redacted_uri(value)
+    return value
+
+
+def _redacted_uri(value: str) -> str:
+    parsed = urlsplit(value)
+    host = parsed.hostname or ""
+    if parsed.port is not None:
+        host = f"{host}:{parsed.port}"
+    netloc = (
+        host
+        if parsed.username is not None or parsed.password is not None
+        else parsed.netloc
+    )
+    query = urlencode([
+        (
+            name,
+            "<redacted>"
+            if any(
+                marker in name.lower()
+                for marker in ("password", "token", "credential", "api_key")
+            )
+            else item,
+        )
+        for name, item in parse_qsl(parsed.query, keep_blank_values=True)
+    ])
+    return urlunsplit((parsed.scheme, netloc, parsed.path, query, parsed.fragment))
 
 
 def _provider(name: str, value: Mapping[str, Any]) -> ProviderDefinition:
@@ -368,16 +572,37 @@ def _routing(value: Mapping[str, Any]) -> RoutingPolicy:
 
 
 def _select_path(path: str | Path | None, *, cwd: str | Path | None) -> Path | None:
+    return _select_path_with_reason(path, cwd=cwd)[0]
+
+
+def _select_path_with_reason(
+    path: str | Path | None, *, cwd: str | Path | None
+) -> tuple[Path | None, str]:
     if path is not None:
         selected = Path(path).expanduser()
         if not selected.is_file():
             raise FileNotFoundError(f"Inference configuration not found: {selected}")
-        return selected
+        return selected, "explicit"
     environment = os.environ.get("COGNITYX_INFERENCE_CONFIG")
     if environment:
-        return _select_path(environment, cwd=cwd)
+        selected = Path(environment).expanduser()
+        if not selected.is_file():
+            raise FileNotFoundError(f"Inference configuration not found: {selected}")
+        return selected, "environment"
     project = Path(cwd or Path.cwd()) / ".cognityx" / "inference.toml"
-    return project if project.is_file() else None
+    return (project, "project") if project.is_file() else (None, "built-in")
+
+
+def _configured_secret_path(
+    document: Mapping[str, Any], config_path: Path
+) -> str | None:
+    raw = document.get("secrets_file")
+    if raw is None:
+        return None
+    selected = Path(str(raw)).expanduser()
+    if not selected.is_absolute():
+        selected = config_path.parent / selected
+    return str(selected.resolve())
 
 
 def _secrets_file(document: Mapping[str, Any], config_path: Path) -> str | None:
